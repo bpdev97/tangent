@@ -14,13 +14,16 @@ for coding agents. It carries a small distribution-specific layer while staying 
 > - Cursor: install [Cursor CLI](https://cursor.com/cli) and run `agent login`
 > - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
 
-### Run without installing
+### Run the server without installing
+
+Download `tangent-server-X.Y.Z.tgz` from the matching
+[GitHub Release](https://github.com/bpdev97/tangent/releases), then run:
 
 ```bash
-npx t3@latest
+npx --yes ./tangent-server-X.Y.Z.tgz
 ```
 
-Tip: Use `npx t3@latest --help` for the full CLI reference.
+Use `npx --yes ./tangent-server-X.Y.Z.tgz --help` for the full CLI reference.
 
 ### Desktop app
 
@@ -39,6 +42,8 @@ There's no public docs site yet, checkout the miscellaneous markdown files in [d
 ## Documentation
 
 - [Getting started](./docs/getting-started/quick-start.md)
+- [Remote access](./docs/user/remote-access.md)
+- [Keeping Tangent in sync](./docs/user/server-updates.md)
 - [Architecture overview](./docs/architecture/overview.md)
 - [Provider guides](./docs/providers/codex.md)
 - [Operations](./docs/operations/ci.md)

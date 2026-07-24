@@ -105,8 +105,13 @@ describe("ssh command", () => {
         resolveRemoteT3CliPackageSpec({
           appVersion: "0.0.17",
           updateChannel: "latest",
+          serverRelease: {
+            repository: { owner: "bpdev97", name: "tangent" },
+            tagPrefix: "personal-v",
+            artifactNamePrefix: "tangent-server",
+          },
         }),
-        "t3@0.0.17",
+        "https://github.com/bpdev97/tangent/releases/download/personal-v0.0.17/tangent-server-0.0.17.tgz",
       );
       assert.equal(
         resolveRemoteT3CliPackageSpec({

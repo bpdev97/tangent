@@ -48,7 +48,9 @@ with incompatible native code.
 
 The macOS app is published through this repository's GitHub Releases. It uses `~/.bpdev-code` for
 state and `bpdev-code` for Electron data, so it can run next to the official app without sharing
-files.
+files. Each `personal-vX.Y.Z` release also carries `tangent-server-X.Y.Z.tgz` and its SHA-256 file;
+remote launch, manual relaunch, self-update, and background-service setup must use that artifact
+rather than the upstream npm package.
 
 ## Fork feature delta registry
 
@@ -62,7 +64,6 @@ feature.
 | `FORK-HERMES-001` | Hermes Agent provider and automation management   | Active, early access | [`docs/fork/hermes.md`](docs/fork/hermes.md)                                       | `vp test apps/server/src/provider/hermes packages/contracts/src/settings.test.ts packages/client-runtime/src/operations/hermesAutomations.test.ts apps/web/src/components/settings/SettingsPanels.logic.test.ts`                                                                                                                                                                                                                                                                                  |
 | `FORK-PUSH-001`   | Tailnet APNs notification and Live Activity relay | Active               | [`docs/fork/personal-push-relay.md`](docs/fork/personal-push-relay.md)             | `vp test apps/push-relay/src apps/server/src/personalPush apps/server/src/serverSettings.test.ts apps/server/src/relay/AgentAwarenessRelay.test.ts apps/mobile/src/features/agent-awareness/remoteRegistration.test.ts packages/contracts/src/settings.test.ts`                                                                                                                                                                                                                                   |
 | `FORK-CODEX-001`  | Codex MCP tool approval prompts                   | Active, temporary    | [`docs/fork/codex-mcp-tool-approvals.md`](docs/fork/codex-mcp-tool-approvals.md)   | `vp test apps/server/src/provider/CodexMcpApproval.test.ts apps/server/src/provider/Layers/CodexAdapter.test.ts apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.test.ts apps/web/src/session-logic.test.ts apps/mobile/src/lib/threadActivity.test.ts`                                                                                                                                                                                                                              |
-| `FORK-CODEX-002`  | Codex automatic approval reviewer                 | Active, temporary    | [`docs/fork/codex-auto-review.md`](docs/fork/codex-auto-review.md)                 | `vp test apps/server/src/codexModelOptions.test.ts apps/server/src/provider/Layers/CodexProvider.test.ts apps/server/src/provider/Layers/CodexAdapter.test.ts apps/server/src/provider/Layers/CodexSessionRuntime.test.ts`                                                                                                                                                                                                                                                                        |
 | `FORK-CURSOR-001` | Cursor ACP protocol compatibility                 | Active, temporary    | [`docs/fork/cursor-acp-protocol.md`](docs/fork/cursor-acp-protocol.md)             | `vp test apps/server/src/provider/Layers/CursorAdapter.test.ts apps/server/src/provider/acp/AcpAdapterSupport.test.ts apps/server/src/provider/acp/AcpJsonRpcConnection.test.ts apps/server/src/provider/acp/AcpRuntimeModel.test.ts apps/server/src/provider/acp/CursorAcpExtension.test.ts`                                                                                                                                                                                                     |
 | `FORK-TOOLS-001`  | Structured tool-call presentation                 | Active               | [`docs/fork/tool-call-presentation.md`](docs/fork/tool-call-presentation.md)       | `vp test packages/client-runtime/src/tool-calls/index.test.ts apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.test.ts apps/web/src/session-logic.test.ts apps/web/src/components/chat/MessagesTimeline.logic.test.ts apps/web/src/components/chat/MessagesTimeline.test.tsx apps/mobile/src/lib/threadActivity.test.ts apps/mobile/src/features/threads/threadFeedLayout.test.ts`                                                                                                   |
 | `FORK-AGENT-001`  | Provider-neutral subagent lifecycle               | Active               | [`docs/fork/subagent-lifecycle.md`](docs/fork/subagent-lifecycle.md)               | `vp test packages/contracts/src/providerRuntime.test.ts apps/server/src/provider/Layers/CodexAdapter.test.ts apps/server/src/provider/Layers/CodexSessionRuntime.test.ts apps/server/src/provider/Layers/ClaudeAdapter.test.ts apps/server/src/provider/Layers/OpenCodeAdapter.test.ts apps/server/src/provider/Layers/CursorAdapter.test.ts apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.test.ts apps/web/src/session-logic.test.ts apps/mobile/src/lib/threadActivity.test.ts` |
@@ -111,21 +112,6 @@ Remove this feature when upstream T3 handles Codex `mcpServer/elicitation/reques
 with `codex_approval_kind: "mcp_tool_call"`, including session-persistence metadata and web/mobile
 approval rendering. Preserve the immediate cancel response for unsupported structured or URL
 elicitations unless upstream adds a complete input flow for them.
-
-### FORK-CODEX-002 ownership map
-
-Shared upstream touchpoints containing the auto-review option and app-server overrides:
-
-- `apps/server/src/codexModelOptions.ts`
-- `apps/server/src/provider/Layers/CodexProvider.ts`
-- `apps/server/src/provider/Layers/CodexAdapter.ts`
-- `apps/server/src/provider/Layers/CodexSessionRuntime.ts`
-- focused tests for those modules
-
-The setting is a Codex model option so the existing provider-specific controls render it on web and
-mobile without widening the shared runtime modes. Preserve the `user` default and pass the selected
-reviewer on thread start, resume, and subsequent turns. Remove this feature when upstream T3 exposes
-Codex `approvalsReviewer` with equivalent per-thread persistence and web/mobile controls.
 
 ### FORK-CURSOR-001 ownership map
 
@@ -374,6 +360,7 @@ successful end-to-end chat.
 | 2026-07-18 | —            | —            | Hermes Agent 0.18.2 / TUI gateway contract 2           | Replaced ACP chat and utility integration with the supervised authenticated loopback TUI gateway. Reviewed Hermes main `614dc194` (contract 3); a real 0.18.2 probe verified ready, setup, model discovery, durable session creation, and close. Legacy ACP sessions are intentionally not migrated.                                                                                                                                                                                                                                                                                                           |
 | 2026-07-19 | `1735e27d`   | `53e3c98a`   | Hermes Agent 0.18.2 / TUI gateway contract 2           | No Hermes runtime interfaces changed. The shared Sidebar conflict kept Tangent branding and Hermes navigation while adopting upstream's nightly/dev header art. The isolated testing workflow was adapted to the personal `.bpdev-code` state root.                                                                                                                                                                                                                                                                                                                                                            |
 | 2026-07-20 | `53e3c98a`   | `5d34f9ff`   | Hermes Agent 0.18.2 / TUI gateway contract 2           | Upstream's T3 Connect, OpenCode resume/title recovery, task-title projection, complete approval details, desktop preview hardening, and mobile glass/header work were adopted. Conflicts preserved generic chat, bounded tool payloads, provider-neutral descendant agents, MCP approvals, Hermes, and personal distribution identity. The redundant compact mobile brand title was retired in favor of the upstream Threads title; the managed chat project gained a server-side deletion guard, and Tangent Connect uses a distinct `tangent.service` unit. No registered fork feature was fully superseded. |
+| 2026-07-24 | `5d34f9ff`   | `ece05087`   | Hermes Agent 0.18.2 / TUI gateway contract 2           | Adopted upstream's first-class `Auto` runtime mode and retired `FORK-CODEX-002` plus its independent reviewer setting. Adopted upstream server self-update and systemd lifecycle management with Tangent distribution boundaries: verified `bpdev97/tangent` GitHub Release archives, source-identity sentinels, `tangent.service`, matching manual/SSH launch URLs, and no upstream npm fallback. Conflicts preserved generic chat, Hermes, push relay, structured tool calls, provider-neutral agents, project grouping, and personal desktop/mobile identity.                                               |
 
 Remove `FORK-HERMES-001` only when upstream T3 ships equivalent profile-aware Hermes TUI gateway support and
 current versioned gateway cursors can be migrated or continued without losing sessions. Compare behavior

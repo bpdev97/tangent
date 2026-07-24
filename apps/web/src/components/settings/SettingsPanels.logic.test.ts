@@ -9,6 +9,8 @@ import {
   buildProviderInstanceUpdatePatch,
   buildProviderInstanceSettingsRows,
   formatDiagnosticsDescription,
+  isProjectGroupingEnabled,
+  projectGroupingModeFromToggle,
 } from "./SettingsPanels.logic";
 
 const HERMES_DRIVER = ProviderDriverKind.make("hermes");
@@ -56,6 +58,21 @@ describe("buildProviderInstanceSettingsRows", () => {
       driver: HERMES_DRIVER,
       isDefault: false,
     });
+  });
+});
+
+describe("project grouping toggle", () => {
+  it("enables repository grouping and disables into separate projects", () => {
+    expect(isProjectGroupingEnabled("repository")).toBe(true);
+    expect(isProjectGroupingEnabled("repository_path")).toBe(true);
+    expect(isProjectGroupingEnabled("separate")).toBe(false);
+    expect(projectGroupingModeFromToggle(true)).toBe("repository");
+    expect(projectGroupingModeFromToggle(false)).toBe("separate");
+  });
+
+  it("restores repository path grouping when the toggle is cycled", () => {
+    expect(projectGroupingModeFromToggle(false, "repository_path")).toBe("separate");
+    expect(projectGroupingModeFromToggle(true, "repository_path")).toBe("repository_path");
   });
 });
 

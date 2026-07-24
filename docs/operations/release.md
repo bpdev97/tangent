@@ -156,6 +156,28 @@ One-time Vercel dashboard setup:
 - Publishes the CLI package (`apps/server`, npm package `t3`) to the `nightly` npm dist-tag using the same nightly version.
 - Does not commit version bumps back to `main`.
 
+## Server self-update release invariant
+
+Tangent-connected servers update to the client's exact version from the personal GitHub Release,
+not from the upstream npm package. Every `personal-vX.Y.Z` release must contain:
+
+- `tangent-server-X.Y.Z.tgz`;
+- `tangent-server-X.Y.Z.tgz.sha256`.
+
+`.github/workflows/personal-macos-release.yml` builds the web and server bundle, packs the server,
+generates the checksum, and publishes those files with the desktop assets in one GitHub Release.
+This keeps the client and exact server replacement visible atomically.
+
+Do not replace this with `t3@<version>` or an npm dist-tag. The upstream `.github/workflows/release.yml`
+still publishes the upstream-compatible CLI as part of its own release graph, but Tangent's
+self-update, manual relaunch, desktop SSH launch, and background-service documentation all resolve
+`bpdev97/tangent` GitHub Release assets.
+
+For a personal release smoke test, download both server assets, verify the recorded SHA-256, inspect
+the archive for `package/dist/bin.mjs`, and run its `t3 --version`. Then connect the new client to a
+server on the previous version and verify one automatic update plus the manual and
+desktop-managed guidance.
+
 ## Desktop auto-update notes
 
 - Runtime updater: `electron-updater` in `apps/desktop/src/main.ts`.
@@ -178,7 +200,7 @@ One-time Vercel dashboard setup:
   - `electron-updater` reads `latest-mac.yml` on stable and `nightly-mac.yml` on nightly, for both Intel and Apple Silicon.
   - The workflow merges the per-arch mac manifests into one channel-specific mac manifest before publishing the GitHub Release.
 
-## 0) npm OIDC trusted publishing setup (CLI)
+## 0) Upstream npm OIDC trusted publishing setup (not used by Tangent self-update)
 
 The workflow publishes the CLI with `npm publish` from `apps/server` after bumping
 the package version to the release tag version.
@@ -293,6 +315,7 @@ Checklist:
 5. Verify workflow steps:
    - preflight passes
    - all matrix builds pass
+   - `publish_cli` publishes the exact release version before the release job
    - release job uploads expected files
 6. Smoke test downloaded artifacts.
 

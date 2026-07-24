@@ -14,6 +14,7 @@ import {
   HostProcessPlatform,
 } from "@t3tools/shared/hostProcess";
 
+import { reconcileService } from "../cli/service.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import * as BootService from "./bootService.ts";
 
@@ -108,6 +109,7 @@ it("renders a systemd unit with absolute paths and append-mode logging", () => {
       "Type=simple",
       "WorkingDirectory=%h",
       "Environment=T3CODE_HOME=/home/theo/.t3",
+      "Environment=T3_BOOT_SERVICE_UNIT=t3code.service",
       "ExecStart=/usr/local/bin/node /home/theo/.t3/runtime/versions/0.0.27/node_modules/t3/dist/bin.mjs serve",
       "Restart=always",
       "RestartSec=5",
@@ -170,6 +172,33 @@ it("flags package-manager cache entry points as ephemeral", () => {
 });
 
 it.layer(NodeServices.layer)("BootService", (it) => {
+  it.effect("reconciles the standalone service once and is then idempotent", () =>
+    Effect.gen(function* () {
+      const { dirs } = yield* makeTestContext();
+      const commands: Array<RecordedCommand> = [];
+      const service = yield* BootService.make({
+        baseDir: dirs.baseDir,
+        logsDir: dirs.logsDir,
+        cliVersion: "0.0.27",
+        host: makeHost(dirs.stableEntry),
+      }).pipe(Effect.provide(makeRecordingRunnerLayer(commands)), provideHostRefs(dirs.home));
+
+      const first = yield* reconcileService().pipe(
+        Effect.provideService(BootService.BootService, service),
+      );
+      assert.isTrue(first.changed);
+      if (!first.changed) return;
+      assert.isFalse(first.previouslyInstalled);
+
+      const commandCount = commands.length;
+      const second = yield* reconcileService().pipe(
+        Effect.provideService(BootService.BootService, service),
+      );
+      assert.isFalse(second.changed);
+      assert.lengthOf(commands, commandCount);
+    }),
+  );
+
   it.effect("installs the unit, enables the service, and enables linger", () =>
     Effect.gen(function* () {
       const { dirs, fs, path } = yield* makeTestContext();
@@ -226,7 +255,7 @@ it.layer(NodeServices.layer)("BootService", (it) => {
         logsDir: dirs.logsDir,
         cliVersion: "0.0.27",
         host: makeHost(dirs.stableEntry),
-        identity: { serviceName: "tangent", displayName: "Tangent" },
+        identity: { bootServiceName: "tangent", displayName: "Tangent" },
       }).pipe(Effect.provide(makeRecordingRunnerLayer(commands)), provideHostRefs(dirs.home));
 
       const plan = yield* service.install;
@@ -247,7 +276,7 @@ it.layer(NodeServices.layer)("BootService", (it) => {
     }),
   );
 
-  it.effect("pins a runtime via npm install when running from the npx cache", () =>
+  it.effect("pins a runtime from the current package when running from the npx cache", () =>
     Effect.gen(function* () {
       const { dirs, fs, path } = yield* makeTestContext();
       const commands: Array<RecordedCommand> = [];
@@ -267,7 +296,14 @@ it.layer(NodeServices.layer)("BootService", (it) => {
       );
       assert.deepEqual(commands[0], {
         command: "npm",
-        args: ["install", "--prefix", runtimeDir, "--no-fund", "--no-audit", "t3@0.0.27"],
+        args: [
+          "install",
+          "--prefix",
+          runtimeDir,
+          "--no-fund",
+          "--no-audit",
+          "/home/theo/.npm/_npx/abc/node_modules/t3",
+        ],
       });
       // Success is recorded via a sentinel so interrupted installs re-run.
       assert.isTrue(yield* fs.exists(path.join(runtimeDir, ".install-complete")));
@@ -341,7 +377,7 @@ it.layer(NodeServices.layer)("BootService", (it) => {
     }),
   );
 
-  it.effect("reports an installed-but-stale unit so connect can offer a repair", () =>
+  it.effect("reports an installed-but-stale unit so the lifecycle can offer a repair", () =>
     Effect.gen(function* () {
       const { dirs, fs, path } = yield* makeTestContext();
       const commands: Array<RecordedCommand> = [];
@@ -432,8 +468,8 @@ it.layer(NodeServices.layer)("BootService", (it) => {
 
       const error = yield* service.install.pipe(Effect.flip);
       assert.isTrue(isCommandError(error));
-      // A leftover unit would make the next connect report "already set up"
-      // even though linger never happened.
+      // A leftover unit would make status report "installed" even though
+      // linger never happened.
       assert.isFalse(
         yield* fs.exists(path.join(dirs.home, ".config", "systemd", "user", "t3code.service")),
       );

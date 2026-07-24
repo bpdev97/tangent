@@ -1,29 +1,6 @@
 import { assert, it } from "@effect/vitest";
-import type { ProviderOptionDescriptor } from "@t3tools/contracts";
 
-import { mapCodexModelCapabilities } from "./CodexProvider.ts";
-
-const APPROVAL_REVIEWER_DESCRIPTOR: ProviderOptionDescriptor = {
-  id: "approvalsReviewer",
-  label: "Approval reviewer",
-  description:
-    "Choose whether you or Codex reviews actions that cross the active sandbox boundary.",
-  type: "select",
-  options: [
-    {
-      id: "user",
-      label: "Ask me",
-      description: "Pause and ask you when an action needs approval.",
-      isDefault: true,
-    },
-    {
-      id: "auto_review",
-      label: "Auto-review",
-      description: "Use a separate Codex reviewer to approve or deny the action based on risk.",
-    },
-  ],
-  currentValue: "user",
-};
+import { applyPreferredCodexDefaultModel, mapCodexModelCapabilities } from "./CodexProvider.ts";
 
 it("maps current Codex model capability fields", () => {
   const capabilities = mapCodexModelCapabilities({
@@ -84,7 +61,6 @@ it("maps current Codex model capability fields", () => {
       ],
       currentValue: "flex",
     },
-    APPROVAL_REVIEWER_DESCRIPTOR,
   ]);
 });
 
@@ -124,6 +100,47 @@ it("uses standard routing when the catalog has no default service tier", () => {
       ],
       currentValue: "default",
     },
-    APPROVAL_REVIEWER_DESCRIPTOR,
   ]);
+});
+
+it("marks the most preferred available model as default", () => {
+  const models = applyPreferredCodexDefaultModel([
+    { slug: "gpt-5.6-terra", name: "GPT-5.6-Terra", isCustom: false, capabilities: null },
+    { slug: "gpt-5.4", name: "GPT-5.4", isCustom: false, isDefault: true, capabilities: null },
+  ]);
+
+  assert.deepStrictEqual(
+    models.map((model) => ({ slug: model.slug, isDefault: model.isDefault })),
+    [
+      { slug: "gpt-5.6-terra", isDefault: true },
+      { slug: "gpt-5.4", isDefault: undefined },
+    ],
+  );
+});
+
+it("prefers sol over terra when both are available", () => {
+  const models = applyPreferredCodexDefaultModel([
+    { slug: "gpt-5.6-terra", name: "GPT-5.6-Terra", isCustom: false, capabilities: null },
+    { slug: "gpt-5.6-sol", name: "GPT-5.6-Sol", isCustom: false, capabilities: null },
+  ]);
+
+  assert.deepStrictEqual(models.find((model) => model.isDefault)?.slug, "gpt-5.6-sol");
+});
+
+it("keeps Codex's own default when no preferred model is available", () => {
+  const models = applyPreferredCodexDefaultModel([
+    { slug: "gpt-5.5", name: "GPT-5.5", isCustom: false, capabilities: null },
+    { slug: "gpt-5.4", name: "GPT-5.4", isCustom: false, isDefault: true, capabilities: null },
+  ]);
+
+  assert.deepStrictEqual(models.find((model) => model.isDefault)?.slug, "gpt-5.4");
+});
+
+it("ignores custom models that shadow a preferred slug", () => {
+  const models = applyPreferredCodexDefaultModel([
+    { slug: "gpt-5.6-sol", name: "gpt-5.6-sol", isCustom: true, capabilities: null },
+    { slug: "gpt-5.4", name: "GPT-5.4", isCustom: false, isDefault: true, capabilities: null },
+  ]);
+
+  assert.deepStrictEqual(models.find((model) => model.isDefault)?.slug, "gpt-5.4");
 });
