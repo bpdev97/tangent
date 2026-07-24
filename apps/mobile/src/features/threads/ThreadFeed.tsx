@@ -45,12 +45,7 @@ import {
 import { TouchableOpacity } from "react-native-gesture-handler";
 import ImageViewing from "react-native-image-viewing";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Animated, {
-  FadeIn,
-  FadeInUp,
-  LinearTransition,
-  type SharedValue,
-} from "react-native-reanimated";
+import Animated, { FadeIn, FadeInUp, type SharedValue } from "react-native-reanimated";
 import { useThemeColor } from "../../lib/useThemeColor";
 import { useFontFamily } from "../../lib/useFontFamily";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
@@ -109,10 +104,6 @@ function formatMessageTime(input: string): string {
   }
   return MESSAGE_TIME_FORMATTER.format(timestamp);
 }
-
-// Rows shift when content above them grows (streaming text, work-log folds);
-// animating the container position turns those jumps into slides.
-const FEED_ITEM_LAYOUT_TRANSITION = LinearTransition.duration(180);
 
 // Entering animations must only play for rows born just now — LegendList
 // remounts rows when they scroll back into view, and replaying an entrance for
@@ -1280,6 +1271,7 @@ function ThreadFeedPlaceholder(props: {
   readonly bottomInset: number;
   readonly detail: string;
   readonly horizontalPadding: number;
+  readonly loading?: boolean;
   readonly title: string;
   readonly topInset: number;
 }) {
@@ -1296,6 +1288,7 @@ function ThreadFeedPlaceholder(props: {
       }}
     >
       <View className="max-w-[320px] items-center gap-2">
+        {props.loading === true ? <ActivityIndicator size="small" /> : null}
         <Text className="text-center font-t3-bold text-lg text-foreground">{props.title}</Text>
         <Text className="text-center text-sm leading-normal text-foreground-secondary">
           {props.detail}
@@ -1576,7 +1569,10 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const maintainVisibleContentPosition = useMemo(
     () => ({
       data: true,
-      size: true,
+      // Data changes can replace or regroup rows, but measuring a variable-height
+      // row while the user scrolls should not issue a second JS offset correction.
+      // End maintenance remains the sole owner of streaming growth at the bottom.
+      size: false,
       shouldRestorePosition: shouldRestoreVisibleContentPosition,
     }),
     [shouldRestoreVisibleContentPosition],
@@ -1698,11 +1694,12 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     ],
   );
 
-  if (props.contentPresentation.kind === "unavailable") {
+  if (props.contentPresentation.kind !== "ready") {
     return (
       <ThreadFeedPlaceholder
         title={props.contentPresentation.title}
         detail={props.contentPresentation.detail}
+        loading={props.contentPresentation.kind === "loading"}
         topInset={topContentInset}
         bottomInset={bottomContentInset}
         horizontalPadding={horizontalPadding}
@@ -1743,7 +1740,6 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
                 }
               : { scrollIndicatorInsets: { top: topContentInset, bottom: 0 } })}
             {...(anchoredEndSpace ? { anchoredEndSpace } : {})}
-            itemLayoutAnimation={FEED_ITEM_LAYOUT_TRANSITION}
             // Patched LegendList prop (patches/@legendapp__list@3.2.0.patch):
             // lets its scroll math clamp programmatic scrolls to -headerInset
             // instead of 0, so initialScrollAtEnd/maintainScrollAtEnd on short

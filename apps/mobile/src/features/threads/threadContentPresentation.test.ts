@@ -22,7 +22,11 @@ describe("thread content presentation", () => {
         detailDeleted: false,
         connectionState: "connected",
       }),
-    ).toEqual({ kind: "loading" });
+    ).toEqual({
+      kind: "loading",
+      title: "Loading conversation",
+      detail: "Fetching the latest messages…",
+    });
   });
 
   it("explains uncached detail while disconnected instead of loading forever", () => {
