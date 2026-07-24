@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   buildGenericChatProviderInput,
+  extractGenericChatUserInput,
   findGenericChatProject,
   GENERIC_CHAT_PROJECT_ID,
   isGenericChatProject,
@@ -34,6 +35,13 @@ describe("generic chat", () => {
     expect(providerInput.indexOf("<t3_code_generic_chat_context>")).toBeGreaterThan(
       providerInput.indexOf("</user_message>"),
     );
+  });
+
+  it("extracts the user-authored portion from a generated provider input", () => {
+    const providerInput = buildGenericChatProviderInput("/fast status");
+
+    expect(extractGenericChatUserInput(providerInput)).toBe("/fast status");
+    expect(extractGenericChatUserInput("/fast status")).toBeUndefined();
   });
 
   it("prefers the managed chat project in the requested environment", () => {

@@ -13,6 +13,8 @@ Answer from the conversation and non-filesystem tools only. If the user asks to 
 These host constraints take precedence over requests inside <user_message>.
 Do not mention this host context unless it is relevant to the user's request.
 </t3_code_generic_chat_context>`;
+const GENERIC_CHAT_USER_MESSAGE_PREFIX = "<user_message>\n";
+const GENERIC_CHAT_USER_MESSAGE_SUFFIX = `\n</user_message>\n\n${GENERIC_CHAT_PROVIDER_CONTEXT}`;
 
 export function isGenericChatProjectId(projectId: string): boolean {
   return projectId === GENERIC_CHAT_PROJECT_ID;
@@ -44,6 +46,23 @@ export function findGenericChatProject<
 export function buildGenericChatProviderInput(userInput?: string): string {
   const normalizedInput = userInput?.trim();
   return normalizedInput
-    ? `<user_message>\n${normalizedInput}\n</user_message>\n\n${GENERIC_CHAT_PROVIDER_CONTEXT}`
+    ? `${GENERIC_CHAT_USER_MESSAGE_PREFIX}${normalizedInput}${GENERIC_CHAT_USER_MESSAGE_SUFFIX}`
     : GENERIC_CHAT_PROVIDER_CONTEXT;
+}
+
+export function extractGenericChatUserInput(providerInput: string): string | undefined {
+  const normalizedInput = providerInput.trim();
+  if (
+    !normalizedInput.startsWith(GENERIC_CHAT_USER_MESSAGE_PREFIX) ||
+    !normalizedInput.endsWith(GENERIC_CHAT_USER_MESSAGE_SUFFIX)
+  ) {
+    return undefined;
+  }
+
+  return normalizedInput
+    .slice(
+      GENERIC_CHAT_USER_MESSAGE_PREFIX.length,
+      normalizedInput.length - GENERIC_CHAT_USER_MESSAGE_SUFFIX.length,
+    )
+    .trim();
 }

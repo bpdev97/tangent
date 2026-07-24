@@ -13,6 +13,10 @@ import {
   ThreadId,
   type ProviderRuntimeEvent,
 } from "@t3tools/contracts";
+import {
+  buildGenericChatProviderInput,
+  extractGenericChatUserInput,
+} from "@t3tools/shared/genericChat";
 import { ServerConfig } from "../../config.ts";
 import { makeHermesAdapter } from "./HermesAdapter.ts";
 import type { HermesGatewayConnection, HermesGatewayEvent } from "./HermesGatewayClient.ts";
@@ -26,6 +30,9 @@ const settleEvents = Effect.gen(function* () {
 class FakeGateway implements HermesGatewayConnection {
   readonly requests: Array<{ method: string; params: Readonly<Record<string, unknown>> }> = [];
   promptSubmit: Promise<unknown> | undefined;
+  slashExecResult: unknown = { output: "(no output)" };
+  slashExecError: Error | undefined;
+  commandDispatchResult: unknown = { type: "exec", output: "(no output)" };
   closed = false;
 
   async request<T>(method: string, params: Readonly<Record<string, unknown>> = {}): Promise<T> {
@@ -33,6 +40,11 @@ class FakeGateway implements HermesGatewayConnection {
     if (method === "prompt.submit" && this.promptSubmit) {
       return (await this.promptSubmit) as T;
     }
+    if (method === "slash.exec") {
+      if (this.slashExecError) throw this.slashExecError;
+      return this.slashExecResult as T;
+    }
+    if (method === "command.dispatch") return this.commandDispatchResult as T;
     const result =
       method === "session.create"
         ? {
@@ -220,6 +232,97 @@ it.layer(testLayer)("HermesAdapter gateway", (it) => {
             (request) => request.method === "clarify.respond" && request.params.answer === "dev",
           ),
         );
+      }),
+    ),
+  );
+
+  it.effect("executes slash commands through the gateway and publishes their output", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const gateway = new FakeGateway();
+        gateway.slashExecResult = { output: "Priority Processing: normal" };
+        const adapter = yield* makeHermesAdapter(decodeSettings({ profile: "default" }), {
+          gatewayRuntime: fakeRuntime(gateway, {}),
+        });
+        const threadId = ThreadId.make("hermes-gateway-slash");
+        const events: ProviderRuntimeEvent[] = [];
+        yield* Stream.runForEach(adapter.streamEvents, (event) =>
+          Effect.sync(() => events.push(event)),
+        ).pipe(Effect.forkChild);
+        yield* Effect.yieldNow;
+        yield* adapter.startSession({ threadId, runtimeMode: "approval-required" });
+        const turn = yield* adapter.sendTurn({
+          threadId,
+          input: buildGenericChatProviderInput("/fast status"),
+        });
+        yield* settleEvents;
+
+        assert.isTrue(
+          gateway.requests.some(
+            (request) =>
+              request.method === "slash.exec" &&
+              request.params.session_id === "live-1" &&
+              request.params.command === "fast status",
+          ),
+        );
+        assert.isFalse(gateway.requests.some((request) => request.method === "prompt.submit"));
+        assert.isTrue(
+          events.some(
+            (event) =>
+              event.type === "content.delta" &&
+              event.payload.streamKind === "assistant_text" &&
+              event.payload.delta === "Priority Processing: normal",
+          ),
+        );
+        assert.isTrue(
+          events.some((event) => event.type === "turn.completed" && event.turnId === turn.turnId),
+        );
+        assert.equal((yield* adapter.listSessions())[0]?.status, "ready");
+      }),
+    ),
+  );
+
+  it.effect("falls back to command.dispatch and submits skill payloads as prompts", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const gateway = new FakeGateway();
+        gateway.slashExecError = new Error("skill command: use command.dispatch");
+        gateway.commandDispatchResult = {
+          type: "skill",
+          name: "plan",
+          message: "Use the planning skill for: ship this",
+        };
+        const emitter: { current?: (event: HermesGatewayEvent) => void } = {};
+        const adapter = yield* makeHermesAdapter(decodeSettings({ profile: "default" }), {
+          gatewayRuntime: fakeRuntime(gateway, emitter),
+        });
+        const threadId = ThreadId.make("hermes-gateway-skill-command");
+        yield* adapter.startSession({ threadId, runtimeMode: "approval-required" });
+        yield* adapter.sendTurn({
+          threadId,
+          input: buildGenericChatProviderInput("/plan ship this"),
+        });
+        yield* settleEvents;
+
+        assert.isTrue(
+          gateway.requests.some(
+            (request) =>
+              request.method === "command.dispatch" &&
+              request.params.name === "plan" &&
+              request.params.arg === "ship this",
+          ),
+        );
+        const promptSubmit = gateway.requests.find((request) => request.method === "prompt.submit");
+        assert.equal(
+          extractGenericChatUserInput(String(promptSubmit?.params.text)),
+          "Use the planning skill for: ship this",
+        );
+
+        emitter.current?.({
+          type: "message.complete",
+          session_id: "live-1",
+          payload: { text: "Plan ready", status: "complete" },
+        });
       }),
     ),
   );

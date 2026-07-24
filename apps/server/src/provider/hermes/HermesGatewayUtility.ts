@@ -23,8 +23,14 @@ export interface HermesModelOptions {
   readonly providers?: ReadonlyArray<HermesModelOptionProvider>;
 }
 
+export interface HermesCommandsCatalog {
+  readonly pairs?: ReadonlyArray<readonly [name: string, description: string]>;
+  readonly warning?: string;
+}
+
 export interface HermesGatewayUtility {
   readonly getModels: Effect.Effect<HermesModelOptions, ProviderAdapterError>;
+  readonly getCommands: Effect.Effect<HermesCommandsCatalog, ProviderAdapterError>;
   readonly getSetupStatus: Effect.Effect<
     { readonly provider_configured?: boolean },
     ProviderAdapterError
@@ -83,6 +89,9 @@ export const makeHermesGatewayUtility = Effect.fn("makeHermesGatewayUtility")(fu
           ),
     ),
   );
+  // Commands include profile-local quick commands and installed skills, so refresh the
+  // catalog whenever provider status is refreshed instead of pinning the startup result.
+  const getCommands = lock.withPermit(rpc<HermesCommandsCatalog>("commands.catalog"));
   const getSetupStatus = lock.withPermit(
     Effect.suspend(() =>
       cachedSetupStatus
@@ -107,5 +116,5 @@ export const makeHermesGatewayUtility = Effect.fn("makeHermesGatewayUtility")(fu
     );
 
   yield* Effect.addFinalizer(() => Effect.sync(() => client?.close()));
-  return { getModels, getSetupStatus, generate };
+  return { getModels, getCommands, getSetupStatus, generate };
 });

@@ -49,8 +49,9 @@ are intentionally not migrated; opening one starts a new Hermes session. This lo
 accepted for the gateway migration.
 
 The adapter and utility service share the provider instance's gateway process. Model discovery uses
-`model.options`, readiness uses `setup.status`, and small text-generation jobs use the stateless
-`llm.oneshot` method, so they do not add turns to a chat transcript.
+`model.options`, slash-command discovery uses `commands.catalog`, readiness uses `setup.status`,
+and small text-generation jobs use the stateless `llm.oneshot` method, so they do not add turns to a
+chat transcript.
 
 ## Protocol mappings
 
@@ -63,6 +64,9 @@ The adapter and utility service share the provider instance's gateway process. M
 - `image.attach` stages T3 image attachments before the next prompt.
 - `config.set` switches a resumed or active session's model. Discovered model IDs are qualified as
   `<provider>:<model>` so provider routing is never guessed.
+- `commands.catalog` supplies built-in, quick, and skill-derived slash commands. Submitted slash
+  commands use `slash.exec` with `command.dispatch` fallback; dispatches that return a prompt are
+  sent through `prompt.submit`, while direct command output becomes canonical assistant output.
 - `session.interrupt`, `session.close`, and `session.undo` implement stop, lifecycle cleanup, and
   rollback.
 - `approval.request` maps to T3 approvals. Accept, accept-for-session, and decline map to `once`,

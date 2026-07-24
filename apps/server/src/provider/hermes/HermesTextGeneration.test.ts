@@ -12,6 +12,7 @@ it.effect("generates structured text through the stateless Hermes gateway utilit
     const prompts: string[] = [];
     const utility: HermesGatewayUtility = {
       getModels: Effect.succeed({ providers: [] }),
+      getCommands: Effect.succeed({ pairs: [] }),
       getSetupStatus: Effect.succeed({ provider_configured: true }),
       generate: ({ prompt }) => {
         prompts.push(prompt);
