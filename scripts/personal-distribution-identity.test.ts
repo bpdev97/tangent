@@ -4,10 +4,14 @@ import { PERSONAL_DISTRIBUTION } from "../downstream/config.ts";
 
 describe("personal distribution identity", () => {
   it("keeps installed identities and persistent state distinct from upstream", () => {
-    const { connect, mobile, macos, repository } = PERSONAL_DISTRIBUTION;
+    const { connect, mobile, macos, repository, serverRelease } = PERSONAL_DISTRIBUTION;
 
     expect(repository).toEqual({ owner: "bpdev97", name: "tangent" });
     expect(connect).toEqual({ bootServiceName: "tangent", displayName: "Tangent" });
+    expect(serverRelease).toEqual({
+      tagPrefix: "personal-v",
+      artifactNamePrefix: "tangent-server",
+    });
     expect(mobile.appName).toBe("Tangent");
     expect([mobile.scheme, mobile.developmentScheme, mobile.previewScheme]).toEqual([
       "bpdev-code",

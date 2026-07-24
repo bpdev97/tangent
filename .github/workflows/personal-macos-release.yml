@@ -108,6 +108,22 @@ jobs:
             -exec cp {} release-publish/ \;
           test -n "$(find release-publish -maxdepth 1 -type f -print -quit)"
 
+      - name: Pack Tangent server release
+        shell: bash
+        run: |
+          version="${{ steps.release-meta.outputs.version }}"
+          node apps/server/scripts/cli.ts pack \
+            --output-directory release-publish
+          source_archive="release-publish/t3-$version.tgz"
+          release_archive="release-publish/tangent-server-$version.tgz"
+          test -f "$source_archive"
+          mv "$source_archive" "$release_archive"
+          (
+            cd release-publish
+            shasum -a 256 "tangent-server-$version.tgz" \
+              > "tangent-server-$version.tgz.sha256"
+          )
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:

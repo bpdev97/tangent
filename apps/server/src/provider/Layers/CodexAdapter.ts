@@ -40,10 +40,7 @@ import * as CodexErrors from "effect-codex-app-server/errors";
 import * as EffectCodexSchema from "effect-codex-app-server/schema";
 
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
-import {
-  getCodexApprovalsReviewerOptionValue,
-  getCodexServiceTierOptionValue,
-} from "../../codexModelOptions.ts";
+import { getCodexServiceTierOptionValue } from "../../codexModelOptions.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import { parseCodexMcpToolApproval } from "../CodexMcpApproval.ts";
 
@@ -1535,10 +1532,6 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           input.modelSelection?.instanceId === boundInstanceId
             ? getCodexServiceTierOptionValue(input.modelSelection)
             : undefined;
-        const approvalsReviewer =
-          input.modelSelection?.instanceId === boundInstanceId
-            ? getCodexApprovalsReviewerOptionValue(input.modelSelection)
-            : undefined;
         const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
         const runtimeInput: CodexSessionRuntimeOptions = {
           threadId: input.threadId,
@@ -1556,7 +1549,6 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             ? { model: input.modelSelection.model }
             : {}),
           ...(serviceTier ? { serviceTier } : {}),
-          ...(approvalsReviewer ? { approvalsReviewer } : {}),
           ...(mcpSession
             ? {
                 environment: {
@@ -1690,10 +1682,6 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       input.modelSelection?.instanceId === boundInstanceId
         ? getCodexServiceTierOptionValue(input.modelSelection)
         : undefined;
-    const approvalsReviewer =
-      input.modelSelection?.instanceId === boundInstanceId
-        ? getCodexApprovalsReviewerOptionValue(input.modelSelection)
-        : undefined;
     return yield* session.runtime
       .sendTurn({
         ...(input.input !== undefined ? { input: input.input } : {}),
@@ -1706,7 +1694,6 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             }
           : {}),
         ...(serviceTier ? { serviceTier } : {}),
-        ...(approvalsReviewer ? { approvalsReviewer } : {}),
         ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
         ...(codexAttachments.length > 0 ? { attachments: codexAttachments } : {}),
       })

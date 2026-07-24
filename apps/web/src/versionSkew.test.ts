@@ -1,14 +1,17 @@
 import { EnvironmentId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { APP_VERSION } from "./branding";
+import { APP_BASE_NAME, APP_VERSION } from "./branding";
 import {
   appendVersionMismatchHint,
   buildVersionMismatchDismissalKey,
   dismissVersionMismatch,
   isVersionMismatchDismissed,
+  manualServerUpdateCommand,
   resolveServerConfigVersionMismatch,
+  resolveServerSelfUpdateCapability,
   resolveVersionMismatch,
+  serverUpdateGuidance,
 } from "./versionSkew";
 
 describe("versionSkew", () => {
@@ -20,7 +23,7 @@ describe("versionSkew", () => {
     expect(resolveVersionMismatch("9.9.9")).toEqual({
       clientVersion: APP_VERSION,
       serverVersion: "9.9.9",
-      hint: "Version mismatch. Try syncing the client and server to the same T3 Code version.",
+      hint: `Version mismatch. Try syncing the client and server to the same ${APP_BASE_NAME} version.`,
     });
   });
 
@@ -72,7 +75,43 @@ describe("versionSkew", () => {
     const mismatch = resolveVersionMismatch("9.9.9");
 
     expect(appendVersionMismatchHint("Socket closed.", mismatch)).toBe(
-      "Socket closed. Hint: Version mismatch. Try syncing the client and server to the same T3 Code version.",
+      `Socket closed. Hint: Version mismatch. Try syncing the client and server to the same ${APP_BASE_NAME} version.`,
+    );
+  });
+
+  it("reads desktop-managed update capabilities from config descriptors", () => {
+    expect(
+      resolveServerSelfUpdateCapability({
+        environment: {
+          environmentId: EnvironmentId.make("environment-desktop"),
+          label: "Desktop",
+          platform: { os: "darwin", arch: "arm64" },
+          serverVersion: "9.9.9",
+          capabilities: {
+            repositoryIdentity: true,
+            serverSelfUpdate: "desktop-managed",
+          },
+        },
+      }),
+    ).toBe("desktop-managed");
+    expect(resolveServerSelfUpdateCapability(null)).toBeNull();
+  });
+
+  it("matches version-drift guidance to the advertised update path", () => {
+    expect(serverUpdateGuidance("respawn", "Remote server")).toBe(
+      "Update the Remote server so they stay in sync.",
+    );
+    expect(serverUpdateGuidance("desktop-managed", "Desktop server")).toBe(
+      `The Desktop server is run by the ${APP_BASE_NAME} desktop app on its machine — update the desktop app there to sync them.`,
+    );
+    expect(serverUpdateGuidance(null, "Local server")).toBe(
+      "Relaunch the Local server with the copied command to sync them.",
+    );
+  });
+
+  it("builds manual update commands from Tangent GitHub Releases", () => {
+    expect(manualServerUpdateCommand("1.2.3")).toBe(
+      "npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v1.2.3/tangent-server-1.2.3.tgz",
     );
   });
 });

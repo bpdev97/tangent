@@ -272,7 +272,6 @@ validationLayer("CodexAdapterLive validation", (it) => {
         threadId: asThreadId("thread-1"),
         modelSelection: createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.3-codex", [
           { id: "serviceTier", value: "priority" },
-          { id: "approvalsReviewer", value: "auto_review" },
         ]),
         runtimeMode: "full-access",
       });
@@ -284,7 +283,6 @@ validationLayer("CodexAdapterLive validation", (it) => {
         model: "gpt-5.3-codex",
         providerInstanceId: ProviderInstanceId.make("codex"),
         serviceTier: "priority",
-        approvalsReviewer: "auto_review",
         threadId: asThreadId("thread-1"),
         runtimeMode: "full-access",
       });
@@ -348,7 +346,6 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
           modelSelection: createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.3-codex", [
             { id: "reasoningEffort", value: "high" },
             { id: "serviceTier", value: "priority" },
-            { id: "approvalsReviewer", value: "auto_review" },
           ]),
           attachments: [],
         }),
@@ -359,7 +356,6 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
         model: "gpt-5.3-codex",
         effort: "high",
         serviceTier: "priority",
-        approvalsReviewer: "auto_review",
       });
     }),
   );

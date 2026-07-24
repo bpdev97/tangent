@@ -1,3 +1,9 @@
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code !== "EPIPE") throw err;
+  });
+}
+
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -13,6 +19,7 @@ import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/ho
 import { resolveRemoteT3CliPackageSpec } from "@t3tools/ssh/command";
 import type { RemoteT3RunnerOptions } from "@t3tools/ssh/tunnel";
 import serverPackageJson from "../../server/package.json" with { type: "json" };
+import { PERSONAL_DISTRIBUTION } from "../../../downstream/config.ts";
 
 import * as DesktopIpc from "./ipc/DesktopIpc.ts";
 import * as ElectronApp from "./electron/ElectronApp.ts";
@@ -86,6 +93,10 @@ const resolveDesktopSshCliRunner = (
       appVersion: environment.appVersion,
       updateChannel: settings.updateChannel,
       isDevelopment: environment.isDevelopment,
+      serverRelease: {
+        repository: PERSONAL_DISTRIBUTION.repository,
+        ...PERSONAL_DISTRIBUTION.serverRelease,
+      },
     }),
     nodeEngineRange: serverPackageJson.engines.node,
   };

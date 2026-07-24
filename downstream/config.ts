@@ -7,6 +7,10 @@ export const PERSONAL_DISTRIBUTION = {
     bootServiceName: "tangent",
     displayName: "Tangent",
   },
+  serverRelease: {
+    tagPrefix: "personal-v",
+    artifactNamePrefix: "tangent-server",
+  },
   mobile: {
     appName: "Tangent",
     developmentAppName: "Tangent Dev",
