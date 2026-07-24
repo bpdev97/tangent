@@ -2,9 +2,77 @@ import { describe, expect, it } from "@effect/vitest";
 
 import {
   deriveToolCallPresentation,
+  deriveToolCallSummary,
   mergeToolCallPresentations,
+  mergeToolCallSummaries,
   toolCallSectionText,
 } from "./index.ts";
+
+describe("deriveToolCallSummary", () => {
+  it("projects collapsed-row metadata without constructing full details", () => {
+    const summary = deriveToolCallSummary({
+      activityKind: "tool.completed",
+      summary: "Call repository tool",
+      payload: {
+        itemId: "mcp-summary",
+        itemType: "mcp_tool_call",
+        status: "completed",
+        data: {
+          item: {
+            server: "repository",
+            tool: "search",
+            arguments: { query: "work log" },
+            result: { matches: Array.from({ length: 100 }, (_, index) => `match-${index}`) },
+          },
+        },
+      },
+    });
+
+    expect(summary).toEqual({
+      callId: "mcp-summary",
+      category: "mcp",
+      title: "repository · search",
+      preview: '{"query":"work log"}',
+      status: "completed",
+      hasDetails: true,
+    });
+    expect(summary).not.toHaveProperty("sections");
+    expect(summary).not.toHaveProperty("copyText");
+  });
+
+  it("merges sparse lifecycle summaries without requiring detail sections", () => {
+    const started = deriveToolCallSummary({
+      activityKind: "tool.started",
+      summary: "Run tests started",
+      payload: {
+        itemId: "summary-command",
+        itemType: "command_execution",
+        title: "Run tests",
+        data: { item: { command: "vp test", cwd: "/workspace" } },
+      },
+    });
+    const completed = deriveToolCallSummary({
+      activityKind: "tool.completed",
+      summary: "Run tests",
+      payload: {
+        itemId: "summary-command",
+        itemType: "command_execution",
+        status: "completed",
+        data: { item: { aggregatedOutput: "passed", exitCode: 0 } },
+      },
+    });
+
+    expect(mergeToolCallSummaries(started, completed)).toEqual({
+      callId: "summary-command",
+      category: "command",
+      title: "Run tests",
+      preview: "passed",
+      status: "completed",
+      exitCode: 0,
+      hasDetails: true,
+    });
+  });
+});
 
 describe("deriveToolCallPresentation", () => {
   it("presents a Codex command start as running before output exists", () => {

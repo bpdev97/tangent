@@ -12,10 +12,13 @@ import {
 
 import { AppText as Text } from "../../components/AppText";
 import { cn } from "../../lib/cn";
-import type { ThreadFeedActivity } from "../../lib/threadActivity";
+import {
+  resolveThreadFeedActivityCopyText,
+  resolveThreadFeedActivityToolCall,
+  type ThreadFeedActivity,
+} from "../../lib/threadActivity";
 import {
   formatToolCallDuration,
-  toolCallHasDetails,
   toolCallSectionText,
   type ToolCallDetailSection,
   type ToolCallPresentation,
@@ -216,16 +219,14 @@ export function ThreadWorkLog(props: {
 }) {
   const colorScheme = useColorScheme();
   const pressedBackground = colorScheme === "dark" ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.035)";
-  const rows = props.activities
-    .filter(
-      (activity) =>
-        !(
-          activity.toolLike &&
-          activity.status === "neutral" &&
-          activity.toolCall?.status !== "inProgress"
-        ),
-    )
-    .map((activity) => ({ ...activity, detail: compactActivityDetail(activity.detail) }));
+  const rows = props.activities.filter(
+    (activity) =>
+      !(
+        activity.toolLike &&
+        activity.status === "neutral" &&
+        activity.toolCall?.status !== "inProgress"
+      ),
+  );
 
   if (rows.length === 0) {
     return null;
@@ -244,10 +245,11 @@ export function ThreadWorkLog(props: {
       <View className="gap-px">
         {rows.map((row) => {
           const expanded = props.expandedRows[row.id] ?? false;
-          const canExpand =
-            row.fullDetail !== null ||
-            (row.toolCall !== undefined && toolCallHasDetails(row.toolCall));
-          const displayText = row.detail ? `${row.summary} ${row.detail}` : row.summary;
+          const detail = compactActivityDetail(row.detail);
+          const canExpand = row.fullDetail !== null || row.toolCall?.hasDetails === true;
+          const resolvedToolCall =
+            expanded && row.toolCall ? resolveThreadFeedActivityToolCall(row) : undefined;
+          const displayText = detail ? `${row.summary} ${detail}` : row.summary;
           const iconIsDestructive = row.icon === "alert" || row.icon === "warning";
 
           return (
@@ -271,7 +273,7 @@ export function ThreadWorkLog(props: {
                     props.onToggleRow(row.id);
                   }
                 }}
-                onLongPress={() => props.onCopyRow(row.id, row.copyText)}
+                onLongPress={() => props.onCopyRow(row.id, resolveThreadFeedActivityCopyText(row))}
                 style={({ pressed }) => ({
                   backgroundColor: pressed ? pressedBackground : "transparent",
                 })}
@@ -297,8 +299,8 @@ export function ThreadWorkLog(props: {
                     >
                       {row.summary}
                     </Text>
-                    {row.detail ? (
-                      <Text className="text-foreground-muted opacity-60"> {row.detail}</Text>
+                    {detail ? (
+                      <Text className="text-foreground-muted opacity-60"> {detail}</Text>
                     ) : null}
                   </Text>
 
@@ -346,9 +348,9 @@ export function ThreadWorkLog(props: {
 
               {expanded && canExpand ? (
                 <View className="ml-7 border-l border-neutral-300/60 pb-1 pl-3 pt-0.5 dark:border-white/[0.12]">
-                  {row.toolCall ? (
+                  {resolvedToolCall ? (
                     <ToolCallDetails
-                      toolCall={row.toolCall}
+                      toolCall={resolvedToolCall}
                       renderMarkdown={props.renderMarkdown}
                     />
                   ) : row.fullDetail ? (

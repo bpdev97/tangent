@@ -41,6 +41,12 @@ Claude-specific decoding to either UI.
 - Projection snapshots and targeted thread detail queries return the latest 500 activities per
   thread, matching the in-memory projector. The projection table remains rebuildable history for
   shell-summary derivations, while reconnect payloads cannot grow without bound.
+- Mobile retains each derived feed by immutable thread-snapshot identity. Reopening an unchanged
+  thread reuses the projection, while a replacement snapshot invalidates it automatically and the
+  weak cache does not extend the snapshot's lifetime.
+- Mobile derives and weakly caches only collapsed-row summaries for immutable activity objects.
+  Structured sections, bounded JSON, diffs, and copy text are projected on first expansion or copy
+  and then weakly cached for subsequent use.
 - Three recent work-log rows remain visible before the existing disclosure folds older work.
 - Unknown tool shapes fall back to a bounded JSON details section instead of disappearing.
 - Explicit lifecycle status and exit code win over text heuristics. Legacy activities still use the
