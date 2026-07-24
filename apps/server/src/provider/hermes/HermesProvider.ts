@@ -2,6 +2,7 @@ import {
   type HermesSettings,
   type ModelCapabilities,
   type ServerProviderModel,
+  type ServerProviderSlashCommand,
 } from "@t3tools/contracts";
 import { createModelCapabilities } from "@t3tools/shared/model";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
@@ -20,7 +21,7 @@ import {
   spawnAndCollect,
   type ServerProviderDraft,
 } from "../providerSnapshot.ts";
-import type { HermesModelOptions } from "./HermesGatewayUtility.ts";
+import type { HermesCommandsCatalog, HermesModelOptions } from "./HermesGatewayUtility.ts";
 import { HERMES_DRIVER_KIND } from "./HermesGatewaySupport.ts";
 
 const HERMES_PRESENTATION = {
@@ -87,6 +88,29 @@ export function buildHermesModelsFromGateway(
   );
 }
 
+export function buildHermesSlashCommandsFromGateway(
+  catalog: HermesCommandsCatalog | null | undefined,
+): ReadonlyArray<ServerProviderSlashCommand> {
+  const commands = new Map<string, ServerProviderSlashCommand>();
+  for (const [rawName, rawDescription] of catalog?.pairs ?? []) {
+    const name = rawName.replace(/^\/+/, "").trim();
+    if (!name || /\s/.test(name)) continue;
+
+    const description = rawDescription.trim() || undefined;
+    const key = name.toLowerCase();
+    const existing = commands.get(key);
+    commands.set(key, {
+      name: existing?.name ?? name,
+      ...(existing?.description
+        ? { description: existing.description }
+        : description
+          ? { description }
+          : {}),
+    });
+  }
+  return [...commands.values()];
+}
+
 export const buildInitialHermesProviderSnapshot = Effect.fn("buildInitialHermesProviderSnapshot")(
   function* (settings: HermesSettings) {
     const checkedAt = DateTime.formatIso(yield* DateTime.now);
@@ -141,6 +165,7 @@ export const checkHermesProviderStatus = Effect.fn("checkHermesProviderStatus")(
   settings: HermesSettings,
   environment: NodeJS.ProcessEnv,
   discoverModels: Effect.Effect<HermesModelOptions, ProviderAdapterError>,
+  discoverCommands: Effect.Effect<HermesCommandsCatalog, ProviderAdapterError>,
   getSetupStatus: Effect.Effect<{ readonly provider_configured?: boolean }, ProviderAdapterError>,
 ): Effect.fn.Return<ServerProviderDraft, never, ChildProcessSpawner.ChildProcessSpawner> {
   const checkedAt = DateTime.formatIso(yield* DateTime.now);
@@ -257,11 +282,20 @@ export const checkHermesProviderStatus = Effect.fn("checkHermesProviderStatus")(
     });
   }
   const discovered = buildHermesModelsFromGateway(discovery.success.value);
+  const commands = yield* discoverCommands.pipe(
+    Effect.timeoutOption(MODEL_DISCOVERY_TIMEOUT_MS),
+    Effect.result,
+  );
+  const slashCommands =
+    Result.isSuccess(commands) && Option.isSome(commands.success)
+      ? buildHermesSlashCommandsFromGateway(commands.success.value)
+      : [];
   return buildServerProvider({
     presentation: HERMES_PRESENTATION,
     enabled: true,
     checkedAt,
     models: modelsFromSettings(settings.customModels, discovered),
+    slashCommands,
     probe: {
       installed: true,
       version,

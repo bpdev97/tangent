@@ -113,6 +113,7 @@ export const HermesDriver: ProviderDriver<HermesSettings, HermesDriverEnv> = {
         effectiveConfig,
         processEnv,
         utility.getModels,
+        utility.getCommands,
         utility.getSetupStatus,
       ).pipe(
         Effect.map(stampIdentity),

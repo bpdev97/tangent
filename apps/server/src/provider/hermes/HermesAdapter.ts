@@ -13,11 +13,16 @@ import {
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
+import {
+  buildGenericChatProviderInput,
+  extractGenericChatUserInput,
+} from "@t3tools/shared/genericChat";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
+import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
@@ -88,6 +93,27 @@ interface SessionStartResponse {
   readonly info?: Readonly<Record<string, unknown>>;
 }
 
+type HermesCommandDispatch =
+  | { readonly type: "exec"; readonly output?: string }
+  | { readonly type: "plugin"; readonly output?: string }
+  | { readonly type: "alias"; readonly target: string }
+  | {
+      readonly type: "send" | "prefill";
+      readonly message: string;
+      readonly notice?: string;
+    }
+  | {
+      readonly type: "skill";
+      readonly message?: string;
+      readonly name: string;
+    };
+
+interface HermesSlashCommand {
+  readonly name: string;
+  readonly arg: string;
+  readonly command: string;
+}
+
 function record(value: unknown): Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Readonly<Record<string, unknown>>)
@@ -107,6 +133,45 @@ function answerText(value: unknown): string {
   if (Array.isArray(value)) return value.map(String).join(", ");
   if (value === undefined || value === null) return "";
   return String(value);
+}
+
+function parseHermesSlashCommand(value: string): HermesSlashCommand | undefined {
+  const command = value.trim();
+  const match = /^\/([^/\s]+)(?:\s+([\s\S]*))?$/.exec(command);
+  if (!match?.[1]) return undefined;
+  return {
+    name: match[1],
+    arg: match[2]?.trim() ?? "",
+    command: command.slice(1),
+  };
+}
+
+function parseHermesCommandDispatch(value: unknown): HermesCommandDispatch | undefined {
+  const payload = record(value);
+  const type = payload.type;
+  if (type === "exec" || type === "plugin") {
+    return { type, ...(typeof payload.output === "string" ? { output: payload.output } : {}) };
+  }
+  if (type === "alias") {
+    return typeof payload.target === "string" && payload.target.trim()
+      ? { type, target: payload.target.trim() }
+      : undefined;
+  }
+  if ((type === "send" || type === "prefill") && typeof payload.message === "string") {
+    return {
+      type,
+      message: payload.message,
+      ...(typeof payload.notice === "string" ? { notice: payload.notice } : {}),
+    };
+  }
+  if (type === "skill" && typeof payload.name === "string") {
+    return {
+      type,
+      name: payload.name,
+      ...(typeof payload.message === "string" ? { message: payload.message } : {}),
+    };
+  }
+  return undefined;
 }
 
 function gatewayRequestError(
@@ -244,6 +309,137 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
         ...(detail ? { errorMessage: detail } : {}),
       },
     });
+  });
+
+  const publishCommandOutput = Effect.fn("HermesAdapter.publishCommandOutput")(function* (
+    context: HermesSessionContext,
+    output: string,
+    completeTurn: boolean,
+  ) {
+    const detail = output.trim() || "(no output)";
+    const event: HermesGatewayEvent = {
+      type: "slash.output",
+      session_id: context.liveSessionId,
+      payload: { text: detail },
+    };
+    const itemId = makeItemId(context, `${context.activeTurnId ?? "idle"}:slash:${yield* uuid}`);
+    yield* publish({
+      type: "item.started",
+      ...(yield* stamp()),
+      ...base(context, event),
+      itemId,
+      payload: { itemType: "assistant_message", status: "inProgress" },
+    });
+    yield* publish({
+      type: "content.delta",
+      ...(yield* stamp()),
+      ...base(context, event),
+      itemId,
+      payload: { streamKind: "assistant_text", delta: detail },
+    });
+    yield* publish({
+      type: "item.completed",
+      ...(yield* stamp()),
+      ...base(context, event),
+      itemId,
+      payload: {
+        itemType: "assistant_message",
+        status: "completed",
+        detail,
+        data: event.payload,
+      },
+    });
+    if (completeTurn) yield* finishTurn(context, "completed");
+  });
+
+  const submitPrompt = (
+    context: HermesSessionContext,
+    prompt: string,
+  ): Effect.Effect<void, ProviderAdapterError> =>
+    request<{ readonly status?: string }>(context, "prompt.submit", {
+      session_id: context.liveSessionId,
+      text: prompt,
+    }).pipe(Effect.asVoid);
+
+  const executeSlashCommand = Effect.fn("HermesAdapter.executeSlashCommand")(function* (
+    context: HermesSessionContext,
+    initialSlash: HermesSlashCommand,
+    preparePrompt: (message: string) => string,
+  ) {
+    let slash = initialSlash;
+    const aliases = new Set([slash.name.toLowerCase()]);
+    while (true) {
+      const slashExec = yield* request<unknown>(context, "slash.exec", {
+        session_id: context.liveSessionId,
+        command: slash.command,
+      }).pipe(Effect.result);
+      const response = Result.isSuccess(slashExec)
+        ? slashExec.success
+        : yield* request<unknown>(context, "command.dispatch", {
+            session_id: context.liveSessionId,
+            name: slash.name,
+            arg: slash.arg,
+          });
+      const dispatch = parseHermesCommandDispatch(response);
+
+      if (!dispatch) {
+        const payload = record(response);
+        const body = text(payload.output) ?? `/${slash.name}: no output`;
+        const warning = text(payload.warning);
+        yield* publishCommandOutput(context, warning ? `warning: ${warning}\n${body}` : body, true);
+        return;
+      }
+      if (dispatch.type === "exec" || dispatch.type === "plugin") {
+        yield* publishCommandOutput(context, dispatch.output ?? "(no output)", true);
+        return;
+      }
+      if (dispatch.type === "alias") {
+        const target = `${dispatch.target}${slash.arg ? ` ${slash.arg}` : ""}`;
+        const aliased = parseHermesSlashCommand(target.startsWith("/") ? target : `/${target}`);
+        if (!aliased) {
+          return yield* new ProviderAdapterValidationError({
+            provider: HERMES_DRIVER_KIND,
+            operation: "sendTurn",
+            issue: `Hermes returned an invalid slash-command alias: ${dispatch.target}`,
+          });
+        }
+        const alias = aliased.name.toLowerCase();
+        if (aliases.has(alias)) {
+          return yield* new ProviderAdapterValidationError({
+            provider: HERMES_DRIVER_KIND,
+            operation: "sendTurn",
+            issue: `Hermes returned a recursive slash-command alias: /${aliased.name}.`,
+          });
+        }
+        aliases.add(alias);
+        slash = aliased;
+        continue;
+      }
+
+      const message = dispatch.message?.trim() ?? "";
+      if (dispatch.type !== "skill" && dispatch.notice?.trim()) {
+        yield* publishCommandOutput(context, dispatch.notice, false);
+      }
+      if (dispatch.type === "prefill") {
+        yield* publishCommandOutput(
+          context,
+          message
+            ? `${message}\n\nHermes returned this text for editing; copy it into the composer to resubmit.`
+            : `/${slash.name} completed without editable text.`,
+          true,
+        );
+        return;
+      }
+      if (!message) {
+        return yield* new ProviderAdapterValidationError({
+          provider: HERMES_DRIVER_KIND,
+          operation: "sendTurn",
+          issue: `Hermes returned an empty ${dispatch.type} command payload for /${slash.name}.`,
+        });
+      }
+      yield* submitPrompt(context, preparePrompt(message));
+      return;
+    }
   });
 
   const openUserInput = Effect.fn("HermesAdapter.openUserInput")(function* (
@@ -802,11 +998,24 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
         const context = yield* requireSession(input.threadId);
         const prompt = input.input?.trim() ?? "";
         const attachments = input.attachments ?? [];
+        const genericChatUserInput = extractGenericChatUserInput(prompt);
+        const slashCommand = parseHermesSlashCommand(genericChatUserInput ?? prompt);
+        const prepareCommandPrompt =
+          genericChatUserInput === undefined
+            ? (message: string) => message
+            : buildGenericChatProviderInput;
         if (!prompt && attachments.length === 0) {
           return yield* new ProviderAdapterValidationError({
             provider: HERMES_DRIVER_KIND,
             operation: "sendTurn",
             issue: "A Hermes turn requires text or an attachment.",
+          });
+        }
+        if (slashCommand && attachments.length > 0) {
+          return yield* new ProviderAdapterValidationError({
+            provider: HERMES_DRIVER_KIND,
+            operation: "sendTurn",
+            issue: "Hermes slash commands do not support image attachments.",
           });
         }
         if (context.activeTurnId) {
@@ -879,13 +1088,14 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
           turnId,
           payload: context.currentModelId ? { model: context.currentModelId } : {},
         });
-        // Hermes keeps prompt.submit pending for the full agent loop. Supervise that
-        // request in the adapter scope so sendTurn can return immediately and T3 can
-        // expose steering and interruption controls while gateway events keep streaming.
-        yield* request<{ readonly status?: string }>(context, "prompt.submit", {
-          session_id: context.liveSessionId,
-          text: prompt || "Please inspect the attached image.",
-        }).pipe(
+        // Hermes keeps prompt.submit and some slash commands pending while they run.
+        // Supervise either path in the adapter scope so sendTurn returns immediately
+        // and T3 can continue receiving ordered gateway events.
+        yield* (
+          slashCommand
+            ? executeSlashCommand(context, slashCommand, prepareCommandPrompt)
+            : submitPrompt(context, prompt || "Please inspect the attached image.")
+        ).pipe(
           Effect.tapError((error) => finishTurn(context, "failed", error.message)),
           Effect.ignore,
           Effect.forkIn(parentScope),
