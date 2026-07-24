@@ -12,9 +12,12 @@ import {
 } from "@t3tools/contracts";
 
 import {
+  buildCachedThreadFeed,
   buildThreadFeed,
   derivePendingApprovals,
   deriveThreadFeedPresentation,
+  resolveThreadFeedActivityCopyText,
+  resolveThreadFeedActivityToolCall,
   type ThreadFeedActivity,
   type ThreadFeedEntry,
 } from "./threadActivity";
@@ -87,6 +90,98 @@ function makeThread(
 }
 
 describe("buildThreadFeed", () => {
+  it("reuses a derived feed for the same immutable thread snapshot", () => {
+    const thread = makeThread({
+      id: ThreadId.make("thread-cached-feed"),
+      projectId: ProjectId.make("project-1"),
+      title: "Cached feed",
+      activities: [
+        makeActivity({
+          id: EventId.make("activity-cached-feed"),
+          kind: "runtime.warning",
+          summary: "Runtime warning",
+          createdAt: "2026-04-01T00:00:01.000Z",
+          payload: { message: "Retain this projection" },
+        }),
+      ],
+    });
+
+    expect(buildCachedThreadFeed(thread)).toBe(buildCachedThreadFeed(thread));
+  });
+
+  it("derives a new feed when the immutable thread snapshot changes", () => {
+    const thread = makeThread({
+      id: ThreadId.make("thread-updated-feed"),
+      projectId: ProjectId.make("project-1"),
+      title: "Updated feed",
+    });
+    const firstFeed = buildCachedThreadFeed(thread);
+    const updatedThread = {
+      ...thread,
+      activities: [
+        makeActivity({
+          id: EventId.make("activity-updated-feed"),
+          kind: "runtime.warning",
+          summary: "Runtime warning",
+          createdAt: "2026-04-01T00:00:01.000Z",
+          payload: { message: "New snapshot" },
+        }),
+      ],
+    };
+    const updatedFeed = buildCachedThreadFeed(updatedThread);
+
+    expect(updatedFeed).not.toBe(firstFeed);
+    expect(updatedFeed).toHaveLength(1);
+  });
+
+  it("reuses the cached summary and full projection for an immutable activity", () => {
+    const activity = makeActivity({
+      id: EventId.make("activity-projection-cache"),
+      kind: "tool.completed",
+      tone: "tool",
+      summary: "Run tests",
+      createdAt: "2026-04-01T00:00:01.000Z",
+      payload: {
+        itemId: "cached-command",
+        itemType: "command_execution",
+        data: {
+          item: {
+            command: "vp test",
+            aggregatedOutput: "passed",
+          },
+        },
+      },
+    });
+    const makeFeed = () =>
+      buildThreadFeed(
+        makeThread({
+          id: ThreadId.make("thread-projection-cache"),
+          projectId: ProjectId.make("project-1"),
+          title: "Projection cache",
+          activities: [activity],
+        }),
+      );
+    const firstGroup = makeFeed()[0];
+    const secondGroup = makeFeed()[0];
+    expect(firstGroup).toMatchObject({ type: "activity-group" });
+    expect(secondGroup).toMatchObject({ type: "activity-group" });
+    if (
+      !firstGroup ||
+      firstGroup.type !== "activity-group" ||
+      !secondGroup ||
+      secondGroup.type !== "activity-group"
+    ) {
+      return;
+    }
+
+    const firstActivity = firstGroup.activities[0]!;
+    const secondActivity = secondGroup.activities[0]!;
+    expect(secondActivity.toolCall).toBe(firstActivity.toolCall);
+    expect(resolveThreadFeedActivityToolCall(secondActivity)).toBe(
+      resolveThreadFeedActivityToolCall(firstActivity),
+    );
+  });
+
   it("renders a collapsed subagent lifecycle with mobile agent presentation", () => {
     const turnId = TurnId.make("turn-agent-1");
     const basePayload = {
@@ -266,25 +361,29 @@ describe("buildThreadFeed", () => {
         turnId: "turn-1",
         summary: "Run tests",
         detail: "bun run test",
-        fullDetail: "Run tests\n\nCommand\nbun run test\n\nInvocation\n/bin/zsh -lc 'bun run test'",
+        fullDetail: null,
         icon: "command",
         toolLike: true,
         status: "success",
         toolCall: {
           category: "command",
           status: "completed",
-          sections: [
-            { kind: "code", title: "Command", content: "bun run test" },
-            {
-              kind: "code",
-              title: "Invocation",
-              content: "/bin/zsh -lc 'bun run test'",
-            },
-          ],
+          hasDetails: true,
         },
       },
     ]);
-    expect(group.activities[0]?.copyText).toBe(
+    expect(group.activities[0]?.copyText).toBe("Run tests\nbun run test");
+    const resolvedToolCall = resolveThreadFeedActivityToolCall(group.activities[0]!);
+    expect(resolvedToolCall?.sections).toEqual([
+      { kind: "code", title: "Command", content: "bun run test", language: "shell" },
+      {
+        kind: "code",
+        title: "Invocation",
+        content: "/bin/zsh -lc 'bun run test'",
+        language: "shell",
+      },
+    ]);
+    expect(resolveThreadFeedActivityCopyText(group.activities[0]!)).toBe(
       "Run tests\n\nCommand\nbun run test\n\nInvocation\n/bin/zsh -lc 'bun run test'",
     );
   });
@@ -398,8 +497,11 @@ describe("buildThreadFeed", () => {
     }
 
     expect(group.activities[0]?.icon).toBe("wrench");
-    expect(group.activities[0]?.fullDetail).toContain('"query": "work log"');
-    expect(group.activities[0]?.fullDetail).toContain("repository.search");
+    expect(group.activities[0]?.fullDetail).toBeNull();
+    expect(group.activities[0]?.toolCall).not.toHaveProperty("sections");
+    const resolvedToolCall = resolveThreadFeedActivityToolCall(group.activities[0]!);
+    expect(resolvedToolCall?.copyText).toContain('"query": "work log"');
+    expect(resolvedToolCall?.copyText).toContain("repository.search");
   });
 
   it("folds settled turn work while leaving the terminal answer visible", () => {

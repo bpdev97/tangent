@@ -67,6 +67,16 @@ export type ToolCallDetailSection =
       readonly links: ReadonlyArray<ToolCallLink>;
     };
 
+export interface ToolCallSummary {
+  readonly callId?: string;
+  readonly category: ToolCallCategory;
+  readonly title: string;
+  readonly preview?: string;
+  readonly status?: ToolCallStatus;
+  readonly exitCode?: number;
+  readonly hasDetails: boolean;
+}
+
 export interface ToolCallPresentation {
   readonly callId?: string;
   readonly category: ToolCallCategory;
@@ -683,6 +693,310 @@ function providerTitleDetail(
   return null;
 }
 
+const SUMMARY_TRAVERSAL_NODES = 100;
+
+function hasShallowHttpUrl(...values: ReadonlyArray<unknown>): boolean {
+  for (const value of values) {
+    const direct = asString(value);
+    if (direct && /^https?:\/\//iu.test(direct)) {
+      return true;
+    }
+    const record = asRecord(value);
+    const url = record ? firstString(record.url, record.uri, record.href) : null;
+    if (url && /^https?:\/\//iu.test(url)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function compactSummaryJson(value: unknown): string | null {
+  const direct = asString(value);
+  if (direct) return firstLine(direct);
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  const record = asRecord(value);
+  if (!record) return null;
+  const entries = Object.entries(record).slice(0, 4);
+  if (
+    entries.length === 0 ||
+    entries.some(
+      ([, entry]) =>
+        entry !== null &&
+        typeof entry !== "string" &&
+        typeof entry !== "number" &&
+        typeof entry !== "boolean",
+    )
+  ) {
+    return null;
+  }
+
+  try {
+    const text = JSON.stringify(Object.fromEntries(entries));
+    return text.length <= 120 ? text : `${text.slice(0, 119).trimEnd()}…`;
+  } catch {
+    return null;
+  }
+}
+
+function firstSummaryFilePath(
+  changedFiles: ReadonlyArray<string> | undefined,
+  ...values: ReadonlyArray<unknown>
+): string | null {
+  const changedFile = changedFiles?.find((path) => path.trim().length > 0);
+  if (changedFile) return changedFile;
+
+  for (const value of values) {
+    const record = asRecord(value);
+    const path = firstString(
+      record?.path,
+      record?.filePath,
+      record?.relativePath,
+      record?.filename,
+      record?.newPath,
+      record?.oldPath,
+    );
+    if (path) return path;
+  }
+  return null;
+}
+
+interface ToolCallProjectionBase {
+  readonly payload: Record<string, unknown>;
+  readonly itemType: ToolLifecycleItemType | null;
+  readonly data: Record<string, unknown>;
+  readonly item: Record<string, unknown>;
+  readonly itemInput: Record<string, unknown>;
+  readonly itemResult: Record<string, unknown> | null;
+  readonly rawInput: Record<string, unknown>;
+  readonly rawOutput: Record<string, unknown> | null;
+  readonly resultRecord: Record<string, unknown> | null;
+  readonly callId: string | null;
+  readonly providerTitle: string | null;
+  readonly toolName: string | null;
+  readonly baseTitle: string;
+  readonly kind: string | null;
+  readonly command: string | null;
+  readonly rawCommand: string | null;
+  readonly cwd: string | null;
+  readonly exitCode: number | undefined;
+  readonly durationMs: number | undefined;
+  readonly status: ToolCallStatus | undefined;
+  readonly normalizedDetail: string | null;
+  readonly argumentsValue: unknown;
+  readonly output: string | null;
+}
+
+function deriveToolCallProjectionBase(
+  input: ToolCallPresentationInput,
+): ToolCallProjectionBase | undefined {
+  const payload = asRecord(input.payload) ?? {};
+  const itemType = isToolLifecycleItemType(payload.itemType) ? payload.itemType : null;
+  const isToolActivity =
+    input.activityKind.startsWith("tool.") ||
+    input.activityKind.startsWith("agent.") ||
+    itemType !== null;
+  if (!isToolActivity) return undefined;
+
+  const data = asRecord(payload.data) ?? {};
+  const item = asRecord(data.item) ?? data;
+  const itemInput = asRecord(item.input) ?? {};
+  const itemResult = asRecord(item.result);
+  const rawInput = asRecord(data.rawInput) ?? {};
+  const rawOutput = asRecord(data.rawOutput);
+  const server = firstString(item.server, data.server);
+  const toolName = firstString(item.tool, data.tool, data.toolName, payload.toolName);
+  const command =
+    input.command ??
+    formatCommand(item.command) ??
+    formatCommand(itemInput.command) ??
+    formatCommand(data.command) ??
+    formatCommand(rawInput.command);
+  const elapsedSeconds = firstNumber(payload.elapsedSeconds, data.elapsedSeconds);
+
+  return {
+    payload,
+    itemType,
+    data,
+    item,
+    itemInput,
+    itemResult,
+    rawInput,
+    rawOutput,
+    resultRecord: itemResult ?? asRecord(data.result) ?? rawOutput,
+    callId: firstString(
+      payload.itemId,
+      payload.agentId,
+      payload.toolCallId,
+      payload.toolUseId,
+      data.toolCallId,
+      data.toolUseId,
+      data.agentId,
+      item.id,
+      item.callId,
+    ),
+    providerTitle: firstString(item.providerTitle, data.providerTitle),
+    toolName,
+    baseTitle: normalizeTitle(
+      firstString(
+        payload.title,
+        server && toolName ? `${server} · ${toolName}` : null,
+        input.summary,
+      ) ?? "Tool call",
+    ),
+    kind: firstString(data.kind, item.kind, item.type),
+    command,
+    rawCommand: input.rawCommand && input.rawCommand !== command ? input.rawCommand : null,
+    cwd: firstString(item.cwd, itemInput.cwd, data.cwd, rawInput.cwd),
+    exitCode:
+      asInteger(item.exitCode) ??
+      asInteger(itemResult?.exitCode) ??
+      asInteger(data.exitCode) ??
+      asInteger(rawOutput?.exitCode) ??
+      undefined,
+    durationMs:
+      firstNumber(item.durationMs, itemResult?.durationMs, data.durationMs) ??
+      (elapsedSeconds !== null ? elapsedSeconds * 1_000 : undefined),
+    status: lifecycleStatus(input.activityKind, payload, data, item),
+    normalizedDetail: asString(input.detail),
+    argumentsValue:
+      item.arguments ??
+      data.arguments ??
+      (hasUsefulValue(data.input) ? data.input : undefined) ??
+      (hasUsefulValue(rawInput) ? rawInput : undefined) ??
+      (hasUsefulValue(itemInput) ? itemInput : undefined),
+    output: firstString(
+      item.aggregatedOutput,
+      item.output,
+      itemResult?.output,
+      itemResult?.content,
+      rawOutput?.content,
+      rawOutput?.stdout,
+      data.output,
+    ),
+  };
+}
+
+/**
+ * Derives only the fields needed by a collapsed tool row. Recursive detail
+ * collection, bounded JSON serialization, section construction, and copy text
+ * remain in deriveToolCallPresentation for on-demand consumers.
+ */
+export function deriveToolCallSummary(
+  input: ToolCallPresentationInput,
+): ToolCallSummary | undefined {
+  const base = deriveToolCallProjectionBase(input);
+  if (!base) return undefined;
+  const {
+    payload,
+    itemType,
+    data,
+    item,
+    itemInput,
+    rawInput,
+    rawOutput,
+    callId,
+    providerTitle,
+    toolName,
+    baseTitle,
+    kind,
+    command,
+    rawCommand,
+    cwd,
+    exitCode,
+    durationMs,
+    status,
+    normalizedDetail,
+    argumentsValue,
+    output,
+  } = base;
+  const category = categoryFromInput({
+    itemType,
+    kind,
+    title: baseTitle,
+    toolName,
+    hasUrl: hasShallowHttpUrl(item, data, itemInput, rawInput),
+  });
+  const title =
+    status === "inProgress" && category === "command" && /^ran command$/iu.test(baseTitle)
+      ? "Running command"
+      : baseTitle;
+
+  const searchQueries = new Map<string, string>();
+  if (category === "search" || category === "web") {
+    const budget = { remainingNodes: SUMMARY_TRAVERSAL_NODES };
+    collectSearchQueries(item, searchQueries, 0, budget);
+    collectSearchQueries(itemInput, searchQueries, 0, budget);
+    collectSearchQueries(data, searchQueries, 0, budget);
+    collectSearchQueries(rawInput, searchQueries, 0, budget);
+    const titleQuery = providerTitleDetail(providerTitle, category);
+    if (titleQuery) searchQueries.set(titleQuery.toLowerCase(), titleQuery);
+  }
+
+  const firstSearchQuery = searchQueries.values().next().value as string | undefined;
+  const changedFileCount = input.changedFiles?.length ?? 0;
+  const filePreview = firstSummaryFilePath(
+    input.changedFiles,
+    item,
+    itemInput,
+    data,
+    rawInput,
+    rawOutput,
+  );
+  const preview = firstString(
+    command,
+    category === "agent"
+      ? firstString(
+          item.summary,
+          data.summary,
+          item.description,
+          data.description,
+          item.prompt,
+          data.prompt,
+        )
+      : null,
+    firstSearchQuery
+      ? searchQueries.size === 1
+        ? firstLine(firstSearchQuery)
+        : `${firstLine(firstSearchQuery)} +${searchQueries.size - 1} more`
+      : null,
+    filePreview
+      ? changedFileCount > 1
+        ? `${filePreview} +${changedFileCount - 1} more`
+        : filePreview
+      : null,
+    category === "mcp" && hasUsefulValue(argumentsValue)
+      ? compactSummaryJson(argumentsValue)
+      : null,
+    output ? firstLine(output) : null,
+    normalizedDetail && normalizedDetail.toLowerCase() !== title.toLowerCase()
+      ? firstLine(normalizedDetail)
+      : null,
+  );
+  const hasDetails =
+    payload.dataTruncation !== undefined ||
+    command !== null ||
+    rawCommand !== null ||
+    cwd !== null ||
+    exitCode !== undefined ||
+    durationMs !== undefined ||
+    normalizedDetail !== null ||
+    changedFileCount > 0 ||
+    hasUsefulValue(data);
+
+  return {
+    ...(callId ? { callId } : {}),
+    category,
+    title,
+    ...(preview ? { preview } : {}),
+    ...(status ? { status } : {}),
+    ...(exitCode !== undefined ? { exitCode } : {}),
+    hasDetails,
+  };
+}
+
 function sectionCopyText(section: ToolCallDetailSection): string {
   switch (section.kind) {
     case "code":
@@ -757,43 +1071,33 @@ export function toolCallHasDetails(toolCall: ToolCallPresentation): boolean {
 export function deriveToolCallPresentation(
   input: ToolCallPresentationInput,
 ): ToolCallPresentation | undefined {
-  const payload = asRecord(input.payload) ?? {};
-  const itemType = isToolLifecycleItemType(payload.itemType) ? payload.itemType : null;
-  const isToolActivity =
-    input.activityKind.startsWith("tool.") ||
-    input.activityKind.startsWith("agent.") ||
-    itemType !== null;
-  if (!isToolActivity) return undefined;
-
-  const data = asRecord(payload.data) ?? {};
-  const item = asRecord(data.item) ?? data;
-  const itemInput = asRecord(item.input) ?? {};
-  const itemResult = asRecord(item.result);
-  const rawInput = asRecord(data.rawInput) ?? {};
-  const rawOutput = asRecord(data.rawOutput);
-  const resultRecord = itemResult ?? asRecord(data.result) ?? rawOutput;
-
-  const callId = firstString(
-    payload.itemId,
-    payload.agentId,
-    payload.toolCallId,
-    payload.toolUseId,
-    data.toolCallId,
-    data.toolUseId,
-    data.agentId,
-    item.id,
-    item.callId,
-  );
-  const server = firstString(item.server, data.server);
-  const providerTitle = firstString(item.providerTitle, data.providerTitle);
-  const toolName = firstString(item.tool, data.tool, data.toolName, payload.toolName);
-  const baseTitle = normalizeTitle(
-    firstString(
-      payload.title,
-      server && toolName ? `${server} · ${toolName}` : null,
-      input.summary,
-    ) ?? "Tool call",
-  );
+  const base = deriveToolCallProjectionBase(input);
+  if (!base) return undefined;
+  const {
+    payload,
+    itemType,
+    data,
+    item,
+    itemInput,
+    itemResult,
+    rawInput,
+    rawOutput,
+    resultRecord,
+    callId,
+    providerTitle,
+    toolName,
+    baseTitle,
+    kind,
+    command,
+    rawCommand,
+    cwd,
+    exitCode,
+    durationMs,
+    status,
+    normalizedDetail,
+    argumentsValue,
+    output,
+  } = base;
 
   const files = new Map<string, ToolCallFile>();
   for (const path of input.changedFiles ?? []) files.set(path, { path });
@@ -811,7 +1115,6 @@ export function deriveToolCallPresentation(
   collectAcpContent(data.content, contentText, files, links, terminalIds);
   collectAcpContent(rawOutput?.content, contentText, files, links, terminalIds);
 
-  const kind = firstString(data.kind, item.kind, item.type);
   const category = categoryFromInput({
     itemType,
     kind,
@@ -828,45 +1131,11 @@ export function deriveToolCallPresentation(
     const titleQuery = providerTitleDetail(providerTitle, category);
     if (titleQuery) searchQueries.set(titleQuery.toLowerCase(), titleQuery);
   }
-  const command =
-    input.command ??
-    formatCommand(item.command) ??
-    formatCommand(itemInput.command) ??
-    formatCommand(data.command) ??
-    formatCommand(rawInput.command);
-  const rawCommand = input.rawCommand && input.rawCommand !== command ? input.rawCommand : null;
-  const cwd = firstString(item.cwd, itemInput.cwd, data.cwd, rawInput.cwd);
-  const exitCode =
-    asInteger(item.exitCode) ??
-    asInteger(itemResult?.exitCode) ??
-    asInteger(data.exitCode) ??
-    asInteger(rawOutput?.exitCode) ??
-    undefined;
-  const elapsedSeconds = firstNumber(payload.elapsedSeconds, data.elapsedSeconds);
-  const durationMs =
-    firstNumber(item.durationMs, itemResult?.durationMs, data.durationMs) ??
-    (elapsedSeconds !== null ? elapsedSeconds * 1_000 : undefined);
-  const status = lifecycleStatus(input.activityKind, payload, data, item);
   const presentationTitle =
     status === "inProgress" && category === "command" && /^ran command$/iu.test(baseTitle)
       ? "Running command"
       : baseTitle;
 
-  const argumentsValue =
-    item.arguments ??
-    data.arguments ??
-    (hasUsefulValue(data.input) ? data.input : undefined) ??
-    (hasUsefulValue(rawInput) ? rawInput : undefined) ??
-    (hasUsefulValue(itemInput) ? itemInput : undefined);
-  const output = firstString(
-    item.aggregatedOutput,
-    item.output,
-    itemResult?.output,
-    itemResult?.content,
-    rawOutput?.content,
-    rawOutput?.stdout,
-    data.output,
-  );
   const contentOutput = contentText.length > 0 ? contentText.join("\n\n") : null;
   const stderr = firstString(item.stderr, itemResult?.stderr, rawOutput?.stderr, data.stderr);
   const errorValue = item.error ?? data.error ?? resultRecord?.error;
@@ -951,7 +1220,6 @@ export function deriveToolCallPresentation(
     });
   }
 
-  const normalizedDetail = asString(input.detail);
   if (
     normalizedDetail &&
     normalizedDetail.toLowerCase() !== presentationTitle.toLowerCase() &&
@@ -1086,5 +1354,24 @@ export function mergeToolCallPresentations(
   return {
     ...mergedWithoutCopy,
     copyText: buildCopyText(mergedWithoutCopy),
+  };
+}
+
+export function mergeToolCallSummaries(
+  previous: ToolCallSummary | undefined,
+  next: ToolCallSummary | undefined,
+): ToolCallSummary | undefined {
+  if (!previous) return next;
+  if (!next) return previous;
+  const category = next.category === "other" ? previous.category : next.category;
+  const exitCode = next.exitCode ?? previous.exitCode;
+  return {
+    ...((next.callId ?? previous.callId) ? { callId: next.callId ?? previous.callId } : {}),
+    category,
+    title: next.category === "other" && previous.category !== "other" ? previous.title : next.title,
+    ...((next.preview ?? previous.preview) ? { preview: next.preview ?? previous.preview } : {}),
+    ...((next.status ?? previous.status) ? { status: next.status ?? previous.status } : {}),
+    ...(exitCode !== undefined ? { exitCode } : {}),
+    hasDetails: previous.hasDetails || next.hasDetails,
   };
 }

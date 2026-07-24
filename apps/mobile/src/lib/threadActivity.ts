@@ -11,12 +11,15 @@ import {
   collapseToolLifecycleEntries,
   DEFAULT_VISIBLE_TOOL_CALL_COUNT,
   deriveToolCallPresentation,
+  deriveToolCallSummary,
   extractToolCallIdentity,
   isToolLifecycleActivityKind,
   mergeToolCallPresentations,
-  toolCallHasDetails,
+  mergeToolCallSummaries,
   type ToolCallPresentation,
+  type ToolCallPresentationInput,
   type ToolCallStatus,
+  type ToolCallSummary,
 } from "@t3tools/client-runtime/tool-calls";
 import {
   deriveThreadResponseGrouping,
@@ -69,7 +72,7 @@ export interface ThreadFeedActivity {
     | "zap";
   readonly toolLike: boolean;
   readonly status: "success" | "failure" | "neutral" | null;
-  readonly toolCall?: ToolCallPresentation;
+  readonly toolCall?: ToolCallSummary;
 }
 
 const MAX_VISIBLE_WORK_LOG_ENTRIES = DEFAULT_VISIBLE_TOOL_CALL_COUNT;
@@ -91,13 +94,61 @@ interface WorkLogEntry {
   requestKind?: PendingApproval["requestKind"];
   toolLifecycleStatus?: WorkLogToolLifecycleStatus;
   toolData?: unknown;
-  toolCall?: ToolCallPresentation;
+  toolCall?: ToolCallSummary;
+  toolCallInputs?: ReadonlyArray<ToolCallPresentationInput>;
 }
 
 interface DerivedWorkLogEntry extends WorkLogEntry {
   activityKind: OrchestrationThreadActivity["kind"];
   collapseKey?: string;
   toolCallId?: string;
+}
+
+const derivedWorkLogEntryCache = new WeakMap<OrchestrationThreadActivity, DerivedWorkLogEntry>();
+const toolCallPresentationCache = new WeakMap<
+  ToolCallPresentationInput,
+  ToolCallPresentation | undefined
+>();
+const activityToolCallInputs = new WeakMap<
+  ThreadFeedActivity,
+  ReadonlyArray<ToolCallPresentationInput>
+>();
+const activityToolCallPresentations = new WeakMap<
+  ThreadFeedActivity,
+  ToolCallPresentation | undefined
+>();
+
+function deriveCachedToolCallPresentation(
+  input: ToolCallPresentationInput,
+): ToolCallPresentation | undefined {
+  if (toolCallPresentationCache.has(input)) {
+    return toolCallPresentationCache.get(input);
+  }
+  const presentation = deriveToolCallPresentation(input);
+  toolCallPresentationCache.set(input, presentation);
+  return presentation;
+}
+
+export function resolveThreadFeedActivityToolCall(
+  activity: ThreadFeedActivity,
+): ToolCallPresentation | undefined {
+  if (activityToolCallPresentations.has(activity)) {
+    return activityToolCallPresentations.get(activity);
+  }
+
+  let presentation: ToolCallPresentation | undefined;
+  for (const input of activityToolCallInputs.get(activity) ?? []) {
+    presentation = mergeToolCallPresentations(
+      presentation,
+      deriveCachedToolCallPresentation(input),
+    );
+  }
+  activityToolCallPresentations.set(activity, presentation);
+  return presentation;
+}
+
+export function resolveThreadFeedActivityCopyText(activity: ThreadFeedActivity): string {
+  return resolveThreadFeedActivityToolCall(activity)?.copyText ?? activity.copyText;
 }
 
 type RawThreadFeedEntry =
@@ -284,6 +335,11 @@ function isPlanBoundaryToolActivity(activity: OrchestrationThreadActivity): bool
 }
 
 function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWorkLogEntry {
+  const cachedEntry = derivedWorkLogEntryCache.get(activity);
+  if (cachedEntry) {
+    return cachedEntry;
+  }
+
   const payload =
     activity.payload && typeof activity.payload === "object"
       ? (activity.payload as Record<string, unknown>)
@@ -365,7 +421,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   if (toolLifecycleStatus) {
     entry.toolLifecycleStatus = toolLifecycleStatus;
   }
-  const toolCall = deriveToolCallPresentation({
+  const toolCallInput: ToolCallPresentationInput = {
     activityKind: activity.kind,
     summary: activity.summary,
     payload: activity.payload,
@@ -373,9 +429,11 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
     ...(commandPreview.rawCommand ? { rawCommand: commandPreview.rawCommand } : {}),
     ...(entry.detail ? { detail: entry.detail } : {}),
     ...(changedFiles.length > 0 ? { changedFiles } : {}),
-  });
+  };
+  const toolCall = deriveToolCallSummary(toolCallInput);
   if (toolCall) {
     entry.toolCall = toolCall;
+    entry.toolCallInputs = [toolCallInput];
     if (!entry.toolCallId && toolCall.callId) {
       entry.toolCallId = toolCall.callId;
     }
@@ -384,6 +442,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   if (collapseKey) {
     entry.collapseKey = collapseKey;
   }
+  derivedWorkLogEntryCache.set(activity, entry);
   return entry;
 }
 
@@ -437,7 +496,8 @@ function mergeDerivedWorkLogEntries(
   const toolLifecycleStatus = next.toolLifecycleStatus ?? previous.toolLifecycleStatus;
   const toolData = next.toolData ?? previous.toolData;
   const toolCallId = next.toolCallId ?? previous.toolCallId;
-  const toolCall = mergeToolCallPresentations(previous.toolCall, next.toolCall);
+  const toolCall = mergeToolCallSummaries(previous.toolCall, next.toolCall);
+  const toolCallInputs = [...(previous.toolCallInputs ?? []), ...(next.toolCallInputs ?? [])];
   return {
     ...previous,
     ...next,
@@ -453,6 +513,7 @@ function mergeDerivedWorkLogEntries(
     ...(toolData !== undefined ? { toolData } : {}),
     ...(toolCallId ? { toolCallId } : {}),
     ...(toolCall !== undefined ? { toolCall } : {}),
+    ...(toolCallInputs.length > 0 ? { toolCallInputs } : {}),
   };
 }
 
@@ -597,8 +658,8 @@ function workEntryIcon(entry: DerivedWorkLogEntry): ThreadFeedActivity["icon"] {
 }
 
 function buildWorkEntryExpandedBody(entry: WorkLogEntry): string | null {
-  if (entry.toolCall && toolCallHasDetails(entry.toolCall)) {
-    return entry.toolCall.copyText;
+  if (entry.toolCall) {
+    return null;
   }
   const blocks: string[] = [];
   const appendUniqueBlock = (value: string | null | undefined) => {
@@ -1324,30 +1385,32 @@ export function buildThreadFeed(
           const summary = entry.toolCall?.title ?? workEntryHeading(entry);
           const detail = entry.toolCall?.preview ?? workEntryPreview(entry);
           const fullDetail = buildWorkEntryExpandedBody(entry);
+          const activity: ThreadFeedActivity = {
+            id: entry.id,
+            createdAt: entry.createdAt,
+            turnId: entry.turnId,
+            summary,
+            detail,
+            fullDetail,
+            icon: workEntryIcon(entry),
+            copyText: [summary, detail]
+              .filter((value, index, values): value is string => {
+                return Boolean(value) && values.indexOf(value) === index;
+              })
+              .join("\n"),
+            toolLike: workLogEntryIsToolLike(entry),
+            status: workEntryStatus(entry),
+            ...(entry.toolCall ? { toolCall: entry.toolCall } : {}),
+          };
+          if (entry.toolCallInputs && entry.toolCallInputs.length > 0) {
+            activityToolCallInputs.set(activity, entry.toolCallInputs);
+          }
           return {
             type: "activity",
             id: entry.id,
             createdAt: entry.createdAt,
             turnId: entry.turnId,
-            activity: {
-              id: entry.id,
-              createdAt: entry.createdAt,
-              turnId: entry.turnId,
-              summary,
-              detail,
-              fullDetail,
-              icon: workEntryIcon(entry),
-              copyText:
-                entry.toolCall?.copyText ??
-                [summary, detail, fullDetail]
-                  .filter((value, index, values): value is string => {
-                    return Boolean(value) && values.indexOf(value) === index;
-                  })
-                  .join("\n"),
-              toolLike: workLogEntryIsToolLike(entry),
-              status: workEntryStatus(entry),
-              ...(entry.toolCall ? { toolCall: entry.toolCall } : {}),
-            },
+            activity,
           };
         }),
     ],
@@ -1356,4 +1419,22 @@ export function buildThreadFeed(
   );
 
   return groupAdjacentActivities(entries);
+}
+
+const cachedThreadFeeds = new WeakMap<OrchestrationThread, ThreadFeedEntry[]>();
+
+/**
+ * Reuses the feed for an unchanged immutable thread snapshot across screen remounts.
+ * A replacement snapshot recomputes automatically, and the weak key does not extend
+ * the lifetime of retained thread data.
+ */
+export function buildCachedThreadFeed(thread: OrchestrationThread): ThreadFeedEntry[] {
+  const cachedFeed = cachedThreadFeeds.get(thread);
+  if (cachedFeed) {
+    return cachedFeed;
+  }
+
+  const feed = buildThreadFeed(thread);
+  cachedThreadFeeds.set(thread, feed);
+  return feed;
 }
