@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ControlPillMenu } from "../../components/ControlPill";
 import { SymbolView } from "../../components/AppSymbol";
 import { APP_NAME } from "../../branding";
+import { isThreadListV2Enabled } from "../../lib/threadListPreferences";
 import { useThemeColor } from "../../lib/useThemeColor";
 import { mobilePreferencesAtom } from "../../state/preferences";
 import { useHardwareKeyboardCommand } from "../keyboard/hardwareKeyboardCommands";
@@ -66,9 +67,7 @@ function checkedMenuState(checked: boolean) {
     key the "customized" icon state off the environment filter alone. */
 function useThreadListV2FilterGate() {
   const preferencesResult = useAtomValue(mobilePreferencesAtom);
-  return (
-    AsyncResult.isSuccess(preferencesResult) && preferencesResult.value.threadListV2Enabled === true
-  );
+  return AsyncResult.isSuccess(preferencesResult) && isThreadListV2Enabled(preferencesResult.value);
 }
 
 function AndroidHomeHeader(props: HomeHeaderProps) {

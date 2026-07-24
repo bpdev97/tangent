@@ -24,9 +24,9 @@ export interface Preferences {
   readonly collapsedProjectGroups?: readonly string[];
   readonly projectGroupingEnabled?: boolean;
   /**
-   * Device-local mirror of the web beta's `sidebarV2Enabled`. Mobile has no
-   * client-settings sync, so the flat v2 thread list is opted into per
-   * device.
+   * Device-local override for the current thread list. Mobile has no
+   * client-settings sync, so an explicit `false` keeps the legacy list
+   * enabled on this device.
    */
   readonly threadListV2Enabled?: boolean;
 }
