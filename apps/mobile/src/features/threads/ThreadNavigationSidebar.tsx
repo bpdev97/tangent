@@ -24,6 +24,7 @@ import { SymbolView } from "../../components/AppSymbol";
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { scopedProjectKey, scopedThreadKey } from "../../lib/scopedEntities";
+import { isThreadListV2Enabled } from "../../lib/threadListPreferences";
 import { useThemeColor } from "../../lib/useThemeColor";
 import { useProjects, useThreadShells } from "../../state/entities";
 import { mobilePreferencesAtom } from "../../state/preferences";
@@ -201,8 +202,7 @@ function ThreadNavigationSidebarPane(
     useThreadListActions();
   const preferencesResult = useAtomValue(mobilePreferencesAtom);
   const threadListV2Enabled =
-    AsyncResult.isSuccess(preferencesResult) &&
-    preferencesResult.value.threadListV2Enabled === true;
+    AsyncResult.isSuccess(preferencesResult) && isThreadListV2Enabled(preferencesResult.value);
   const pendingTasks = usePendingNewTasks();
   const { openPendingTask, confirmDeletePendingTask } = usePendingTaskListActions();
   const environments = useMemo(

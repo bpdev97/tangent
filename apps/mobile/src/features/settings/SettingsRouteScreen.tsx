@@ -35,6 +35,7 @@ import { hasCloudPublicConfig, resolveRelayClerkTokenOptions } from "../cloud/pu
 import { withNativeGlassHeaderItem } from "../layout/native-glass-header-items";
 import { WorkspaceSidebarToolbar } from "../layout/workspace-sidebar-toolbar";
 import { runtime } from "../../lib/runtime";
+import { isThreadListV2Enabled } from "../../lib/threadListPreferences";
 import { useThemeColor } from "../../lib/useThemeColor";
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
 import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
@@ -559,7 +560,7 @@ function BetaSettingsSection() {
   const preferencesResult = useAtomValue(mobilePreferencesAtom);
   const savePreferences = useAtomSet(updateMobilePreferencesAtom);
   const threadListV2Enabled = AsyncResult.isSuccess(preferencesResult)
-    ? preferencesResult.value.threadListV2Enabled === true
+    ? isThreadListV2Enabled(preferencesResult.value)
     : false;
 
   return (
