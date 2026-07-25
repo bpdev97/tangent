@@ -16,9 +16,9 @@ import {
 } from "../rpc/http.ts";
 import { buildEnvironmentAuthHeaders, withEnvironmentCredentials } from "./environmentHttpAuth.ts";
 
-// Bounded so a pathologically slow endpoint cannot block the (cheaper) socket
-// fallback for long. The cached thread renders while this runs, so the wait only
-// delays the transition to live data on the first open, not the initial paint.
+// Bounded so a pathologically slow endpoint releases its request resources.
+// The socket fallback starts independently, so this timeout never gates the
+// initial thread subscription or first paint.
 const DEFAULT_THREAD_SNAPSHOT_TIMEOUT_MS = 6_000;
 
 /**

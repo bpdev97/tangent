@@ -2,7 +2,11 @@ import { type EnvironmentConnectionPhase } from "@t3tools/client-runtime/connect
 
 export type ThreadContentPresentation =
   | { readonly kind: "ready" }
-  | { readonly kind: "loading" }
+  | {
+      readonly kind: "loading";
+      readonly title: string;
+      readonly detail: string;
+    }
   | {
       readonly kind: "unavailable";
       readonly title: string;
@@ -39,7 +43,11 @@ export function projectThreadContentPresentation(input: {
   ) {
     // Messages will arrive once the (re)connection completes — present as
     // loading; the composer's connection pill reports the connection phase.
-    return { kind: "loading" };
+    return {
+      kind: "loading",
+      title: "Loading conversation",
+      detail: "Fetching the latest messages…",
+    };
   }
   return {
     kind: "unavailable",
