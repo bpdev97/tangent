@@ -333,6 +333,7 @@ public final class T3ComposerEditorView: ExpoView, UITextViewDelegate {
     textView.alwaysBounceVertical = false
     textView.showsVerticalScrollIndicator = true
     textView.adjustsFontForContentSizeCategory = true
+    textView.smartDashesType = .no
     textView.onPasteImages = { [weak self] urls in
       self?.onComposerPasteImages(["uris": urls])
     }
