@@ -13,6 +13,7 @@ import {
 import { createAttachmentId, resolveAttachmentPath } from "../attachmentStore.ts";
 import { ServerConfig } from "../config.ts";
 import { parseBase64DataUrl } from "../imageMime.ts";
+import { normalizeUploadedImage } from "../imageNormalization.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
 
 export const canonicalizeClientCommandTimestamps = (
@@ -122,6 +123,19 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
             });
           }
 
+          const normalizedImage = yield* normalizeUploadedImage({
+            bytes,
+            mimeType: parsed.mimeType,
+            name: attachment.name,
+          }).pipe(
+            Effect.mapError(
+              (cause) =>
+                new OrchestrationDispatchCommandError({
+                  message: `Failed to normalize image attachment '${attachment.name}': ${cause.message}`,
+                }),
+            ),
+          );
+
           const attachmentId = createAttachmentId(canonicalCommand.threadId);
           if (!attachmentId) {
             return yield* new OrchestrationDispatchCommandError({
@@ -132,9 +146,9 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
           const persistedAttachment = {
             type: "image" as const,
             id: attachmentId,
-            name: attachment.name,
-            mimeType: parsed.mimeType.toLowerCase(),
-            sizeBytes: bytes.byteLength,
+            name: normalizedImage.name,
+            mimeType: normalizedImage.mimeType,
+            sizeBytes: normalizedImage.bytes.byteLength,
           };
 
           const attachmentPath = resolveAttachmentPath({
@@ -155,7 +169,7 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
                 }),
             ),
           );
-          yield* fileSystem.writeFile(attachmentPath, bytes).pipe(
+          yield* fileSystem.writeFile(attachmentPath, normalizedImage.bytes).pipe(
             Effect.mapError(
               () =>
                 new OrchestrationDispatchCommandError({
