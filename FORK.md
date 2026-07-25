@@ -65,8 +65,24 @@ feature.
 | `FORK-PUSH-001`   | Tailnet APNs notification and Live Activity relay | Active               | [`docs/fork/personal-push-relay.md`](docs/fork/personal-push-relay.md)             | `vp test apps/push-relay/src apps/server/src/personalPush apps/server/src/serverSettings.test.ts apps/server/src/relay/AgentAwarenessRelay.test.ts apps/mobile/src/features/agent-awareness/remoteRegistration.test.ts packages/contracts/src/settings.test.ts`                                                                                                                                                                                                                                   |
 | `FORK-CODEX-001`  | Codex MCP tool approval prompts                   | Active, temporary    | [`docs/fork/codex-mcp-tool-approvals.md`](docs/fork/codex-mcp-tool-approvals.md)   | `vp test apps/server/src/provider/CodexMcpApproval.test.ts apps/server/src/provider/Layers/CodexAdapter.test.ts apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.test.ts apps/web/src/session-logic.test.ts apps/mobile/src/lib/threadActivity.test.ts`                                                                                                                                                                                                                              |
 | `FORK-CURSOR-001` | Cursor ACP protocol compatibility                 | Active, temporary    | [`docs/fork/cursor-acp-protocol.md`](docs/fork/cursor-acp-protocol.md)             | `vp test apps/server/src/provider/Layers/CursorAdapter.test.ts apps/server/src/provider/acp/AcpAdapterSupport.test.ts apps/server/src/provider/acp/AcpJsonRpcConnection.test.ts apps/server/src/provider/acp/AcpRuntimeModel.test.ts apps/server/src/provider/acp/CursorAcpExtension.test.ts`                                                                                                                                                                                                     |
+| `FORK-IOS-001`    | CLI-safe iOS composer input                       | Active               | [`FORK-IOS-001 ownership map`](#fork-ios-001-ownership-map)                        | `vp run lint:mobile`, iOS Simulator composer smoke test                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `FORK-TOOLS-001`  | Structured tool-call presentation                 | Active               | [`docs/fork/tool-call-presentation.md`](docs/fork/tool-call-presentation.md)       | `vp test packages/client-runtime/src/tool-calls/index.test.ts apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.test.ts apps/web/src/session-logic.test.ts apps/web/src/components/chat/MessagesTimeline.logic.test.ts apps/web/src/components/chat/MessagesTimeline.test.tsx apps/mobile/src/lib/threadActivity.test.ts apps/mobile/src/features/threads/threadFeedLayout.test.ts`                                                                                                   |
 | `FORK-AGENT-001`  | Provider-neutral subagent lifecycle               | Active               | [`docs/fork/subagent-lifecycle.md`](docs/fork/subagent-lifecycle.md)               | `vp test packages/contracts/src/providerRuntime.test.ts apps/server/src/provider/Layers/CodexAdapter.test.ts apps/server/src/provider/Layers/CodexSessionRuntime.test.ts apps/server/src/provider/Layers/ClaudeAdapter.test.ts apps/server/src/provider/Layers/OpenCodeAdapter.test.ts apps/server/src/provider/Layers/CursorAdapter.test.ts apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.test.ts apps/web/src/session-logic.test.ts apps/mobile/src/lib/threadActivity.test.ts` |
+
+### FORK-IOS-001 ownership map
+
+Fork-owned paths:
+
+- `FORK.md`
+
+Shared upstream touchpoints:
+
+- `apps/mobile/modules/t3-composer-editor/ios/T3ComposerEditorView.swift`
+
+Keep `UITextView.smartDashesType` disabled in the native composer so iOS does not rewrite ASCII
+`--` into an em dash and corrupt CLI flags such as `--global`. Preserve normal autocorrection and
+spell-check behavior. Remove this delta when upstream provides equivalent literal-input handling
+for the iOS composer.
 
 ### FORK-CLAUDE-001 ownership map
 
