@@ -70,6 +70,28 @@ export function enumerateCommandPaletteItems(
 
 export type CommandPaletteMode = "root" | "root-browse" | "submenu" | "submenu-browse";
 
+export function getCommandPaletteControlNavigationKey(input: {
+  key: string;
+  ctrlKey: boolean;
+  altKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+  isComposing: boolean;
+}): "ArrowDown" | "ArrowUp" | null {
+  if (!input.ctrlKey || input.altKey || input.metaKey || input.shiftKey || input.isComposing) {
+    return null;
+  }
+
+  switch (input.key.toLowerCase()) {
+    case "n":
+      return "ArrowDown";
+    case "p":
+      return "ArrowUp";
+    default:
+      return null;
+  }
+}
+
 export function filterBrowseEntries(input: {
   browseEntries: ReadonlyArray<FilesystemBrowseEntry>;
   browseFilterQuery: string;

@@ -5,8 +5,34 @@ import {
   buildThreadActionItems,
   enumerateCommandPaletteItems,
   filterCommandPaletteGroups,
+  getCommandPaletteControlNavigationKey,
   type CommandPaletteGroup,
 } from "./CommandPalette.logic";
+
+describe("getCommandPaletteControlNavigationKey", () => {
+  const keyEvent = (key: string, overrides: Partial<KeyboardEvent> = {}) => ({
+    key,
+    ctrlKey: true,
+    altKey: false,
+    metaKey: false,
+    shiftKey: false,
+    isComposing: false,
+    ...overrides,
+  });
+
+  it("maps Control-N and Control-P to next and previous navigation", () => {
+    expect(getCommandPaletteControlNavigationKey(keyEvent("n"))).toBe("ArrowDown");
+    expect(getCommandPaletteControlNavigationKey(keyEvent("p"))).toBe("ArrowUp");
+  });
+
+  it("does not claim modified chords or composing input", () => {
+    expect(getCommandPaletteControlNavigationKey(keyEvent("n", { ctrlKey: false }))).toBeNull();
+    expect(getCommandPaletteControlNavigationKey(keyEvent("n", { altKey: true }))).toBeNull();
+    expect(getCommandPaletteControlNavigationKey(keyEvent("p", { metaKey: true }))).toBeNull();
+    expect(getCommandPaletteControlNavigationKey(keyEvent("p", { shiftKey: true }))).toBeNull();
+    expect(getCommandPaletteControlNavigationKey(keyEvent("n", { isComposing: true }))).toBeNull();
+  });
+});
 
 describe("enumerateCommandPaletteItems", () => {
   it("assigns positional jump shortcuts to the first nine displayed items", () => {
