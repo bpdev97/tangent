@@ -1,0 +1,104 @@
+# Provider-safe HEIC/HEIF upload normalization
+
+`FORK-IMAGE-001` makes HEIC and HEIF uploads usable across providers without teaching each provider
+adapter about Apple image containers.
+
+## Decision
+
+Normalize HEIC/HEIF once in shared server ingestion, before attachment metadata, persistence paths,
+asset URLs, or provider dispatch are created. The canonical stored attachment is JPEG.
+
+This is a fork-level compatibility boundary rather than a Hermes adapter workaround. Hermes Agent
+0.19.0 rejects `.heic` and `.heif` in `image.attach` before its later image-routing code can inspect
+or transcode the bytes. Other providers and browser previews also benefit from receiving the same
+widely supported persisted format.
+
+## Architecture
+
+The upload path is:
+
+```text
+client data URL
+  -> validate MIME and compressed-byte limit
+  -> detect HEIC/HEIF MIME or ISO BMFF ftyp brand
+  -> worker-thread decode and JPEG encode
+  -> create canonical metadata and .jpg persistence path
+  -> persist bytes
+  -> serve assets and dispatch to any provider
+```
+
+`apps/server/src/imageNormalization.ts` owns format detection and conversion.
+`apps/server/src/orchestration/Normalizer.ts` owns when conversion occurs. Provider adapters must
+remain consumers of the canonical attachment and must not add their own HEIC conversion.
+
+Files that are not HEIC/HEIF remain byte-for-byte pass-through. Detection uses both the declared
+MIME type and the ISO BMFF `ftyp` brand so mislabeled camera uploads still normalize. The first image
+in a HEIF sequence becomes the canonical JPEG; auxiliary images, depth maps, and container metadata
+are intentionally not persisted.
+
+## Output policy
+
+- Output MIME type: `image/jpeg`.
+- Output display extension: `.jpg`.
+- JPEG quality attempts: 90, 75, then 60, stopping at the first result within the existing 10 MiB
+  attachment limit.
+- A lossless PNG output was rejected because photographic HEIC inputs can expand beyond the
+  attachment budget.
+- HDR and HEIF-specific metadata are not preserved.
+
+## Resource and failure invariants
+
+- CPU-heavy decode and encode work runs outside the server event loop in a worker thread.
+- Compressed input remains subject to the existing 10 MiB upload limit.
+- Declared dimensions are checked before allocating the decoded pixel buffer; images above 40
+  megapixels are rejected.
+- Conversion has a 30-second Effect timeout. Interruption or timeout terminates the worker.
+- The worker has a constrained V8 heap and fixed output-quality attempts.
+- Invalid input, excessive dimensions, oversized output, timeout, and worker failure become
+  controlled orchestration errors. Decoder internals, local paths, and raw worker failures are not
+  exposed to clients.
+
+## Dependencies and packaging
+
+The server declares `heic-decode` and `jpeg-js` as direct runtime dependencies. `heic-decode` brings
+the `libheif-js` WASM decoder transitively. Keep these dependencies on the server package: the
+worker resolves them at runtime from the packaged server installation.
+
+When changing server bundling or dependency externalization, build the server bundle and verify
+that a packaged installation can resolve both direct dependencies before shipping.
+
+## Upstream sync and removal criteria
+
+During an upstream sync, review changes to upload schemas, data URL parsing, image MIME inference,
+the shared orchestration normalizer, attachment paths, asset serving, and provider image APIs. Keep
+conversion before persistence and provider dispatch. Preserve pass-through behavior for JPEG, PNG,
+GIF, WebP, and AVIF.
+
+Remove `FORK-IMAGE-001` only when upstream supports HEIC/HEIF end to end across persistence, browser
+assets, and providers that reject HEIC/HEIF paths or MIME types. Client-side preview support or a
+single provider's native decoder is not equivalent.
+
+## Compatibility baseline
+
+On 2026-07-25, Hermes Agent 0.19.0 source review confirmed the gateway extension rejection. A real
+HEIC fixture generated from a repository image verified signature detection, decoding, JPEG output,
+canonical `.jpg`/`image/jpeg` metadata, attachment-path creation, and persisted JPEG bytes. The
+Hermes-focused deterministic suite, server bundle build, `vp check`, and repository-wide typecheck
+passed.
+
+Live web and mobile upload automation did not run: the isolated development server could not bind
+inside the sandbox, and permission to launch it outside the sandbox was rejected. This baseline
+must not be represented as browser-, simulator-, or real-provider-verified attachment coverage.
+
+## Revalidation procedure
+
+1. Run
+   `vp test run apps/server/src/imageNormalization.test.ts apps/server/src/orchestration/Normalizer.test.ts`.
+2. Run the focused attachment tests for every affected provider.
+3. Run `vp run --filter t3 build:bundle`, `vp check`, and `vp run typecheck`.
+4. Upload a real HEIC through web and one representative mobile client. Confirm the persisted
+   attachment uses `.jpg`, reports `image/jpeg`, renders in the conversation, and reaches the
+   selected provider.
+5. Verify JPEG, PNG, GIF, WebP, and AVIF remain byte-for-byte pass-through.
+6. Record only checks that actually ran; distinguish deterministic server tests, packaged-server
+   checks, provider-binary smokes, and full client coverage.

@@ -61,7 +61,9 @@ chat transcript.
   controls remain available; `session.steer` handles text sent during the active turn.
 - `message.*`, `reasoning.*`, `tool.*`, `subagent.*`, and `background.complete` become canonical T3
   runtime events. Per-session queues preserve Hermes event order before ingestion.
-- `image.attach` stages T3 image attachments before the next prompt.
+- `image.attach` stages T3 image attachments before the next prompt. Shared server ingestion
+  normalizes HEIC/HEIF uploads to JPEG first because Hermes 0.19 rejects those container
+  extensions at the gateway boundary.
 - `config.set` switches a resumed or active session's model. Discovered model IDs are qualified as
   `<provider>:<model>` so provider routing is never guessed.
 - `commands.catalog` supplies built-in, quick, and skill-derived slash commands. Submitted slash
@@ -87,6 +89,8 @@ ACP's `accept_edits`; treating it as full access would widen authority, so T3 ke
 - Preserve event order per session; JSON-RPC responses and terminal events may race.
 - Hermes remains the transcript owner. Do not add another Hermes conversation database.
 - Provider output must flow through canonical runtime events for persistence, reconnects, and push.
+- HEIC/HEIF conversion belongs to shared upload ingestion. Hermes must receive the canonical JPEG
+  attachment; do not add another conversion path to the adapter.
 - Never turn a session approval into permanent approval.
 - Do not include the dashboard token, raw stderr, secrets, or unredacted provider data in user-facing
   errors or native event logs.
@@ -100,6 +104,11 @@ Agent 0.18.2 (desktop contract 2). A real loopback probe verified authenticated 
 `setup.status`, `model.options`, `session.create`, durable `stored_session_id`, and `session.close`.
 Focused deterministic tests cover cursor rejection, model qualification, ordered message/reasoning/
 tool mapping, approvals, clarification, full-access behavior, and legacy ACP-session loss.
+Hermes Agent 0.19.0 source review additionally confirmed that `image.attach` rejects `.heic` and
+`.heif` before its downstream image decoder is reached; `FORK-IMAGE-001` handles that compatibility
+gap at shared upload ingestion rather than in this provider adapter. The real HEIC fixture was
+verified through JPEG persistence and Hermes-focused deterministic tests, but no live 0.19.0
+gateway attachment or browser/mobile upload smoke ran for this change.
 
 ## Automations
 
@@ -119,7 +128,9 @@ deduplication, durable thread routing, and failure semantics.
 2. Run the focused Hermes tests and full repository checks.
 3. With configured default and named profiles, verify model discovery, create/resume, streaming,
    reasoning, a tool call, approval decisions, clarification, steering, interrupt, rollback,
-   attachment handling, model switching, and restart/resume.
+   attachment handling, model switching, and restart/resume. Attachment coverage must include a
+   real HEIC upload and confirm Hermes receives the normalized `.jpg` path and `image/jpeg`
+   metadata.
 4. Verify cron list/create/edit/pause/resume/run/remove separately; confirm chat startup does not run
    a cron ticker.
 5. Record only checks that actually ran and distinguish source review, protocol smoke, and complete

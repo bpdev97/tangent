@@ -62,6 +62,7 @@ feature.
 | `FORK-CHAT-001`   | Directoryless generic chat                        | Active               | [`docs/fork/generic-chat.md`](docs/fork/generic-chat.md)                           | `vp test packages/shared/src/genericChat.test.ts packages/shared/src/threadResponseGrouping.test.ts packages/client-runtime/src/state/projectGrouping.genericChat.test.ts apps/server/src/genericChat.test.ts apps/server/src/orchestration/Layers/ProviderCommandReactor.genericChat.test.ts apps/web/src/components/chat/MessagesTimeline.logic.test.ts apps/mobile/src/lib/repositoryGroups.test.ts apps/mobile/src/lib/threadActivity.test.ts`                                                |
 | `FORK-CLAUDE-001` | Claude subagent lifecycle correctness             | Active, temporary    | [`docs/fork/claude-subagent-lifecycle.md`](docs/fork/claude-subagent-lifecycle.md) | `vp test apps/server/src/provider/Layers/ClaudeAdapter.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `FORK-HERMES-001` | Hermes Agent provider and automation management   | Active, early access | [`docs/fork/hermes.md`](docs/fork/hermes.md)                                       | `vp test apps/server/src/provider/hermes packages/contracts/src/settings.test.ts packages/client-runtime/src/operations/hermesAutomations.test.ts apps/web/src/components/settings/SettingsPanels.logic.test.ts`                                                                                                                                                                                                                                                                                  |
+| `FORK-IMAGE-001`  | Provider-safe HEIC/HEIF upload normalization      | Active               | [`docs/fork/image-normalization.md`](docs/fork/image-normalization.md)             | `vp test run apps/server/src/imageNormalization.test.ts apps/server/src/orchestration/Normalizer.test.ts`                                                                                                                                                                                                                                                                                                                                                                                         |
 | `FORK-PUSH-001`   | Tailnet APNs notification and Live Activity relay | Active               | [`docs/fork/personal-push-relay.md`](docs/fork/personal-push-relay.md)             | `vp test apps/push-relay/src apps/server/src/personalPush apps/server/src/serverSettings.test.ts apps/server/src/relay/AgentAwarenessRelay.test.ts apps/mobile/src/features/agent-awareness/remoteRegistration.test.ts packages/contracts/src/settings.test.ts`                                                                                                                                                                                                                                   |
 | `FORK-CODEX-001`  | Codex MCP tool approval prompts                   | Active, temporary    | [`docs/fork/codex-mcp-tool-approvals.md`](docs/fork/codex-mcp-tool-approvals.md)   | `vp test apps/server/src/provider/CodexMcpApproval.test.ts apps/server/src/provider/Layers/CodexAdapter.test.ts apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.test.ts apps/web/src/session-logic.test.ts apps/mobile/src/lib/threadActivity.test.ts`                                                                                                                                                                                                                              |
 | `FORK-CURSOR-001` | Cursor ACP protocol compatibility                 | Active, temporary    | [`docs/fork/cursor-acp-protocol.md`](docs/fork/cursor-acp-protocol.md)             | `vp test apps/server/src/provider/Layers/CursorAdapter.test.ts apps/server/src/provider/acp/AcpAdapterSupport.test.ts apps/server/src/provider/acp/AcpJsonRpcConnection.test.ts apps/server/src/provider/acp/AcpRuntimeModel.test.ts apps/server/src/provider/acp/CursorAcpExtension.test.ts`                                                                                                                                                                                                     |
@@ -83,6 +84,49 @@ Keep `UITextView.smartDashesType` disabled in the native composer so iOS does no
 `--` into an em dash and corrupt CLI flags such as `--global`. Preserve normal autocorrection and
 spell-check behavior. Remove this delta when upstream provides equivalent literal-input handling
 for the iOS composer.
+
+### FORK-IMAGE-001 ownership map
+
+Fork-owned paths:
+
+- `apps/server/src/imageNormalization.ts`
+- `apps/server/src/imageNormalization.test.ts`
+- `apps/server/src/testFixtures/heic.ts`
+- `docs/fork/image-normalization.md`
+
+Shared upstream touchpoints containing image normalization:
+
+- `apps/server/package.json`
+- `pnpm-lock.yaml`
+- `apps/server/src/orchestration/Normalizer.ts`
+- `apps/server/src/orchestration/Normalizer.test.ts`
+- `docs/fork/hermes.md`
+
+Keep normalization at the shared upload-ingestion boundary so every provider and persisted asset
+sees the same canonical JPEG bytes and metadata. Remove this feature only when upstream accepts
+HEIC/HEIF uploads end to end, including providers that reject those filename extensions or MIME
+types.
+
+### Image normalization upstream sync playbook
+
+1. Compare upstream changes to upload contracts, `imageMime.ts`, attachment persistence,
+   `Normalizer.ts`, asset serving, and every provider's image capability boundary.
+2. Preserve normalization before attachment metadata and paths are created. Do not move conversion
+   into Hermes or duplicate it across provider adapters.
+3. Review upstream dependency and bundling changes for `heic-decode`, `libheif-js`, worker threads,
+   and `jpeg-js`; confirm the packaged server can resolve both direct dependencies.
+4. Keep signature-based detection for mislabeled HEIC/HEIF files and byte-for-byte pass-through for
+   JPEG, PNG, GIF, WebP, and AVIF.
+5. Run the focused image tests, the affected provider attachment tests, the server bundle build,
+   `vp check`, and `vp run typecheck`.
+6. Verify one real HEIC upload on each affected client surface. Record server-only coverage
+   separately when browser, simulator, or provider-binary verification did not run.
+
+### Image normalization compatibility baseline
+
+| Date       | Upstream baseline | Provider baseline   | Verification                                                                                                                                                                                                                                                                                                                                                                              |
+| ---------- | ----------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-07-25 | `ece05087`        | Hermes Agent 0.19.0 | Source review confirmed Hermes rejects `.heic`/`.heif` at `image.attach`. A generated real HEIC fixture passed decode, JPEG normalization, metadata/path creation, and persistence tests. Hermes-focused tests, server bundle, `vp check`, and repository typecheck passed. Live web/mobile verification did not run because the isolated local server could not bind within the sandbox. |
 
 ### FORK-CLAUDE-001 ownership map
 
