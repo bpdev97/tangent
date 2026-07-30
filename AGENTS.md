@@ -6,12 +6,6 @@ Tangent is a personal fork of T3 Code. Before rebasing from upstream or changing
 feature, read `FORK.md`; it is the authoritative inventory of local changes, shared upstream
 touchpoints, compatibility baselines, and verification commands.
 
-Before considering work complete, `vp check` and `vp run typecheck` must pass. If native mobile
-code changed, `vp run lint:mobile` must also pass. Keep earlier verification focused on the files
-and packages changed. Backend behavior changes require focused tests. User-visible frontend changes
-require one integrated pass per affected surface after integration: use `test-t3-app` for web and
-`test-t3-mobile` for mobile.
-
 Tangent prioritizes performance, reliability, predictable failure behavior, and shared
 implementations over local duplication. Preserve the distribution identity in `downstream/config.ts`
 and the active fork features registered in `FORK.md` when syncing upstream.
@@ -120,8 +114,9 @@ An empty database is a bad test. Seed your worktree's `.t3` with a copy of real 
 ## Verifying
 
 - Smallest proof that the change works. `vp test run <files>` for the tests you touched, targeted lint and typecheck for the scope you changed.
-- Tangent requires `vp check` and `vp run typecheck` before completion. Do not run a larger recursive
-  test suite unless asked; CI owns the exhaustive suite.
+- Tangent requires `vp check` and `vp run typecheck` before completion. If native mobile code
+  changed, `vp run lint:mobile` must also pass. Do not run a larger recursive test suite unless
+  asked; CI owns the exhaustive suite.
 - Backend behavior changes ship with focused tests for that behavior.
 - The server is event-sourced and its async flows emit typed receipts. Wait on receipts and worker drains, never on sleeps or polling. A test that needs a timeout to pass is wrong.
 - User-visible frontend changes get one integrated pass in a real client: `test-t3-app` for web,

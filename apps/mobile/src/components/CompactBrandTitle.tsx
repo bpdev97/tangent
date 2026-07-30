@@ -62,7 +62,7 @@ export function CompactBrandTitle(
           letterSpacing: -0.5,
         }}
       >
-        {APP_NAME.startsWith("T") ? APP_NAME.slice(1) : APP_NAME}
+        {APP_NAME.slice(1)}
       </Text>
       <View
         style={{
