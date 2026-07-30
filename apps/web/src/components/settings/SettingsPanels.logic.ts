@@ -1,13 +1,21 @@
 import {
   defaultInstanceIdForDriver,
+  type BackgroundActivityProfile,
+  type BackgroundActivitySettings,
   type ProviderDriverKind,
   type ProviderInstanceConfig,
   type ProviderInstanceId,
   type ServerSettings,
+  type ServerSettingsPatch,
   type SidebarProjectGroupingMode,
   type UnifiedSettings,
 } from "@t3tools/contracts";
 import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import {
+  normalizeBackgroundActivitySettings,
+  normalizeServerBackgroundActivitySettings,
+  resolveServerBackgroundActivitySettings,
+} from "@t3tools/shared/backgroundActivitySettings";
 import * as Equal from "effect/Equal";
 
 export interface ProviderInstanceSettingsRow {
@@ -18,11 +26,6 @@ export interface ProviderInstanceSettingsRow {
   readonly isDirty?: boolean;
 }
 
-/**
- * Build provider settings rows without assuming every registered driver has a
- * legacy `settings.providers` slot. Drivers such as Hermes are explicit-only
- * and must appear solely through `providerInstances`.
- */
 export function buildProviderInstanceSettingsRows(input: {
   readonly settings: Pick<ServerSettings, "providers" | "providerInstances">;
   readonly providerDrivers: ReadonlyArray<ProviderDriverKind>;
@@ -127,6 +130,65 @@ export function rememberEnabledProjectGroupingMode(mode: SidebarProjectGroupingM
   }
 }
 
+export function hasChangedBackgroundActivitySettings(
+  settings: Pick<
+    UnifiedSettings,
+    | "backgroundActivity"
+    | "backgroundActivityProfile"
+    | "automaticGitFetchInterval"
+    | "providerHealthRefreshInterval"
+  >,
+): boolean {
+  return (
+    !Equal.equals(settings.backgroundActivity, DEFAULT_UNIFIED_SETTINGS.backgroundActivity) ||
+    settings.backgroundActivityProfile !== DEFAULT_UNIFIED_SETTINGS.backgroundActivityProfile ||
+    !Equal.equals(
+      settings.automaticGitFetchInterval,
+      DEFAULT_UNIFIED_SETTINGS.automaticGitFetchInterval,
+    ) ||
+    !Equal.equals(
+      settings.providerHealthRefreshInterval,
+      DEFAULT_UNIFIED_SETTINGS.providerHealthRefreshInterval,
+    )
+  );
+}
+
+export function resolveBackgroundActivityProfileOption(
+  settings: ServerSettings,
+): BackgroundActivityProfile | "advanced" {
+  const resolved = resolveServerBackgroundActivitySettings(settings);
+  const normalized = normalizeBackgroundActivitySettings({
+    schemaVersion: 1,
+    profile: "custom",
+    baseProfile: resolved.profile,
+    overrides: {
+      automaticGitFetchInterval: resolved.automaticGitFetchInterval,
+      providerHealthRefreshInterval: resolved.providerHealthRefreshInterval,
+      hostPowerMonitorActiveInterval: resolved.hostPowerMonitorActiveInterval,
+      hostPowerMonitorIdleInterval: resolved.hostPowerMonitorIdleInterval,
+      idleClientTtl: resolved.idleClientTtl,
+      pauseWhenHostLocked: resolved.pauseWhenHostLocked,
+      pauseWhenHostLowPower: resolved.pauseWhenHostLowPower,
+      pauseWhenClientLowPower: resolved.pauseWhenClientLowPower,
+      pauseWhenOnBattery: resolved.pauseWhenOnBattery,
+    },
+  });
+  return normalized.profile === "custom" ? "advanced" : normalized.profile;
+}
+
+export function backgroundActivitySharedPolicySettings(
+  settings: ServerSettings,
+  profile: BackgroundActivityProfile,
+): BackgroundActivitySettings {
+  const normalized = normalizeServerBackgroundActivitySettings(settings);
+  return {
+    schemaVersion: 1,
+    profile: "custom",
+    baseProfile: profile,
+    overrides: normalized.profile === "custom" ? normalized.overrides : {},
+  };
+}
+
 function collapseOtelSignalsUrl(input: {
   readonly tracesUrl: string;
   readonly metricsUrl: string;
@@ -184,7 +246,7 @@ export function buildProviderInstanceUpdatePatch(input: {
   readonly textGenerationModelSelection?:
     | ServerSettings["textGenerationModelSelection"]
     | undefined;
-}): Partial<UnifiedSettings> {
+}): ServerSettingsPatch {
   type LegacyProviderSettings = ServerSettings["providers"][keyof ServerSettings["providers"]];
   const legacyProviderDefaults = DEFAULT_UNIFIED_SETTINGS.providers as Record<
     string,

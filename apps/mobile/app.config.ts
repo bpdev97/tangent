@@ -163,7 +163,7 @@ const config: ExpoConfig = {
   slug: personalMobile.expoSlug,
   platforms: ["ios"],
   scheme: variant.scheme,
-  version: "0.1.0",
+  version: "1.0.1",
   runtimeVersion: {
     // Fingerprint (not appVersion) so an OTA only reaches binaries whose native
     // project — native deps, config plugins, AND patches/ — matches the update.
@@ -273,10 +273,12 @@ const config: ExpoConfig = {
       "expo-camera",
       {
         cameraPermission: `Allow ${personalMobile.appName} to access your camera so you can scan pairing QR codes.`,
+        microphonePermission: false,
         barcodeScannerEnabled: true,
         recordAudioAndroid: false,
       },
     ],
+    ["expo-image-picker", { photosPermission: false, microphonePermission: false }],
     [
       "expo-splash-screen",
       {
@@ -342,9 +344,11 @@ const config: ExpoConfig = {
       tracesDataset: repoEnv.EXPO_PUBLIC_OTLP_TRACES_DATASET ?? null,
       tracesToken: repoEnv.EXPO_PUBLIC_OTLP_TRACES_TOKEN ?? null,
     },
-    eas: { projectId: personalMobile.expoProjectId },
+    eas: {
+      projectId: "d763fcb8-d37c-41ea-a773-b54a0ab4a454",
+    },
   },
-  owner: personalMobile.expoOwner,
+  owner: "pingdotgg",
 };
 
 export default config;

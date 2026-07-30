@@ -37,12 +37,8 @@ Generic-chat threads do not expose project-only affordances:
 - new-chat drafts use the local workspace mode with no branch, worktree, or origin selection;
 - runtime selection is fixed by the server even if stale client metadata says otherwise.
 
-Conversation presentation uses the same web and mobile renderers as project threads. A visible
-assistant response is identified by the user message that triggered it, not by provider turn ID:
-one user send can span multiple provider turns, while one provider turn can also receive a rapid
-follow-up. Provider turns remain timing and lifecycle metadata and must not create duplicate
-“Worked” groups for one user message. This invariant applies equally to project threads and generic
-Chats.
+Conversation presentation uses the same upstream provider-turn folding as project threads. Generic
+chat does not maintain a separate response-grouping model.
 
 The mobile working-directory selector is the central capability boundary for existing threads. It
 derives generic-chat status from the selected thread's reserved project ID, without waiting for the
@@ -64,8 +60,7 @@ review, terminal, and their nested routes cannot be opened through deep links or
 - Never expose the managed scratch directory as a user workspace in web or mobile UI.
 - Derive existing-thread capability from `thread.projectId`; project catalog objects may arrive a
   render later and must not temporarily enable project tools.
-- Keep one visible assistant response per user message even when the provider splits that response
-  across turns or reuses a running turn for a follow-up.
+- Keep generic-chat presentation aligned with upstream provider-turn folding.
 - Keep normal project behavior unchanged; shared helpers must branch only on the reserved ID.
 
 ## Revalidation procedure
@@ -74,7 +69,6 @@ Run the focused tests:
 
 ```sh
 vp test packages/shared/src/genericChat.test.ts \
-  packages/shared/src/threadResponseGrouping.test.ts \
   packages/client-runtime/src/state/projectGrouping.genericChat.test.ts \
   apps/server/src/genericChat.test.ts \
   apps/server/src/orchestration/Layers/ProviderCommandReactor.genericChat.test.ts \

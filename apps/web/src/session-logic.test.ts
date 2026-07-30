@@ -779,15 +779,7 @@ describe("deriveWorkLogEntries", () => {
     expect(liveEntries.map((entry) => entry.id)).toEqual(["warning", "tool-progress"]);
     expect(liveEntries[1]).toMatchObject({
       toolLifecycleStatus: "inProgress",
-      toolCall: {
-        callId: "command-1",
-        category: "command",
-        title: "Run tests",
-        status: "inProgress",
-        cwd: "/workspace",
-        durationMs: 2000,
-        sections: [expect.objectContaining({ title: "Command", content: "vp test" })],
-      },
+      sourceActivityKind: "tool.progress",
     });
 
     const completedEntries = deriveWorkLogEntries([
@@ -807,15 +799,11 @@ describe("deriveWorkLogEntries", () => {
       }),
     ]);
     expect(completedEntries.map((entry) => entry.id)).toEqual(["warning", "tool-complete"]);
-    expect(completedEntries[1]?.toolCall).toMatchObject({
-      callId: "command-1",
-      status: "completed",
-      cwd: "/workspace",
-      exitCode: 0,
-      sections: [
-        expect.objectContaining({ title: "Command", content: "vp test" }),
-        expect.objectContaining({ title: "Output", content: "All tests passed" }),
-      ],
+    expect(completedEntries[1]).toMatchObject({
+      itemType: "command_execution",
+      toolTitle: "Run tests",
+      toolLifecycleStatus: "completed",
+      sourceActivityKind: "tool.completed",
     });
   });
 
@@ -893,22 +881,9 @@ describe("deriveWorkLogEntries", () => {
       itemType: "collab_agent_tool_call",
       toolLifecycleStatus: "completed",
       sourceActivityKind: "agent.completed",
-      toolCall: {
-        callId: "agent-1",
-        category: "agent",
-        title: "reviewer subagent",
-        status: "completed",
-        preview: "No lifecycle bugs found",
-      },
+      toolTitle: "reviewer subagent",
+      detail: "No lifecycle bugs found",
     });
-    expect(entries[0]?.toolCall?.sections).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ title: "Prompt", content: "Find lifecycle bugs" }),
-        expect.objectContaining({ title: "Role", content: "reviewer" }),
-        expect.objectContaining({ title: "Model", content: "gpt-5.3-codex" }),
-        expect.objectContaining({ title: "Parent agent", content: "root-agent" }),
-      ]),
-    );
   });
 
   it("uses payload summary as label for task entries when available", () => {

@@ -12,8 +12,7 @@ answer.
 The runtime contract exposes `agent.started`, `agent.updated`, and `agent.completed` events keyed by
 `RuntimeAgentId`. Events may carry a parent agent, role, prompt, description, model, provider thread,
 path, usage, duration, and terminal summary. Orchestration projects these into stable
-`collab_agent_tool_call` work items so the shared client presentation can fold lifecycle updates into
-one card.
+`collab_agent_tool_call` work items so clients can fold lifecycle updates into one compact row.
 
 The collaboration operation remains a separate tool lifecycle. This matters for Codex, where a
 `spawnAgent`, `sendInput`, `wait`, or `closeAgent` call describes an interaction while the target
@@ -37,10 +36,9 @@ agent has its own longer-lived state.
 
 ## Cross-platform presentation
 
-Web and mobile both use `@t3tools/client-runtime/tool-calls` to merge stable agent IDs and render
-prompt, summary, role, model, parent identity, path, duration, and status. Provider names must not be
-used to select UI behavior. Mobile uses its dedicated agent symbol and the same expandable detail
-sections as web.
+Web and mobile use the stable projected agent ID to correlate lifecycle updates without selecting
+behavior by provider name. Mobile uses its dedicated agent symbol. Both clients intentionally use
+the compact upstream work-row presentation rather than a fork-owned structured detail model.
 
 ## Invariants
 
@@ -49,7 +47,7 @@ sections as web.
 3. Terminal states are `completed`, `failed`, or `stopped`; terminal rows must not merge with later
    unrelated work.
 4. Parent relationships are included only when the provider supplies a stable identifier.
-5. Provider payload traversal and persisted details remain bounded by the shared tool presentation
-   safeguards.
+5. Network payload projection follows upstream; non-MCP agent details not included in its compact
+   projection are not guaranteed to reach clients.
 6. A provider with summary-only support may emit only `agent.completed`; the clients must still
    render a useful card.

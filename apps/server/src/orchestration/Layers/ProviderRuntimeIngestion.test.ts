@@ -1128,55 +1128,6 @@ describe("ProviderRuntimeIngestion", () => {
     expect(rawOutput?.content).toBe('import * as Effect from "effect/Effect"\n');
   });
 
-  it("bounds persisted tool data while retaining diagnostic context", async () => {
-    const harness = await createHarness();
-    const now = "2026-01-01T00:00:00.000Z";
-
-    harness.emit({
-      type: "item.completed",
-      eventId: asEventId("evt-tool-completed-with-large-data"),
-      provider: ProviderDriverKind.make("cursor"),
-      createdAt: now,
-      threadId: asThreadId("thread-1"),
-      turnId: asTurnId("turn-tool-completed-large"),
-      itemId: asItemId("item-tool-completed-large"),
-      payload: {
-        itemType: "command_execution",
-        status: "completed",
-        title: "Ran command",
-        data: {
-          toolCallId: "tool-large-1",
-          kind: "execute",
-          rawOutput: {
-            content: `start-${"x".repeat(100_000)}-end`,
-          },
-        },
-      },
-    });
-
-    const thread = await waitForThread(harness.readModel, (entry) =>
-      entry.activities.some(
-        (activity: ProviderRuntimeTestActivity) =>
-          activity.id === "evt-tool-completed-with-large-data",
-      ),
-    );
-    const activity = thread.activities.find(
-      (entry: ProviderRuntimeTestActivity) => entry.id === "evt-tool-completed-with-large-data",
-    );
-    const payload = activity?.payload as Record<string, unknown> | undefined;
-    const data = payload?.data as Record<string, unknown> | undefined;
-    const rawOutput = data?.rawOutput as Record<string, unknown> | undefined;
-
-    expect(rawOutput?.content).toMatch(/^start-/u);
-    expect(rawOutput?.content).toMatch(/-end$/u);
-    expect(rawOutput?.content).toContain("… tool payload truncated …");
-    expect(payload?.dataTruncation).toMatchObject({
-      truncated: true,
-      reasons: expect.arrayContaining(["string-size"]),
-    });
-    expect(new TextEncoder().encode(JSON.stringify(payload)).byteLength).toBeLessThan(130_000);
-  });
-
   it("normalizes command execution activities to ran-command summaries", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
