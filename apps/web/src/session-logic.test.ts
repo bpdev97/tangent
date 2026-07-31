@@ -206,6 +206,45 @@ describe("derivePendingApprovals", () => {
 });
 
 describe("derivePendingUserInputs", () => {
+  it("keeps open-ended prompts that require a typed answer", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "user-input-open-ended",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "user-input.requested",
+        summary: "User input requested",
+        tone: "info",
+        payload: {
+          requestId: "req-user-input-open-ended",
+          questions: [
+            {
+              id: "answer",
+              header: "Hermes question",
+              question: "What would you like me to search for?",
+              options: [],
+            },
+          ],
+        },
+      }),
+    ];
+
+    expect(derivePendingUserInputs(activities)).toEqual([
+      {
+        requestId: "req-user-input-open-ended",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        questions: [
+          {
+            id: "answer",
+            header: "Hermes question",
+            question: "What would you like me to search for?",
+            options: [],
+            multiSelect: false,
+          },
+        ],
+      },
+    ]);
+  });
+
   it("tracks open structured prompts and removes resolved ones", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({

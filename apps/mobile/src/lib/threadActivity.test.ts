@@ -14,6 +14,7 @@ import {
 import {
   buildThreadFeed,
   deriveThreadFeedPresentation,
+  derivePendingUserInputs,
   type ThreadFeedActivity,
   type ThreadFeedEntry,
 } from "./threadActivity";
@@ -54,6 +55,46 @@ function makeThread(
     settledAt: input.settledAt ?? null,
   };
 }
+
+describe("derivePendingUserInputs", () => {
+  it("keeps open-ended prompts that require a typed answer", () => {
+    const pending = derivePendingUserInputs([
+      makeActivity({
+        id: EventId.make("user-input-open-ended"),
+        createdAt: "2026-04-01T00:00:00.000Z",
+        kind: "user-input.requested",
+        summary: "User input requested",
+        payload: {
+          requestId: "req-user-input-open-ended",
+          questions: [
+            {
+              id: "answer",
+              header: "Hermes question",
+              question: "What would you like me to search for?",
+              options: [],
+            },
+          ],
+        },
+      }),
+    ]);
+
+    expect(pending).toEqual([
+      {
+        requestId: "req-user-input-open-ended",
+        createdAt: "2026-04-01T00:00:00.000Z",
+        questions: [
+          {
+            id: "answer",
+            header: "Hermes question",
+            question: "What would you like me to search for?",
+            options: [],
+            multiSelect: false,
+          },
+        ],
+      },
+    ]);
+  });
+});
 
 describe("buildThreadFeed", () => {
   it("keeps historic work entries attributed to their turns", () => {

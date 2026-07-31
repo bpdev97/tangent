@@ -371,14 +371,43 @@ it.layer(testLayer)("HermesAdapter gateway", (it) => {
           gatewayRuntime: fakeRuntime(gateway, emitter),
         });
         const threadId = ThreadId.make("hermes-gateway-interrupt");
-        yield* adapter.startSession({ threadId, runtimeMode: "full-access" });
+        const events: ProviderRuntimeEvent[] = [];
+        yield* Stream.runForEach(adapter.streamEvents, (event) =>
+          Effect.sync(() => events.push(event)),
+        ).pipe(Effect.forkChild);
+        yield* Effect.yieldNow;
+        yield* adapter.startSession({ threadId, runtimeMode: "approval-required" });
 
         const turn = yield* adapter.sendTurn({ threadId, input: "wait for it" });
         yield* settleEvents;
         assert.isTrue(gateway.requests.some((request) => request.method === "prompt.submit"));
+        emitter.current?.({
+          type: "approval.request",
+          session_id: "live-1",
+          payload: { command: "dangerous", description: "dangerous" },
+        });
+        emitter.current?.({
+          type: "clarify.request",
+          session_id: "live-1",
+          payload: {
+            request_id: "clarify-open-ended",
+            question: "What should I search for?",
+          },
+        });
+        yield* settleEvents;
+
+        const inputRequested = events.find((event) => event.type === "user-input.requested");
+        assert.deepEqual(
+          inputRequested?.type === "user-input.requested"
+            ? inputRequested.payload.questions[0]?.options
+            : undefined,
+          [],
+        );
 
         yield* adapter.interruptTurn(threadId, turn.turnId);
         assert.isTrue(gateway.requests.some((request) => request.method === "session.interrupt"));
+        assert.isTrue(events.some((event) => event.type === "request.resolved"));
+        assert.isTrue(events.some((event) => event.type === "user-input.resolved"));
         resolvePrompt({ status: "interrupted" });
       }),
     ),

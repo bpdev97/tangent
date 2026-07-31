@@ -74,7 +74,11 @@ chat transcript.
 - `approval.request` maps to T3 approvals. Accept, accept-for-session, and decline map to `once`,
   `session`, and `deny`; T3 never chooses Hermes's permanent `always` scope.
 - `clarify.request`, `sudo.request`, and `secret.request` use T3's structured user-input path and
-  retain Hermes request IDs for the corresponding response method.
+  retain Hermes request IDs for the corresponding response method. Clarifications without choices
+  remain valid open-ended prompts and use the clients' typed custom-answer controls.
+- Terminal turns, interrupts, session stops, and gateway expiry events resolve any remaining
+  Hermes approval or user-input activities so blocked-on-user indicators cannot outlive the
+  provider callback they represent.
 
 `full-access` auto-accepts an individual gateway approval with `once`. `approval-required` and
 `auto-accept-edits` surface approval requests. Gateway contract 2 has no session-local equivalent of
@@ -109,6 +113,13 @@ Hermes Agent 0.19.0 source review additionally confirmed that `image.attach` rej
 gap at shared upload ingestion rather than in this provider adapter. The real HEIC fixture was
 verified through JPEG persistence and Hermes-focused deterministic tests, but no live 0.19.0
 gateway attachment or browser/mobile upload smoke ran for this change.
+
+On 2026-07-30, a persisted open-ended `clarify.request` exposed that web and mobile rejected
+zero-option questions even though both clients support typed custom answers. It also exposed that
+interrupting the turn cleared Hermes's callback without resolving T3's projected activity. The
+clients now retain open-ended prompts, terminal Hermes lifecycles publish matching resolution
+events, and migration 036 closes orphaned projected prompts from older builds when their Hermes
+turn is already terminal.
 
 ## Automations
 

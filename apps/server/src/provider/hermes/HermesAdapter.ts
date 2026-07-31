@@ -285,6 +285,41 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
   const makeItemId = (context: HermesSessionContext, suffix: string) =>
     RuntimeItemId.make(`hermes:${context.liveSessionId}:${suffix}`);
 
+  const abandonPendingInteractions = Effect.fn("HermesAdapter.abandonPendingInteractions")(
+    function* (
+      context: HermesSessionContext,
+      shouldAbandon: (pending: PendingInteraction) => boolean = () => true,
+    ) {
+      for (const [requestId, pending] of context.pendingInteractions) {
+        if (!shouldAbandon(pending)) continue;
+        context.pendingInteractions.delete(requestId);
+        if (pending.kind === "approval") {
+          yield* publish({
+            type: "request.resolved",
+            ...(yield* stamp()),
+            provider: HERMES_DRIVER_KIND,
+            providerInstanceId: boundInstanceId,
+            threadId: context.threadId,
+            ...(context.activeTurnId ? { turnId: context.activeTurnId } : {}),
+            requestId: RuntimeRequestId.make(requestId),
+            payload: { requestType: pending.requestType, decision: "cancelled" },
+          });
+          continue;
+        }
+        yield* publish({
+          type: "user-input.resolved",
+          ...(yield* stamp()),
+          provider: HERMES_DRIVER_KIND,
+          providerInstanceId: boundInstanceId,
+          threadId: context.threadId,
+          ...(context.activeTurnId ? { turnId: context.activeTurnId } : {}),
+          requestId: RuntimeRequestId.make(requestId),
+          payload: { answers: {} },
+        });
+      }
+    },
+  );
+
   const finishTurn = Effect.fn("HermesAdapter.finishTurn")(function* (
     context: HermesSessionContext,
     state: "completed" | "failed" | "cancelled",
@@ -292,6 +327,7 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
   ) {
     const turnId = context.activeTurnId;
     if (!turnId) return;
+    yield* abandonPendingInteractions(context);
     context.activeTurnId = undefined;
     context.assistantItemId = undefined;
     context.reasoningItemId = undefined;
@@ -747,11 +783,11 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
       case "secret.expire": {
         const gatewayRequestId = text(payload.request_id);
         if (!gatewayRequestId) return;
-        for (const [requestId, pending] of context.pendingInteractions) {
-          if (pending.kind === "user-input" && pending.gatewayRequestId === gatewayRequestId) {
-            context.pendingInteractions.delete(requestId);
-          }
-        }
+        yield* abandonPendingInteractions(
+          context,
+          (pending) =>
+            pending.kind === "user-input" && pending.gatewayRequestId === gatewayRequestId,
+        );
         return;
       }
       case "subagent.spawn_requested":
@@ -1117,7 +1153,6 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
         yield* request(context, "session.interrupt", { session_id: context.liveSessionId }).pipe(
           Effect.ignore,
         );
-        context.pendingInteractions.clear();
         yield* finishTurn(context, "cancelled");
       }),
     );
@@ -1194,12 +1229,12 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
     context: HermesSessionContext,
   ) {
     if (context.stopped) return;
+    yield* abandonPendingInteractions(context);
     context.stopped = true;
     yield* request(context, "session.close", { session_id: context.liveSessionId }).pipe(
       Effect.ignore,
     );
     context.client.close();
-    context.pendingInteractions.clear();
     sessions.delete(context.threadId);
     const { activeTurnId: _activeTurnId, ...session } = context.session;
     context.session = { ...session, status: "closed", updatedAt: yield* nowIso };
