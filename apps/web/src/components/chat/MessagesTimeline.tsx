@@ -6,7 +6,6 @@ import {
   type TurnId,
 } from "@t3tools/contracts";
 import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
-import { toolCallHasDetails } from "@t3tools/client-runtime/tool-calls";
 import { resolveChatListAnchoredEndSpace } from "@t3tools/shared/chatList";
 import {
   createContext,
@@ -48,7 +47,6 @@ import {
   EyeIcon,
   GlobeIcon,
   HammerIcon,
-  LoaderCircleIcon,
   MessageCircleIcon,
   MousePointerClickIcon,
   PaintbrushIcon,
@@ -68,7 +66,6 @@ import { shouldAutoExpandChangedFiles } from "./changedFilesPresentation";
 import { MessageCopyButton } from "./MessageCopyButton";
 import {
   computeStableMessagesTimelineRows,
-  deriveMessagesTimelineResponseGrouping,
   deriveMessagesTimelineRows,
   normalizeCompactToolLabel,
   resolveAssistantMessageCopyState,
@@ -109,7 +106,6 @@ import {
   textContainsInlineTerminalContextLabels,
 } from "./userMessageTerminalContexts";
 import { SkillInlineText } from "./SkillInlineText";
-import { ToolCallDetails } from "./ToolCallDetails";
 import { formatWorkspaceRelativePath } from "../../filePathDisplay";
 import {
   buildReviewCommentRenderablePatch,
@@ -137,7 +133,7 @@ interface TimelineRowSharedState {
   onRevertUserMessage: (messageId: MessageId) => void;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
-  onToggleTurnFold: (responseId: string) => void;
+  onToggleTurnFold: (turnId: TurnId) => void;
   onToggleWorkGroup: (groupId: string, anchorElement?: HTMLElement) => void;
 }
 
@@ -224,17 +220,17 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   hideEmptyPlaceholder = false,
   topFadeEnabled = false,
 }: MessagesTimelineProps) {
-  const [expandedResponseIds, setExpandedResponseIds] = useState<ReadonlySet<string>>(new Set());
+  const [expandedTurnIds, setExpandedTurnIds] = useState<ReadonlySet<TurnId>>(new Set());
   const [expandedWorkGroupIds, setExpandedWorkGroupIds] = useState<ReadonlySet<string>>(new Set());
   const [minimapStripMap] = useState(() => new Map<string, HTMLSpanElement>());
 
-  const onToggleTurnFold = useCallback((responseId: string) => {
-    setExpandedResponseIds((existing) => {
+  const onToggleTurnFold = useCallback((turnId: TurnId) => {
+    setExpandedTurnIds((existing) => {
       const next = new Set(existing);
-      if (next.has(responseId)) {
-        next.delete(responseId);
+      if (next.has(turnId)) {
+        next.delete(turnId);
       } else {
-        next.add(responseId);
+        next.add(turnId);
       }
       return next;
     });
@@ -273,18 +269,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     [listRef],
   );
 
-  const responseGrouping = useMemo(
-    () =>
-      deriveMessagesTimelineResponseGrouping({
-        timelineEntries,
-        latestTurn,
-        runningTurnId,
-      }),
-    [latestTurn, runningTurnId, timelineEntries],
-  );
-
-  // An in-session interrupt leaves its response groups expanded so the user
-  // keeps their place; the next turn folds those groups again.
+  // An in-session interrupt leaves its turn expanded so the user keeps their
+  // place; the next turn (or a reload, since this is local state) folds it.
   const previousLatestTurnRef = useRef(latestTurn);
   useEffect(() => {
     const previous = previousLatestTurnRef.current;
@@ -294,29 +280,23 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     }
     if (latestTurn.turnId === previous.turnId) {
       if (previous.state === "running" && latestTurn.state === "interrupted") {
-        const responseIds = responseGrouping.responseIdsByTurnId.get(latestTurn.turnId) ?? [];
-        setExpandedResponseIds((existing) => {
+        setExpandedTurnIds((existing) => {
           const next = new Set(existing);
-          for (const responseId of responseIds) {
-            next.add(responseId);
-          }
+          next.add(latestTurn.turnId);
           return next;
         });
       }
       return;
     }
-    const previousResponseIds = responseGrouping.responseIdsByTurnId.get(previous.turnId) ?? [];
-    setExpandedResponseIds((existing) => {
-      if (!previousResponseIds.some((responseId) => existing.has(responseId))) {
+    setExpandedTurnIds((existing) => {
+      if (!existing.has(previous.turnId)) {
         return existing;
       }
       const next = new Set(existing);
-      for (const responseId of previousResponseIds) {
-        next.delete(responseId);
-      }
+      next.delete(previous.turnId);
       return next;
     });
-  }, [latestTurn, responseGrouping.responseIdsByTurnId]);
+  }, [latestTurn]);
 
   const rawRows = useMemo(
     () =>
@@ -324,7 +304,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         timelineEntries,
         latestTurn,
         runningTurnId,
-        expandedResponseIds,
+        expandedTurnIds,
         expandedWorkGroupIds,
         isWorking,
         activeTurnStartedAt,
@@ -335,7 +315,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       timelineEntries,
       latestTurn,
       runningTurnId,
-      expandedResponseIds,
+      expandedTurnIds,
       expandedWorkGroupIds,
       isWorking,
       activeTurnStartedAt,
@@ -1025,7 +1005,7 @@ function TurnFoldTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "turn-
         type="button"
         aria-expanded={row.expanded}
         data-scroll-anchor-ignore
-        onClick={() => ctx.onToggleTurnFold(row.responseId)}
+        onClick={() => ctx.onToggleTurnFold(row.turnId)}
         className="flex cursor-pointer select-none items-center gap-1 rounded-md px-1 text-xs text-muted-foreground tabular-nums transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
       >
         <span>{row.label}</span>
@@ -1904,17 +1884,6 @@ function workEntryIconName(workEntry: TimelineWorkEntry): WorkEntryIconName {
   if (workEntry.requestKind === "file-read") return "eye";
   if (workEntry.requestKind === "file-change") return "square-pen";
 
-  if (workEntry.toolCall?.category === "command") return "terminal";
-  if (workEntry.toolCall?.category === "file-change") return "square-pen";
-  if (workEntry.toolCall?.category === "read" || workEntry.toolCall?.category === "image") {
-    return "eye";
-  }
-  if (workEntry.toolCall?.category === "search" || workEntry.toolCall?.category === "web") {
-    return "globe";
-  }
-  if (workEntry.toolCall?.category === "mcp") return "wrench";
-  if (workEntry.toolCall?.category === "agent") return "bot";
-
   if (workEntry.itemType === "command_execution" || workEntry.command) {
     return "terminal";
   }
@@ -1945,9 +1914,6 @@ function capitalizePhrase(value: string): string {
 }
 
 function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
-  if (workEntry.toolCall?.title) {
-    return capitalizePhrase(workEntry.toolCall.title);
-  }
   if (!workEntry.toolTitle) {
     return capitalizePhrase(normalizeCompactToolLabel(workEntry.label));
   }
@@ -1967,7 +1933,7 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   const showWarningIndicator = workEntry.sourceActivityKind === "runtime.warning";
   const entryIconName = showWarningIndicator ? "x" : workEntryIconName(workEntry);
   const heading = toolWorkEntryHeading(workEntry);
-  const rawPreview = workEntry.toolCall?.preview ?? workEntryPreview(workEntry, workspaceRoot);
+  const rawPreview = workEntryPreview(workEntry, workspaceRoot);
   const preview =
     rawPreview &&
     normalizeCompactToolLabel(rawPreview).toLowerCase() ===
@@ -1975,13 +1941,8 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
       ? null
       : rawPreview;
   const displayText = preview ? `${heading} - ${preview}` : heading;
-  const structuredToolCall = workEntry.toolCall;
-  const expandedBody = structuredToolCall
-    ? null
-    : buildToolCallExpandedBody(workEntry, workspaceRoot);
-  const canExpand =
-    expandedBody !== null ||
-    (structuredToolCall !== undefined && toolCallHasDetails(structuredToolCall));
+  const expandedBody = buildToolCallExpandedBody(workEntry, workspaceRoot);
+  const canExpand = expandedBody !== null;
   const showFailedIndicator = workEntryIndicatesToolFailure(workEntry);
   const showDestructiveRowStyle =
     showFailedIndicator &&
@@ -2002,14 +1963,10 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
       ? "font-medium text-destructive"
       : "font-medium text-foreground/82";
   const turnSettled = !activity.activeTurnInProgress;
-  const showRunningIndicator = !turnSettled && structuredToolCall?.status === "inProgress";
-  const showNeutralIndicator =
-    !showRunningIndicator && !turnSettled && workEntryIndicatesToolNeutralStatus(workEntry);
+  const showNeutralIndicator = !turnSettled && workEntryIndicatesToolNeutralStatus(workEntry);
   const showSuccessIndicator =
     workEntryIndicatesToolSuccess(workEntry) ||
-    (turnSettled &&
-      structuredToolCall?.status !== "inProgress" &&
-      workEntryIndicatesToolNeutralStatus(workEntry));
+    (turnSettled && workEntryIndicatesToolNeutralStatus(workEntry));
   const rowToggleProps = canExpand
     ? {
         role: "button" as const,
@@ -2095,15 +2052,6 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
                   </TooltipTrigger>
                   <TooltipPopup>Completed</TooltipPopup>
                 </Tooltip>
-              ) : showRunningIndicator ? (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={<span className="flex size-4 items-center justify-center" />}
-                  >
-                    <LoaderCircleIcon className="block size-3 shrink-0 animate-spin" aria-hidden />
-                  </TooltipTrigger>
-                  <TooltipPopup>Running</TooltipPopup>
-                </Tooltip>
               ) : showNeutralIndicator ? (
                 <Tooltip>
                   <TooltipTrigger
@@ -2118,19 +2066,15 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
           </div>
         </div>
       </div>
-      {expanded && canExpand ? (
+      {expanded && canExpand && expandedBody ? (
         <div
           className="mt-1 ms-7 cursor-default border-s border-border/45 ps-3 pt-0.5"
           onClick={stopRowToggle}
           onPointerDown={stopRowToggle}
         >
-          {structuredToolCall ? (
-            <ToolCallDetails toolCall={structuredToolCall} workspaceRoot={workspaceRoot} />
-          ) : expandedBody ? (
-            <pre className="max-h-64 cursor-text overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-muted-foreground select-text">
-              {expandedBody}
-            </pre>
-          ) : null}
+          <pre className="max-h-64 cursor-text overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-muted-foreground select-text">
+            {expandedBody}
+          </pre>
         </div>
       ) : null}
     </div>

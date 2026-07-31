@@ -39,10 +39,6 @@
       "types": "./src/platform/index.ts",
       "default": "./src/platform/index.ts"
     },
-    "./tool-calls": {
-      "types": "./src/tool-calls/index.ts",
-      "default": "./src/tool-calls/index.ts"
-    },
     "./relay": {
       "types": "./src/relay/index.ts",
       "default": "./src/relay/index.ts"
@@ -142,6 +138,10 @@
     "./state/thread-settled": {
       "types": "./src/state/threadSettled.ts",
       "default": "./src/state/threadSettled.ts"
+    },
+    "./state/thread-search": {
+      "types": "./src/state/threadSearch.ts",
+      "default": "./src/state/threadSearch.ts"
     },
     "./state/vcs": {
       "types": "./src/state/vcs.ts",

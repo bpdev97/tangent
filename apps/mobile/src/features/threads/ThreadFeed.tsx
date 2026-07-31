@@ -1,7 +1,7 @@
 import * as Haptics from "expo-haptics";
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
 import { type LegendListRef } from "@legendapp/list/react-native";
-import type { EnvironmentId, MessageId, ThreadId } from "@t3tools/contracts";
+import type { EnvironmentId, MessageId, ThreadId, TurnId } from "@t3tools/contracts";
 import { CHAT_LIST_ANCHOR_OFFSET, resolveChatListAnchoredEndSpace } from "@t3tools/shared/chatList";
 import { formatElapsed } from "@t3tools/shared/orchestrationTiming";
 import { SymbolView } from "../../components/AppSymbol";
@@ -45,7 +45,14 @@ import {
 import { TouchableOpacity } from "react-native-gesture-handler";
 import ImageViewing from "react-native-image-viewing";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Animated, { FadeIn, FadeInUp, type SharedValue } from "react-native-reanimated";
+import Animated, {
+  FadeIn,
+  FadeInUp,
+  useSharedValue,
+  withTiming,
+  type LayoutAnimationsValues,
+  type SharedValue,
+} from "react-native-reanimated";
 import { useThemeColor } from "../../lib/useThemeColor";
 import { useFontFamily } from "../../lib/useFontFamily";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
@@ -75,20 +82,25 @@ import { deriveCenteredContentHorizontalPadding, type LayoutVariant } from "../.
 import {
   resolveMarkdownFontSizes,
   resolveNativeMarkdownTypography,
+  scaledTypographyLineHeight,
 } from "../../lib/appearancePreferences";
+import { MOBILE_TYPOGRAPHY } from "../../lib/typography";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { useAppearanceCodeSurface } from "../settings/appearance/useAppearanceCodeSurface";
 import { markdownFileIconSource } from "@t3tools/mobile-markdown-text/file-icons";
 import { resolveMarkdownLinkPresentation } from "@t3tools/mobile-markdown-text/links";
 import {
-  deriveThreadFeedResponseGrouping,
   deriveThreadFeedPresentation,
   type ThreadFeedEntry,
   type ThreadFeedLatestTurn,
 } from "../../lib/threadActivity";
 import type { ThreadContentPresentation } from "./threadContentPresentation";
-import { ThreadWorkGroupToggle, ThreadWorkLog } from "./thread-work-log";
-import { resolveThreadFeedFixedItemSize } from "./threadFeedLayout";
+import {
+  collapsedWorkLogHeight,
+  ThreadWorkGroupToggle,
+  ThreadWorkLog,
+  WORK_GROUP_TOGGLE_HEIGHT,
+} from "./thread-work-log";
 import { useMarkdownCodeHighlight } from "./markdownCodeHighlightState";
 import { useAssetUrl } from "../../state/assets";
 import { resolveWorkspaceRelativeFilePath } from "../files/filePath";
@@ -104,6 +116,24 @@ function formatMessageTime(input: string): string {
   }
   return MESSAGE_TIME_FORMATTER.format(timestamp);
 }
+
+// Rows shift when content above them grows (streaming text, work-log folds);
+// animating the container position turns those jumps into slides. Applied
+// conditionally — see the gated transition in ThreadFeed: while browsing
+// history the animation must NOT run, or every estimate→actual size
+// correction plays as a visible slide against the instant scroll-offset
+// compensation from maintainVisibleContentPosition.
+const FEED_ITEM_LAYOUT_DURATION_MS = 180;
+
+// Pre-measurement heights for getFixedItemSize, mirroring renderFeedEntry's
+// classNames. The fold row's min-h-11 (44px) stays taller than its single
+// text-sm line at every supported base font size (26px at the 22pt maximum),
+// so its height is a constant; a drifted value costs one correction on
+// measure, not a persistent offset.
+const TURN_FOLD_HEIGHT = 56; // min-h-11 (44) + mb-3 (12)
+// The working row has no min-height clamp — its height follows the scaled
+// text-xs line height (see workingRowHeight in ThreadFeed).
+const WORKING_ROW_VERTICAL_EXTRAS = 24; // py-1 (8) + mb-4 (16)
 
 // Entering animations must only play for rows born just now — LegendList
 // remounts rows when they scroll back into view, and replaying an entrance for
@@ -793,12 +823,11 @@ function renderFeedEntry(
     readonly copiedRowId: string | null;
     readonly expandedWorkRows: Record<string, boolean>;
     readonly terminalAssistantMessageIds: ReadonlySet<string>;
-    readonly activeResponseId: string | null;
-    readonly responseIdByEntryId: ReadonlyMap<string, string>;
+    readonly unsettledTurnId: TurnId | null;
     readonly onCopyWorkRow: (rowId: string, value: string) => void;
     readonly onToggleWorkGroup: (groupId: string) => void;
     readonly onToggleWorkRow: (rowId: string) => void;
-    readonly onToggleTurnFold: (responseId: string) => void;
+    readonly onToggleTurnFold: (turnId: TurnId) => void;
     readonly onPressImage: (uri: string, headers?: Record<string, string>) => void;
     readonly onMarkdownLinkPress: (href: string) => void;
     readonly iconSubtleColor: string | import("react-native").ColorValue;
@@ -821,7 +850,7 @@ function renderFeedEntry(
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded: entry.expanded }}
-        onPress={() => props.onToggleTurnFold(entry.responseId)}
+        onPress={() => props.onToggleTurnFold(entry.turnId)}
         hitSlop={4}
         className="mb-3 min-h-11 flex-row items-center gap-2 border-b border-neutral-200/80 px-2 dark:border-white/[0.08]"
       >
@@ -857,14 +886,14 @@ function renderFeedEntry(
     const timestampLabel = formatMessageTime(isUser ? message.createdAt : message.updatedAt);
     const attachments = message.attachments ?? [];
     const hasReviewCommentContext = message.text.includes("<review_comment");
-    const assistantResponseStillInProgress =
+    const assistantTurnStillInProgress =
       message.role === "assistant" &&
-      props.activeResponseId !== null &&
-      props.responseIdByEntryId.get(entry.id) === props.activeResponseId;
+      props.unsettledTurnId !== null &&
+      message.turnId === props.unsettledTurnId;
     const showAssistantMeta =
       message.role === "assistant" &&
       props.terminalAssistantMessageIds.has(message.id) &&
-      !assistantResponseStillInProgress &&
+      !assistantTurnStillInProgress &&
       !message.streaming;
 
     if (isUser) {
@@ -988,16 +1017,6 @@ function renderFeedEntry(
       expandedRows={props.expandedWorkRows}
       iconSubtleColor={iconSubtleColor}
       onCopyRow={props.onCopyWorkRow}
-      renderMarkdown={(text) => (
-        <Markdown
-          options={{ gfm: true }}
-          renderers={markdownStyles.assistant.renderers}
-          styles={markdownStyles.assistant.styles}
-          theme={markdownStyles.assistant.theme}
-        >
-          {text}
-        </Markdown>
-      )}
       onToggleRow={props.onToggleWorkRow}
     />
   );
@@ -1271,7 +1290,6 @@ function ThreadFeedPlaceholder(props: {
   readonly bottomInset: number;
   readonly detail: string;
   readonly horizontalPadding: number;
-  readonly loading?: boolean;
   readonly title: string;
   readonly topInset: number;
 }) {
@@ -1288,7 +1306,6 @@ function ThreadFeedPlaceholder(props: {
       }}
     >
       <View className="max-w-[320px] items-center gap-2">
-        {props.loading === true ? <ActivityIndicator size="small" /> : null}
         <Text className="text-center font-t3-bold text-lg text-foreground">{props.title}</Text>
         <Text className="text-center text-sm leading-normal text-foreground-secondary">
           {props.detail}
@@ -1306,7 +1323,8 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const disclosureAnchorKeyRef = useRef<string | null>(null);
   const headerMaterialVisibleRef = useRef(false);
   const previousLatestTurnRef = useRef(props.latestTurn);
-  const { fontScale, width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
+  const { appearance } = useAppearancePreferences();
   const [viewportWidth, setViewportWidth] = useState(() =>
     props.layoutVariant === "split" ? 0 : windowWidth,
   );
@@ -1316,15 +1334,14 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     readonly copiedRowId: string | null;
     readonly expandedWorkGroups: Record<string, boolean>;
     readonly expandedWorkRows: Record<string, boolean>;
-    readonly expandedResponseIds: ReadonlySet<string>;
+    readonly expandedTurnIds: ReadonlySet<TurnId>;
   }>({
     copiedRowId: null,
     expandedWorkGroups: {},
     expandedWorkRows: {},
-    expandedResponseIds: new Set(),
+    expandedTurnIds: new Set(),
   });
-  const { copiedRowId, expandedWorkGroups, expandedWorkRows, expandedResponseIds } =
-    interactionState;
+  const { copiedRowId, expandedWorkGroups, expandedWorkRows, expandedTurnIds } = interactionState;
   const [expandedImage, setExpandedImage] = useState<{
     uri: string;
     headers?: Record<string, string>;
@@ -1417,6 +1434,11 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     },
     [props.onHeaderMaterialVisibilityChange],
   );
+  // True while the viewport sits within ~one screen of the list end — the
+  // only region where layout shifts should animate. Starts true because the
+  // list opens pinned to the end.
+  const nearListEnd = useSharedValue(true);
+
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       // anchorTopInset, not topContentInset: under automatic insets the list
@@ -1424,9 +1446,40 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       // UIKit's adjustedContentInset, so topContentInset is 0 here). Add the
       // header height back or the material toggles a full header too late.
       reportHeaderMaterialVisibility(event.nativeEvent.contentOffset.y + anchorTopInset > 6);
+      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      nearListEnd.value =
+        contentSize.height - layoutMeasurement.height - contentOffset.y < layoutMeasurement.height;
     },
-    [reportHeaderMaterialVisibility, anchorTopInset],
+    [reportHeaderMaterialVisibility, anchorTopInset, nearListEnd],
   );
+
+  // Gated variant of the 180ms feed layout slide. Instant while browsing
+  // history: maintainVisibleContentPosition compensates the scroll offset in
+  // the same frame a row's measured size lands, so an instant reposition is
+  // invisible — animating it is exactly what made cold upward scrolls slide
+  // and jump. Near the end the slide stays on: streaming growth and sends
+  // shift rows at rest, where the animation is the thing preventing a hard
+  // visual snap.
+  const feedItemLayoutTransition = useMemo(() => {
+    return (values: LayoutAnimationsValues) => {
+      "worklet";
+      const duration = nearListEnd.value ? FEED_ITEM_LAYOUT_DURATION_MS : 0;
+      return {
+        initialValues: {
+          originX: values.currentOriginX,
+          originY: values.currentOriginY,
+          width: values.currentWidth,
+          height: values.currentHeight,
+        },
+        animations: {
+          originX: withTiming(values.targetOriginX, { duration }),
+          originY: withTiming(values.targetOriginY, { duration }),
+          width: withTiming(values.targetWidth, { duration }),
+          height: withTiming(values.targetHeight, { duration }),
+        },
+      };
+    };
+  }, [nearListEnd]);
   const handleViewportLayout = useCallback((event: LayoutChangeEvent) => {
     const nextWidth = Math.round(event.nativeEvent.layout.width);
     const nextHeight = Math.round(event.nativeEvent.layout.height);
@@ -1452,12 +1505,12 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       deriveThreadFeedPresentation(
         props.feed,
         props.latestTurn,
-        expandedResponseIds,
+        expandedTurnIds,
         expandedWorkGroupIds,
         props.activeWorkStartedAt,
       ),
     [
-      expandedResponseIds,
+      expandedTurnIds,
       expandedWorkGroupIds,
       props.activeWorkStartedAt,
       props.feed,
@@ -1490,11 +1543,20 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       ),
     [presentedFeed, props.anchorMessageId, anchorTopInset],
   );
-  const responseGrouping = useMemo(
-    () => deriveThreadFeedResponseGrouping(props.feed, props.latestTurn),
-    [props.feed, props.latestTurn],
-  );
-  const terminalAssistantMessageIds = responseGrouping.terminalAssistantEntryIds;
+  const terminalAssistantMessageIds = useMemo(() => {
+    const terminalIdsByTurn = new Map<TurnId, string>();
+    for (const entry of props.feed) {
+      if (entry.type === "message" && entry.message.role === "assistant" && entry.message.turnId) {
+        terminalIdsByTurn.set(entry.message.turnId, entry.message.id);
+      }
+    }
+    return new Set(terminalIdsByTurn.values());
+  }, [props.feed]);
+  const unsettledTurnId =
+    props.latestTurn &&
+    (props.latestTurn.completedAt === null || props.latestTurn.state === "running")
+      ? props.latestTurn.turnId
+      : null;
 
   useEffect(() => {
     const previous = previousLatestTurnRef.current;
@@ -1504,29 +1566,23 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     }
     if (props.latestTurn.turnId === previous.turnId) {
       if (previous.state === "running" && props.latestTurn.state === "interrupted") {
-        const responseIds = responseGrouping.responseIdsByTurnId.get(props.latestTurn.turnId) ?? [];
-        setInteractionState((current) => {
-          const next = new Set(current.expandedResponseIds);
-          for (const responseId of responseIds) {
-            next.add(responseId);
-          }
-          return { ...current, expandedResponseIds: next };
-        });
+        const interruptedTurnId = props.latestTurn.turnId;
+        setInteractionState((current) => ({
+          ...current,
+          expandedTurnIds: new Set(current.expandedTurnIds).add(interruptedTurnId),
+        }));
       }
       return;
     }
-    const previousResponseIds = responseGrouping.responseIdsByTurnId.get(previous.turnId) ?? [];
     setInteractionState((current) => {
-      if (!previousResponseIds.some((responseId) => current.expandedResponseIds.has(responseId))) {
+      if (!current.expandedTurnIds.has(previous.turnId)) {
         return current;
       }
-      const next = new Set(current.expandedResponseIds);
-      for (const responseId of previousResponseIds) {
-        next.delete(responseId);
-      }
-      return { ...current, expandedResponseIds: next };
+      const next = new Set(current.expandedTurnIds);
+      next.delete(previous.turnId);
+      return { ...current, expandedTurnIds: next };
     });
-  }, [props.latestTurn, responseGrouping.responseIdsByTurnId]);
+  }, [props.latestTurn]);
 
   useEffect(() => {
     return () => {
@@ -1569,18 +1625,10 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const maintainVisibleContentPosition = useMemo(
     () => ({
       data: true,
-      // Data changes can replace or regroup rows, but measuring a variable-height
-      // row while the user scrolls should not issue a second JS offset correction.
-      // End maintenance remains the sole owner of streaming growth at the bottom.
-      size: false,
+      size: true,
       shouldRestorePosition: shouldRestoreVisibleContentPosition,
     }),
     [shouldRestoreVisibleContentPosition],
-  );
-
-  const getFixedFeedItemSize = useCallback(
-    (entry: ThreadFeedEntry) => resolveThreadFeedFixedItemSize(entry, expandedWorkRows, fontScale),
-    [expandedWorkRows, fontScale],
   );
 
   const onCopyWorkRow = useCallback((rowId: string, value: string) => {
@@ -1629,16 +1677,16 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   );
 
   const onToggleTurnFold = useCallback(
-    (responseId: string) => {
-      suspendEndScrollMaintenanceForDisclosure(`turn-fold:${responseId}`);
+    (turnId: TurnId) => {
+      suspendEndScrollMaintenanceForDisclosure(`turn-fold:${turnId}`);
       setInteractionState((current) => {
-        const next = new Set(current.expandedResponseIds);
-        if (next.has(responseId)) {
-          next.delete(responseId);
+        const next = new Set(current.expandedTurnIds);
+        if (next.has(turnId)) {
+          next.delete(turnId);
         } else {
-          next.add(responseId);
+          next.add(turnId);
         }
-        return { ...current, expandedResponseIds: next };
+        return { ...current, expandedTurnIds: next };
       });
     },
     [suspendEndScrollMaintenanceForDisclosure],
@@ -1648,15 +1696,46 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     setExpandedImage({ uri, headers });
   }, []);
 
+  // Rows whose height is known before they ever render. Without this, every
+  // row above the viewport is assumed to be estimatedItemSize tall, and
+  // scrolling up through unmeasured content corrects each row's height as it
+  // mounts — the feed visibly jumps. Fixed sizes make the small chrome rows
+  // exact; message rows stay undefined and use LegendList's per-type running
+  // average once one of their type has been measured. Text-driven heights
+  // follow the configurable base font size via scaledTypographyLineHeight.
+  const workingRowHeight =
+    WORKING_ROW_VERTICAL_EXTRAS +
+    scaledTypographyLineHeight(MOBILE_TYPOGRAPHY.label, appearance.baseFontSize);
+  const getFixedItemSize = useCallback(
+    (entry: ThreadFeedEntry) => {
+      switch (entry.type) {
+        case "turn-fold":
+          return TURN_FOLD_HEIGHT;
+        case "work-toggle":
+          return WORK_GROUP_TOGGLE_HEIGHT;
+        case "working":
+          return workingRowHeight;
+        case "activity-group":
+          // Expanded rows append a variable detail block — fall back to
+          // measurement for those groups.
+          return entry.activities.some((activity) => expandedWorkRows[activity.id])
+            ? undefined
+            : collapsedWorkLogHeight(entry.activities, appearance.baseFontSize);
+        default:
+          return undefined;
+      }
+    },
+    [expandedWorkRows, workingRowHeight, appearance.baseFontSize],
+  );
+
   const renderItem = useCallback(
     (info: { item: ThreadFeedEntry; index: number }) =>
       renderFeedEntry(info, {
         environmentId: props.environmentId,
         copiedRowId,
-        activeResponseId: responseGrouping.activeResponseId,
         expandedWorkRows,
-        responseIdByEntryId: responseGrouping.responseIdByEntryId,
         terminalAssistantMessageIds,
+        unsettledTurnId,
         onCopyWorkRow,
         onToggleWorkGroup,
         onToggleWorkRow,
@@ -1673,10 +1752,9 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       }),
     [
       copiedRowId,
-      responseGrouping.activeResponseId,
-      responseGrouping.responseIdByEntryId,
       expandedWorkRows,
       terminalAssistantMessageIds,
+      unsettledTurnId,
       iconSubtleColor,
       userBubbleColor,
       markdownStyles,
@@ -1694,12 +1772,11 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     ],
   );
 
-  if (props.contentPresentation.kind !== "ready") {
+  if (props.contentPresentation.kind === "unavailable") {
     return (
       <ThreadFeedPlaceholder
         title={props.contentPresentation.title}
         detail={props.contentPresentation.detail}
-        loading={props.contentPresentation.kind === "loading"}
         topInset={topContentInset}
         bottomInset={bottomContentInset}
         horizontalPadding={horizontalPadding}
@@ -1740,6 +1817,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
                 }
               : { scrollIndicatorInsets: { top: topContentInset, bottom: 0 } })}
             {...(anchoredEndSpace ? { anchoredEndSpace } : {})}
+            itemLayoutAnimation={feedItemLayoutTransition}
             // Patched LegendList prop (patches/@legendapp__list@3.2.0.patch):
             // lets its scroll math clamp programmatic scrolls to -headerInset
             // instead of 0, so initialScrollAtEnd/maintainScrollAtEnd on short
@@ -1783,7 +1861,10 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             getItemType={(entry) =>
               entry.type === "message" ? `message:${entry.message.role}` : entry.type
             }
-            getFixedItemSize={getFixedFeedItemSize}
+            getFixedItemSize={getFixedItemSize}
+            // Measure rows well before they scroll into view so estimate→actual
+            // corrections land offscreen instead of under the user's finger.
+            drawDistance={500}
             keyboardShouldPersistTaps="always"
             keyboardDismissMode="none"
             keyboardLiftBehavior="whenAtEnd"
@@ -1803,6 +1884,11 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             // user overscroll back to the adjusted rest position.
             scrollToOverflowEnabled
             estimatedItemSize={180}
+            // Chat-style bottom alignment: when a thread is shorter than the
+            // viewport, pad above the content so messages rest just above the
+            // composer instead of under the header. No effect on threads that
+            // overflow the viewport (the padding clamps to zero).
+            alignItemsAtEnd
             initialScrollAtEnd
             onScroll={handleScroll}
             scrollEventThrottle={16}

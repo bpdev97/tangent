@@ -30,6 +30,7 @@ function projectionQuery(project: Option.Option<OrchestrationProjectShell>) {
     getThreadShellById: () => Effect.die("unused"),
     getThreadDetailById: () => Effect.die("unused"),
     getThreadDetailSnapshot: () => Effect.die("unused"),
+    searchThreads: () => Effect.die("unused"),
   });
 }
 

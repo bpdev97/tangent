@@ -59,7 +59,7 @@ feature.
 
 | ID                 | Feature                                           | Status               | Maintenance record                                                                 | Tests                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | ------------------ | ------------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `FORK-CHAT-001`    | Directoryless generic chat                        | Active               | [`docs/fork/generic-chat.md`](docs/fork/generic-chat.md)                           | `vp test packages/shared/src/genericChat.test.ts packages/shared/src/threadResponseGrouping.test.ts packages/client-runtime/src/state/projectGrouping.genericChat.test.ts apps/server/src/genericChat.test.ts apps/server/src/orchestration/Layers/ProviderCommandReactor.genericChat.test.ts apps/web/src/components/chat/MessagesTimeline.logic.test.ts apps/mobile/src/lib/repositoryGroups.test.ts apps/mobile/src/lib/threadActivity.test.ts`                                                |
+| `FORK-CHAT-001`    | Directoryless generic chat                        | Active               | [`docs/fork/generic-chat.md`](docs/fork/generic-chat.md)                           | `vp test packages/shared/src/genericChat.test.ts packages/client-runtime/src/state/projectGrouping.genericChat.test.ts apps/server/src/genericChat.test.ts apps/server/src/orchestration/Layers/ProviderCommandReactor.genericChat.test.ts apps/web/src/components/chat/MessagesTimeline.logic.test.ts apps/mobile/src/lib/repositoryGroups.test.ts apps/mobile/src/lib/threadActivity.test.ts`                                                                                                   |
 | `FORK-CLAUDE-001`  | Claude subagent lifecycle correctness             | Active, temporary    | [`docs/fork/claude-subagent-lifecycle.md`](docs/fork/claude-subagent-lifecycle.md) | `vp test apps/server/src/provider/Layers/ClaudeAdapter.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `FORK-HERMES-001`  | Hermes Agent provider and automation management   | Active, early access | [`docs/fork/hermes.md`](docs/fork/hermes.md)                                       | `vp test apps/server/src/provider/hermes packages/contracts/src/settings.test.ts packages/client-runtime/src/operations/hermesAutomations.test.ts apps/web/src/components/settings/SettingsPanels.logic.test.ts`                                                                                                                                                                                                                                                                                  |
 | `FORK-IMAGE-001`   | Provider-safe HEIC/HEIF upload normalization      | Active               | [`docs/fork/image-normalization.md`](docs/fork/image-normalization.md)             | `vp test run apps/server/src/imageNormalization.test.ts apps/server/src/orchestration/Normalizer.test.ts`                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -68,8 +68,19 @@ feature.
 | `FORK-CURSOR-001`  | Cursor ACP protocol compatibility                 | Active, temporary    | [`docs/fork/cursor-acp-protocol.md`](docs/fork/cursor-acp-protocol.md)             | `vp test apps/server/src/provider/Layers/CursorAdapter.test.ts apps/server/src/provider/acp/AcpAdapterSupport.test.ts apps/server/src/provider/acp/AcpJsonRpcConnection.test.ts apps/server/src/provider/acp/AcpRuntimeModel.test.ts apps/server/src/provider/acp/CursorAcpExtension.test.ts`                                                                                                                                                                                                     |
 | `FORK-IOS-001`     | CLI-safe iOS composer input                       | Active               | [`FORK-IOS-001 ownership map`](#fork-ios-001-ownership-map)                        | `vp run lint:mobile`, iOS Simulator composer smoke test                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `FORK-PALETTE-001` | Control-key command palette navigation            | Active               | [`FORK-PALETTE-001 ownership map`](#fork-palette-001-ownership-map)                | `vp test apps/web/src/components/CommandPalette.logic.test.ts`, web command palette smoke test                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `FORK-TOOLS-001`   | Structured tool-call presentation                 | Active               | [`docs/fork/tool-call-presentation.md`](docs/fork/tool-call-presentation.md)       | `vp test packages/client-runtime/src/tool-calls/index.test.ts apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.test.ts apps/web/src/session-logic.test.ts apps/web/src/components/chat/MessagesTimeline.logic.test.ts apps/web/src/components/chat/MessagesTimeline.test.tsx apps/mobile/src/lib/threadActivity.test.ts apps/mobile/src/features/threads/threadFeedLayout.test.ts`                                                                                                   |
 | `FORK-AGENT-001`   | Provider-neutral subagent lifecycle               | Active               | [`docs/fork/subagent-lifecycle.md`](docs/fork/subagent-lifecycle.md)               | `vp test packages/contracts/src/providerRuntime.test.ts apps/server/src/provider/Layers/CodexAdapter.test.ts apps/server/src/provider/Layers/CodexSessionRuntime.test.ts apps/server/src/provider/Layers/ClaudeAdapter.test.ts apps/server/src/provider/Layers/OpenCodeAdapter.test.ts apps/server/src/provider/Layers/CursorAdapter.test.ts apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.test.ts apps/web/src/session-logic.test.ts apps/mobile/src/lib/threadActivity.test.ts` |
+
+## Retired fork deltas
+
+- On 2026-07-30, `FORK-TOOLS-001` was retired in favor of upstream's
+  `ActivityPayloadProjection`. Network snapshots now keep upstream's compact non-MCP fields, pass
+  MCP tool data through unchanged, and leave the full payload only in persistence. Tangent's
+  provider-specific detail model, custom web/mobile detail renderers, and pre-persistence payload
+  bounds were removed.
+- On 2026-07-30, the user-message response grouping that had been maintained with generic chat was
+  retired. Web and mobile now use upstream provider-turn folding. A provider that splits one user
+  response across multiple turns can therefore produce multiple work groups, and a rapid follow-up
+  attached to an existing provider turn can share that turn's group.
 
 ### FORK-PALETTE-001 ownership map
 
@@ -217,36 +228,6 @@ behavior for other providers. Remove this feature only when upstream handles the
 authentication command, mode/model configuration, interactive extension requests, task/todo/plan
 events, and session lifecycle without weakening the shared ACP protocol implementation.
 
-### FORK-TOOLS-001 ownership map
-
-Fork-owned paths:
-
-- `packages/shared/src/toolActivity.ts`
-- `packages/client-runtime/src/tool-calls/`
-- `docs/fork/tool-call-presentation.md`
-
-Shared upstream touchpoints containing the additive projection and platform renderers:
-
-- `packages/client-runtime/package.json`
-- `apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts`
-- `apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.test.ts`
-- `apps/web/src/session-logic.ts`
-- `apps/web/src/session-logic.test.ts`
-- `apps/web/src/components/chat/MessagesTimeline.tsx`
-- `apps/web/src/components/chat/ToolCallDetails.tsx`
-- `apps/web/src/components/chat/MessagesTimeline.logic.ts`
-- `apps/web/src/components/chat/MessagesTimeline.logic.test.ts`
-- `apps/mobile/src/lib/threadActivity.ts`
-- `apps/mobile/src/lib/threadActivity.test.ts`
-- `apps/mobile/src/features/threads/thread-work-log.tsx`
-
-Keep provider payload decoding and lifecycle merging in `@t3tools/client-runtime/tool-calls`; web and
-mobile should remain thin renderers over the same presentation model. Preserve stable item IDs and
-use the shared payload budget before orchestration persistence, retaining explicit truncation
-metadata and useful leading/trailing diagnostics. Client traversal and rendering must remain bounded
-even for legacy unbounded rows. Remove this patch when upstream provides equivalent cross-provider
-lifecycle correlation and structured, responsive detail views on both clients.
-
 ### FORK-AGENT-001 ownership map
 
 Fork-owned paths:
@@ -257,7 +238,7 @@ Shared upstream touchpoints containing provider-neutral subagent handling:
 
 - `packages/contracts/src/baseSchemas.ts`
 - `packages/contracts/src/providerRuntime.ts`
-- `packages/client-runtime/src/tool-calls/index.ts`
+- `packages/shared/src/toolActivity.ts`
 - `apps/server/src/provider/Layers/CodexSessionRuntime.ts`
 - `apps/server/src/provider/Layers/CodexAdapter.ts`
 - `apps/server/src/provider/Layers/ClaudeAdapter.ts`
@@ -271,10 +252,11 @@ Shared upstream touchpoints containing provider-neutral subagent handling:
 
 Keep agent lifecycle distinct from the collaboration tool call that created or interacted with an
 agent. Child provider transcripts must never enter the parent assistant stream unless they carry a
-stable agent identity and are rendered in an isolated transcript. Web and mobile must consume the
-same projected lifecycle and structured detail model. Hermes remains outside this compatibility
-layer until its direct runtime integration lands. Remove this patch when upstream has equivalent
-provider-neutral lifecycle, hierarchy, isolation, and cross-platform presentation.
+stable agent identity and are rendered in an isolated transcript. Web and mobile correlate the
+projected lifecycle by stable ID and use compact upstream work rows; the retired rich tool
+presentation is not part of this feature. Hermes remains outside this compatibility layer until its
+direct runtime integration emits the same canonical events. Remove this patch when upstream has
+equivalent provider-neutral lifecycle, hierarchy, isolation, and cross-platform presentation.
 
 ### FORK-PUSH-001 ownership map
 
@@ -320,7 +302,6 @@ git, logs, issues, or PR text.
 Fork-owned paths:
 
 - `packages/shared/src/genericChat.ts`
-- `packages/shared/src/threadResponseGrouping.ts`
 - `packages/client-runtime/src/state/projectGrouping.genericChat.test.ts`
 - `apps/server/src/genericChat.ts`
 - focused `genericChat.test.ts` files
@@ -439,6 +420,7 @@ successful end-to-end chat.
 | 2026-07-20 | `53e3c98a`   | `5d34f9ff`   | Hermes Agent 0.18.2 / TUI gateway contract 2           | Upstream's T3 Connect, OpenCode resume/title recovery, task-title projection, complete approval details, desktop preview hardening, and mobile glass/header work were adopted. Conflicts preserved generic chat, bounded tool payloads, provider-neutral descendant agents, MCP approvals, Hermes, and personal distribution identity. The redundant compact mobile brand title was retired in favor of the upstream Threads title; the managed chat project gained a server-side deletion guard, and Tangent Connect uses a distinct `tangent.service` unit. No registered fork feature was fully superseded. |
 | 2026-07-24 | `5d34f9ff`   | `ece05087`   | Hermes Agent 0.18.2 / TUI gateway contract 2           | Adopted upstream's first-class `Auto` runtime mode and retired `FORK-CODEX-002` plus its independent reviewer setting. Adopted upstream server self-update and systemd lifecycle management with Tangent distribution boundaries: verified `bpdev97/tangent` GitHub Release archives, source-identity sentinels, `tangent.service`, matching manual/SSH launch URLs, and no upstream npm fallback. Conflicts preserved generic chat, Hermes, push relay, structured tool calls, provider-neutral agents, project grouping, and personal desktop/mobile identity.                                               |
 | 2026-07-25 | `ece05087`   | `5719e8ac`   | Hermes Agent 0.18.2 / TUI gateway contract 2           | Adopted Claude Opus 5 model discovery and aliases plus the web diff collapse-all and fast-mode presentation updates. The merge was conflict-free. The shared model-contract change is Claude-only and does not alter Hermes registration or runtime interfaces; the additive Claude adapter test does not overlap the fork's subagent lifecycle behavior. No registered fork feature was superseded.                                                                                                                                                                                                           |
+| 2026-07-30 | `5719e8ac`   | `605c2bb7`   | Hermes Agent 0.19.0 / TUI gateway contract 2           | Adopted upstream's payload projection, provider-turn folding, connection/runtime work, mobile thread-list v2, settings refactor, self-update progress, and dependency updates. Retired `FORK-TOOLS-001`, Tangent's pre-persistence payload bounds, and user-message response grouping. Preserved generic chat, Hermes, push relay, MCP approvals, provider-neutral agent lifecycle correlation, personal release/service boundaries, and personal desktop/mobile identity.                                                                                                                                     |
 
 Remove `FORK-HERMES-001` only when upstream T3 ships equivalent profile-aware Hermes TUI gateway support and
 current versioned gateway cursors can be migrated or continued without losing sessions. Compare behavior

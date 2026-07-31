@@ -1400,6 +1400,8 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     options?.taskLifecycleRecovery?.activeTaskResultTimeoutMs,
     DEFAULT_ACTIVE_TASK_RESULT_TIMEOUT_MS,
   );
+  const managedNativeEventLogger =
+    options?.nativeEventLogger === undefined ? nativeEventLogger : undefined;
 
   const createQuery =
     options?.createQuery ??
@@ -1433,7 +1435,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   const offerRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
     Queue.offer(runtimeEventQueue, event).pipe(Effect.asVoid);
 
-  const logNativeSdkMessage = Effect.fn("logNativeSdkMessage")(function* (
+  const logNativeSdkMessage = Effect.fnUntraced(function* (
     context: ClaudeSessionContext,
     message: SDKMessage,
   ) {
@@ -4174,6 +4176,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         Effect.logError("Failed to emit Claude session shutdown event.", { cause }),
       ),
       Effect.tap(() => Queue.shutdown(runtimeEventQueue)),
+      Effect.tap(() => managedNativeEventLogger?.close() ?? Effect.void),
     ),
   );
 

@@ -1,264 +1,5 @@
 import type { ToolLifecycleItemType } from "@t3tools/contracts";
 
-export interface ToolActivityPayloadLimits {
-  readonly maxDepth: number;
-  readonly maxEntriesPerCollection: number;
-  readonly maxNodes: number;
-  readonly maxStringCharacters: number;
-  readonly maxTotalCharacters: number;
-  readonly maxSerializedBytes: number;
-}
-
-export interface ToolActivityPayloadTruncation {
-  readonly truncated: true;
-  readonly reasons: ReadonlyArray<
-    | "circular-reference"
-    | "collection-size"
-    | "depth"
-    | "node-count"
-    | "serialized-size"
-    | "string-size"
-    | "total-size"
-    | "unsupported-value"
-  >;
-  readonly omittedCharacters: number;
-  readonly omittedEntries: number;
-  readonly retainedNodes: number;
-}
-
-export interface BoundedToolActivityData {
-  readonly value: unknown;
-  readonly truncation?: ToolActivityPayloadTruncation;
-}
-
-export const DEFAULT_TOOL_ACTIVITY_PAYLOAD_LIMITS: ToolActivityPayloadLimits = {
-  maxDepth: 10,
-  maxEntriesPerCollection: 100,
-  maxNodes: 2_000,
-  maxStringCharacters: 32_000,
-  maxTotalCharacters: 64_000,
-  maxSerializedBytes: 128_000,
-};
-
-const PAYLOAD_TRUNCATION_MARKER = "… tool payload truncated …";
-
-type TruncationReason = ToolActivityPayloadTruncation["reasons"][number];
-
-interface PayloadBudgetState {
-  readonly limits: ToolActivityPayloadLimits;
-  readonly reasons: Set<TruncationReason>;
-  readonly seen: WeakSet<object>;
-  nodes: number;
-  characters: number;
-  omittedCharacters: number;
-  omittedEntries: number;
-}
-
-const serializedByteLength = (value: string): number => new TextEncoder().encode(value).byteLength;
-
-function recordOmission(
-  state: PayloadBudgetState,
-  reason: TruncationReason,
-  omittedEntries = 0,
-  omittedCharacters = 0,
-): void {
-  state.reasons.add(reason);
-  state.omittedEntries += omittedEntries;
-  state.omittedCharacters += omittedCharacters;
-}
-
-function retainString(value: string, state: PayloadBudgetState): string {
-  const available = Math.max(0, state.limits.maxTotalCharacters - state.characters);
-  const retainedLength = Math.min(value.length, state.limits.maxStringCharacters, available);
-  if (retainedLength >= value.length) {
-    state.characters += value.length;
-    return value;
-  }
-
-  recordOmission(
-    state,
-    value.length > state.limits.maxStringCharacters ? "string-size" : "total-size",
-    0,
-    value.length - retainedLength,
-  );
-  if (retainedLength <= PAYLOAD_TRUNCATION_MARKER.length + 2) {
-    const marker = PAYLOAD_TRUNCATION_MARKER.slice(0, retainedLength);
-    state.characters += marker.length;
-    return marker;
-  }
-
-  const contentLength = retainedLength - PAYLOAD_TRUNCATION_MARKER.length;
-  const startLength = Math.ceil(contentLength / 2);
-  const endLength = Math.floor(contentLength / 2);
-  const retained = `${value.slice(0, startLength)}${PAYLOAD_TRUNCATION_MARKER}${value.slice(-endLength)}`;
-  state.characters += retained.length;
-  return retained;
-}
-
-function visitPayloadValue(value: unknown, state: PayloadBudgetState, depth: number): unknown {
-  state.nodes += 1;
-  if (state.nodes > state.limits.maxNodes) {
-    recordOmission(state, "node-count", 1);
-    return PAYLOAD_TRUNCATION_MARKER;
-  }
-  if (depth > state.limits.maxDepth) {
-    recordOmission(state, "depth", 1);
-    return PAYLOAD_TRUNCATION_MARKER;
-  }
-
-  if (typeof value === "string") {
-    return retainString(value, state);
-  }
-  if (value === null || typeof value === "boolean" || typeof value === "number") {
-    state.characters += String(value).length;
-    return Number.isFinite(value as number) || typeof value !== "number" ? value : String(value);
-  }
-  if (typeof value === "bigint") {
-    recordOmission(state, "unsupported-value");
-    return retainString(String(value), state);
-  }
-  if (typeof value === "undefined" || typeof value === "function" || typeof value === "symbol") {
-    recordOmission(state, "unsupported-value");
-    return null;
-  }
-
-  if (state.seen.has(value)) {
-    recordOmission(state, "circular-reference", 1);
-    return PAYLOAD_TRUNCATION_MARKER;
-  }
-  state.seen.add(value);
-
-  if (Array.isArray(value)) {
-    const retained: unknown[] = [];
-    const length = Math.min(value.length, state.limits.maxEntriesPerCollection);
-    for (let index = 0; index < length; index += 1) {
-      if (
-        state.characters >= state.limits.maxTotalCharacters ||
-        state.nodes >= state.limits.maxNodes
-      ) {
-        recordOmission(state, "total-size", value.length - index);
-        break;
-      }
-      retained.push(visitPayloadValue(value[index], state, depth + 1));
-    }
-    if (value.length > length) {
-      recordOmission(state, "collection-size", value.length - length);
-    }
-    state.seen.delete(value);
-    return retained;
-  }
-
-  const retained: Record<string, unknown> = {};
-  let visitedEntries = 0;
-  for (const key in value) {
-    if (!Object.hasOwn(value, key)) {
-      continue;
-    }
-    if (visitedEntries >= state.limits.maxEntriesPerCollection) {
-      recordOmission(state, "collection-size", 1);
-      continue;
-    }
-    if (
-      state.characters >= state.limits.maxTotalCharacters ||
-      state.nodes >= state.limits.maxNodes
-    ) {
-      recordOmission(state, "total-size", 1);
-      continue;
-    }
-    visitedEntries += 1;
-    const retainedKey = retainString(key, state);
-    retained[retainedKey] = visitPayloadValue(
-      (value as Record<string, unknown>)[key],
-      state,
-      depth + 1,
-    );
-  }
-  state.seen.delete(value);
-  return retained;
-}
-
-function withSerializedSizeReason(result: BoundedToolActivityData): BoundedToolActivityData {
-  return {
-    ...result,
-    truncation: {
-      truncated: true,
-      reasons: [
-        ...new Set([...(result.truncation?.reasons ?? []), "serialized-size" as const]),
-      ].toSorted(),
-      omittedCharacters: result.truncation?.omittedCharacters ?? 0,
-      omittedEntries: result.truncation?.omittedEntries ?? 0,
-      retainedNodes: result.truncation?.retainedNodes ?? 1,
-    },
-  };
-}
-
-function boundToolActivityDataOnce(
-  value: unknown,
-  limits: ToolActivityPayloadLimits,
-): BoundedToolActivityData {
-  const state: PayloadBudgetState = {
-    limits,
-    reasons: new Set(),
-    seen: new WeakSet(),
-    nodes: 0,
-    characters: 0,
-    omittedCharacters: 0,
-    omittedEntries: 0,
-  };
-  const bounded = visitPayloadValue(value, state, 0);
-  return {
-    value: bounded,
-    ...(state.reasons.size > 0
-      ? {
-          truncation: {
-            truncated: true as const,
-            reasons: [...state.reasons].toSorted(),
-            omittedCharacters: state.omittedCharacters,
-            omittedEntries: state.omittedEntries,
-            retainedNodes: Math.min(state.nodes, limits.maxNodes),
-          },
-        }
-      : {}),
-  };
-}
-
-/**
- * Produces a JSON-safe provider payload with bounded depth, fan-out, node count, strings, and
- * serialized size. The separate metadata is intended to be persisted beside `data`, so clients can
- * explain that diagnostics are partial without changing provider-specific payload shapes.
- */
-export function boundToolActivityData(
-  value: unknown,
-  overrides: Partial<ToolActivityPayloadLimits> = {},
-): BoundedToolActivityData {
-  let limits = { ...DEFAULT_TOOL_ACTIVITY_PAYLOAD_LIMITS, ...overrides };
-  let result = boundToolActivityDataOnce(value, limits);
-  let exceededSerializedSize = false;
-
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const serialized = JSON.stringify(result.value);
-    if (serializedByteLength(serialized) <= limits.maxSerializedBytes) {
-      return exceededSerializedSize ? withSerializedSizeReason(result) : result;
-    }
-    exceededSerializedSize = true;
-    limits = Object.assign({}, limits, {
-      maxTotalCharacters: Math.max(256, Math.floor(limits.maxTotalCharacters / 2)),
-    });
-    result = boundToolActivityDataOnce(value, limits);
-  }
-
-  return {
-    value: PAYLOAD_TRUNCATION_MARKER,
-    truncation: {
-      truncated: true,
-      reasons: ["serialized-size"],
-      omittedCharacters: result.truncation?.omittedCharacters ?? 0,
-      omittedEntries: result.truncation?.omittedEntries ?? 1,
-      retainedNodes: 1,
-    },
-  };
-}
-
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -273,6 +14,44 @@ function asTrimmedString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function firstTrimmedString(...values: ReadonlyArray<unknown>): string | null {
+  for (const value of values) {
+    const normalized = asTrimmedString(value);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return null;
+}
+
+export function extractToolCallIdentity(payloadValue: unknown): string | null {
+  const payload = asRecord(payloadValue);
+  const data = asRecord(payload?.data);
+  const item = asRecord(data?.item);
+  return firstTrimmedString(
+    payload?.itemId,
+    payload?.agentId,
+    payload?.toolCallId,
+    payload?.toolUseId,
+    data?.toolCallId,
+    data?.toolUseId,
+    data?.agentId,
+    item?.id,
+  );
+}
+
+export function isToolLifecycleActivityKind(kind: string): boolean {
+  return (
+    kind === "tool.started" ||
+    kind === "tool.progress" ||
+    kind === "tool.updated" ||
+    kind === "tool.completed" ||
+    kind === "agent.started" ||
+    kind === "agent.updated" ||
+    kind === "agent.completed"
+  );
+}
+
 function normalizeCommandValue(value: unknown): string | undefined {
   const direct = asTrimmedString(value);
   if (direct) {
@@ -282,7 +61,7 @@ function normalizeCommandValue(value: unknown): string | undefined {
     return undefined;
   }
   const parts: string[] = [];
-  for (const entry of value.slice(0, 100)) {
+  for (const entry of value) {
     const part = asTrimmedString(entry);
     if (part !== undefined) {
       parts.push(part);
@@ -351,21 +130,14 @@ function maybePathLike(value: string | undefined): string | undefined {
   return undefined;
 }
 
-function collectPaths(
-  value: unknown,
-  paths: string[],
-  seen: Set<string>,
-  depth: number,
-  budget: { remainingNodes: number },
-): void {
-  if (depth > 4 || paths.length >= 8 || budget.remainingNodes <= 0) {
+function collectPaths(value: unknown, paths: string[], seen: Set<string>, depth: number): void {
+  if (depth > 4 || paths.length >= 8) {
     return;
   }
-  budget.remainingNodes -= 1;
   if (Array.isArray(value)) {
     for (const entry of value) {
-      collectPaths(entry, paths, seen, depth + 1, budget);
-      if (paths.length >= 8 || budget.remainingNodes <= 0) {
+      collectPaths(entry, paths, seen, depth + 1);
+      if (paths.length >= 8) {
         return;
       }
     }
@@ -390,8 +162,8 @@ function collectPaths(
     if (!(nestedKey in record)) {
       continue;
     }
-    collectPaths(record[nestedKey], paths, seen, depth + 1, budget);
-    if (paths.length >= 8 || budget.remainingNodes <= 0) {
+    collectPaths(record[nestedKey], paths, seen, depth + 1);
+    if (paths.length >= 8) {
       return;
     }
   }
@@ -399,7 +171,7 @@ function collectPaths(
 
 function extractPrimaryPath(data: Record<string, unknown> | undefined): string | undefined {
   const paths: string[] = [];
-  collectPaths(data, paths, new Set<string>(), 0, { remainingNodes: 1_000 });
+  collectPaths(data, paths, new Set<string>(), 0);
   return paths[0];
 }
 
@@ -424,7 +196,7 @@ function classifyToolAction(input: {
   readonly itemType?: ToolLifecycleItemType | null | undefined;
   readonly title?: string | undefined;
   readonly data?: Record<string, unknown> | undefined;
-}): "command" | "read" | "file_change" | "file_search" | "web_search" | "other" {
+}): "command" | "read" | "file_change" | "search" | "other" {
   const itemType = input.itemType ?? undefined;
   const kind = asTrimmedString(input.data?.kind)?.toLowerCase();
   const title = asTrimmedString(input.title)?.toLowerCase();
@@ -443,11 +215,8 @@ function classifyToolAction(input: {
   ) {
     return "file_change";
   }
-  if (kind === "search" || title === "find" || title === "grep") {
-    return "file_search";
-  }
-  if (kind === "fetch" || itemType === "web_search") {
-    return "web_search";
+  if (itemType === "web_search" || kind === "search" || title === "find" || title === "grep") {
+    return "search";
   }
   return "other";
 }
@@ -506,13 +275,13 @@ export function deriveToolActivityPresentation(
     };
   }
 
-  if (action === "file_search" || action === "web_search") {
+  if (action === "search") {
     const query =
       asTrimmedString(asRecord(data?.rawInput)?.query) ??
       asTrimmedString(asRecord(data?.rawInput)?.pattern) ??
       asTrimmedString(asRecord(data?.rawInput)?.searchTerm);
     return {
-      summary: action === "file_search" ? "Searched files" : "Searched web",
+      summary: "Searched files",
       ...(query ? { detail: query } : {}),
     };
   }

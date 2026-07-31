@@ -1,31 +1,15 @@
-import { ApprovalRequestId, isToolLifecycleItemType, TurnId } from "@t3tools/contracts";
+import { ApprovalRequestId, isToolLifecycleItemType } from "@t3tools/contracts";
 import type {
   OrchestrationLatestTurn,
   OrchestrationThread,
   OrchestrationThreadActivity,
   ProviderRequestKind,
   ToolLifecycleItemType,
+  TurnId,
   UserInputQuestion,
 } from "@t3tools/contracts";
-import {
-  collapseToolLifecycleEntries,
-  DEFAULT_VISIBLE_TOOL_CALL_COUNT,
-  deriveToolCallPresentation,
-  deriveToolCallSummary,
-  extractToolCallIdentity,
-  isToolLifecycleActivityKind,
-  mergeToolCallPresentations,
-  mergeToolCallSummaries,
-  type ToolCallPresentation,
-  type ToolCallPresentationInput,
-  type ToolCallStatus,
-  type ToolCallSummary,
-} from "@t3tools/client-runtime/tool-calls";
-import {
-  deriveThreadResponseGrouping,
-  type ThreadResponseGrouping,
-  type ThreadResponseGroupingEntry,
-} from "@t3tools/shared/threadResponseGrouping";
+import { formatDuration } from "@t3tools/shared/orchestrationTiming";
+import { extractToolCallIdentity, isToolLifecycleActivityKind } from "@t3tools/shared/toolActivity";
 
 import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
@@ -55,8 +39,9 @@ export interface ThreadFeedActivity {
   readonly turnId: TurnId | null;
   readonly summary: string;
   readonly detail: string | null;
-  readonly fullDetail: string | null;
-  readonly copyText: string;
+  readonly canExpand: boolean;
+  readonly getFullDetail: () => string | null;
+  readonly getCopyText: () => string;
   readonly icon:
     | "agent"
     | "alert"
@@ -72,12 +57,11 @@ export interface ThreadFeedActivity {
     | "zap";
   readonly toolLike: boolean;
   readonly status: "success" | "failure" | "neutral" | null;
-  readonly toolCall?: ToolCallSummary;
 }
 
-const MAX_VISIBLE_WORK_LOG_ENTRIES = DEFAULT_VISIBLE_TOOL_CALL_COUNT;
+const MAX_VISIBLE_WORK_LOG_ENTRIES = 1;
 
-type WorkLogToolLifecycleStatus = ToolCallStatus;
+type WorkLogToolLifecycleStatus = "inProgress" | "completed" | "failed" | "declined" | "stopped";
 
 interface WorkLogEntry {
   id: string;
@@ -94,61 +78,12 @@ interface WorkLogEntry {
   requestKind?: PendingApproval["requestKind"];
   toolLifecycleStatus?: WorkLogToolLifecycleStatus;
   toolData?: unknown;
-  toolCall?: ToolCallSummary;
-  toolCallInputs?: ReadonlyArray<ToolCallPresentationInput>;
 }
 
 interface DerivedWorkLogEntry extends WorkLogEntry {
   activityKind: OrchestrationThreadActivity["kind"];
   collapseKey?: string;
   toolCallId?: string;
-}
-
-const derivedWorkLogEntryCache = new WeakMap<OrchestrationThreadActivity, DerivedWorkLogEntry>();
-const toolCallPresentationCache = new WeakMap<
-  ToolCallPresentationInput,
-  ToolCallPresentation | undefined
->();
-const activityToolCallInputs = new WeakMap<
-  ThreadFeedActivity,
-  ReadonlyArray<ToolCallPresentationInput>
->();
-const activityToolCallPresentations = new WeakMap<
-  ThreadFeedActivity,
-  ToolCallPresentation | undefined
->();
-
-function deriveCachedToolCallPresentation(
-  input: ToolCallPresentationInput,
-): ToolCallPresentation | undefined {
-  if (toolCallPresentationCache.has(input)) {
-    return toolCallPresentationCache.get(input);
-  }
-  const presentation = deriveToolCallPresentation(input);
-  toolCallPresentationCache.set(input, presentation);
-  return presentation;
-}
-
-export function resolveThreadFeedActivityToolCall(
-  activity: ThreadFeedActivity,
-): ToolCallPresentation | undefined {
-  if (activityToolCallPresentations.has(activity)) {
-    return activityToolCallPresentations.get(activity);
-  }
-
-  let presentation: ToolCallPresentation | undefined;
-  for (const input of activityToolCallInputs.get(activity) ?? []) {
-    presentation = mergeToolCallPresentations(
-      presentation,
-      deriveCachedToolCallPresentation(input),
-    );
-  }
-  activityToolCallPresentations.set(activity, presentation);
-  return presentation;
-}
-
-export function resolveThreadFeedActivityCopyText(activity: ThreadFeedActivity): string {
-  return resolveThreadFeedActivityToolCall(activity)?.copyText ?? activity.copyText;
 }
 
 type RawThreadFeedEntry =
@@ -194,7 +129,6 @@ export type ThreadFeedEntry =
       readonly type: "turn-fold";
       readonly id: string;
       readonly createdAt: string;
-      readonly responseId: string;
       readonly turnId: TurnId;
       readonly label: string;
       readonly expanded: boolean;
@@ -313,6 +247,7 @@ function deriveWorkLogEntries(
   const ordered = Arr.sort(activities, activityOrder);
   const entries: DerivedWorkLogEntry[] = [];
   for (const activity of ordered) {
+    if (activity.kind === "tool.started") continue;
     if (activity.kind === "task.started") continue;
     if (activity.kind === "context-window.updated") continue;
     if (activity.summary === "Checkpoint captured") continue;
@@ -335,11 +270,6 @@ function isPlanBoundaryToolActivity(activity: OrchestrationThreadActivity): bool
 }
 
 function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWorkLogEntry {
-  const cachedEntry = derivedWorkLogEntryCache.get(activity);
-  if (cachedEntry) {
-    return cachedEntry;
-  }
-
   const payload =
     activity.payload && typeof activity.payload === "object"
       ? (activity.payload as Record<string, unknown>)
@@ -415,45 +345,35 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
     entry.toolCallId = toolCallId;
   }
   let toolLifecycleStatus = extractWorkLogToolLifecycleStatus(payload);
-  if (!toolLifecycleStatus && activity.kind === "tool.completed") {
+  if (
+    !toolLifecycleStatus &&
+    (activity.kind === "tool.completed" || activity.kind === "agent.completed")
+  ) {
     toolLifecycleStatus = "completed";
   }
   if (toolLifecycleStatus) {
     entry.toolLifecycleStatus = toolLifecycleStatus;
   }
-  const toolCallInput: ToolCallPresentationInput = {
-    activityKind: activity.kind,
-    summary: activity.summary,
-    payload: activity.payload,
-    ...(commandPreview.command ? { command: commandPreview.command } : {}),
-    ...(commandPreview.rawCommand ? { rawCommand: commandPreview.rawCommand } : {}),
-    ...(entry.detail ? { detail: entry.detail } : {}),
-    ...(changedFiles.length > 0 ? { changedFiles } : {}),
-  };
-  const toolCall = deriveToolCallSummary(toolCallInput);
-  if (toolCall) {
-    entry.toolCall = toolCall;
-    entry.toolCallInputs = [toolCallInput];
-    if (!entry.toolCallId && toolCall.callId) {
-      entry.toolCallId = toolCall.callId;
-    }
-  }
   const collapseKey = deriveToolLifecycleCollapseKey(entry);
   if (collapseKey) {
     entry.collapseKey = collapseKey;
   }
-  derivedWorkLogEntryCache.set(activity, entry);
   return entry;
 }
 
 function collapseDerivedWorkLogEntries(
   entries: ReadonlyArray<DerivedWorkLogEntry>,
 ): DerivedWorkLogEntry[] {
-  return collapseToolLifecycleEntries(
-    entries,
-    mergeDerivedWorkLogEntries,
-    shouldCollapseToolLifecycleEntries,
-  );
+  const collapsed: DerivedWorkLogEntry[] = [];
+  for (const entry of entries) {
+    const previous = collapsed.at(-1);
+    if (previous && shouldCollapseToolLifecycleEntries(previous, entry)) {
+      collapsed[collapsed.length - 1] = mergeDerivedWorkLogEntries(previous, entry);
+      continue;
+    }
+    collapsed.push(entry);
+  }
+  return collapsed;
 }
 
 function shouldCollapseToolLifecycleEntries(
@@ -493,11 +413,9 @@ function mergeDerivedWorkLogEntries(
   const itemType = next.itemType ?? previous.itemType;
   const requestKind = next.requestKind ?? previous.requestKind;
   const collapseKey = next.collapseKey ?? previous.collapseKey;
+  const toolCallId = next.toolCallId ?? previous.toolCallId;
   const toolLifecycleStatus = next.toolLifecycleStatus ?? previous.toolLifecycleStatus;
   const toolData = next.toolData ?? previous.toolData;
-  const toolCallId = next.toolCallId ?? previous.toolCallId;
-  const toolCall = mergeToolCallSummaries(previous.toolCall, next.toolCall);
-  const toolCallInputs = [...(previous.toolCallInputs ?? []), ...(next.toolCallInputs ?? [])];
   return {
     ...previous,
     ...next,
@@ -509,11 +427,9 @@ function mergeDerivedWorkLogEntries(
     ...(itemType ? { itemType } : {}),
     ...(requestKind ? { requestKind } : {}),
     ...(collapseKey ? { collapseKey } : {}),
+    ...(toolCallId ? { toolCallId } : {}),
     ...(toolLifecycleStatus ? { toolLifecycleStatus } : {}),
     ...(toolData !== undefined ? { toolData } : {}),
-    ...(toolCallId ? { toolCallId } : {}),
-    ...(toolCall !== undefined ? { toolCall } : {}),
-    ...(toolCallInputs.length > 0 ? { toolCallInputs } : {}),
   };
 }
 
@@ -549,9 +465,6 @@ function normalizeCompactToolLabel(value: string): string {
 }
 
 function workLogEntryIsToolLike(entry: WorkLogEntry): boolean {
-  if (entry.toolCall !== undefined) {
-    return true;
-  }
   if (entry.tone === "tool" || entry.tone === "thinking" || entry.tone === "error") {
     return true;
   }
@@ -586,11 +499,7 @@ function workEntryIndicatesToolFailure(entry: WorkLogEntry): boolean {
   if (entry.tone === "error") {
     return true;
   }
-  const status = entry.toolCall?.status ?? entry.toolLifecycleStatus;
-  if (status === "failed" || status === "declined") {
-    return true;
-  }
-  if (entry.toolCall?.exitCode !== undefined && entry.toolCall.exitCode !== 0) {
+  if (entry.toolLifecycleStatus === "failed" || entry.toolLifecycleStatus === "declined") {
     return true;
   }
   if (!workLogEntryIsToolLike(entry)) {
@@ -606,9 +515,11 @@ function workEntryIndicatesToolSuccess(entry: WorkLogEntry): boolean {
   if (entry.tone === "thinking") {
     return false;
   }
-  const status = entry.toolCall?.status ?? entry.toolLifecycleStatus;
   return (
-    status !== "inProgress" && status !== "stopped" && status !== "failed" && status !== "declined"
+    entry.toolLifecycleStatus !== "inProgress" &&
+    entry.toolLifecycleStatus !== "stopped" &&
+    entry.toolLifecycleStatus !== "failed" &&
+    entry.toolLifecycleStatus !== "declined"
   );
 }
 
@@ -633,12 +544,6 @@ function workEntryIcon(entry: DerivedWorkLogEntry): ThreadFeedActivity["icon"] {
     return "message";
   }
   if (entry.activityKind === "runtime.warning") return "warning";
-  if (entry.toolCall?.category === "command") return "command";
-  if (entry.toolCall?.category === "file-change") return "edit";
-  if (entry.toolCall?.category === "read" || entry.toolCall?.category === "image") return "eye";
-  if (entry.toolCall?.category === "search" || entry.toolCall?.category === "web") return "globe";
-  if (entry.toolCall?.category === "mcp") return "wrench";
-  if (entry.toolCall?.category === "agent") return "agent";
   if (entry.requestKind === "command") return "command";
   if (entry.requestKind === "file-read") return "eye";
   if (entry.requestKind === "file-change") return "edit";
@@ -648,9 +553,7 @@ function workEntryIcon(entry: DerivedWorkLogEntry): ThreadFeedActivity["icon"] {
   if (entry.itemType === "image_view") return "eye";
   if (entry.itemType === "mcp_tool_call") return "wrench";
   if (entry.itemType === "collab_agent_tool_call") return "agent";
-  if (entry.itemType === "dynamic_tool_call") {
-    return "hammer";
-  }
+  if (entry.itemType === "dynamic_tool_call") return "hammer";
   if (entry.tone === "error") return "alert";
   if (entry.tone === "thinking") return "agent";
   if (entry.tone === "info") return "check";
@@ -658,9 +561,6 @@ function workEntryIcon(entry: DerivedWorkLogEntry): ThreadFeedActivity["icon"] {
 }
 
 function buildWorkEntryExpandedBody(entry: WorkLogEntry): string | null {
-  if (entry.toolCall) {
-    return null;
-  }
   const blocks: string[] = [];
   const appendUniqueBlock = (value: string | null | undefined) => {
     const trimmed = value?.trim();
@@ -679,6 +579,27 @@ function buildWorkEntryExpandedBody(entry: WorkLogEntry): string | null {
   }
 
   return blocks.length > 0 ? blocks.join("\n\n") : null;
+}
+
+function workEntryHasExpandedBody(entry: WorkLogEntry): boolean {
+  return (
+    (entry.itemType === "mcp_tool_call" && entry.toolData !== undefined) ||
+    Boolean((entry.rawCommand ?? entry.command)?.trim()) ||
+    Boolean(entry.detail?.trim()) ||
+    (entry.changedFiles?.some((path) => path.trim().length > 0) ?? false)
+  );
+}
+
+function memoizeValue<T>(build: () => T): () => T {
+  let value: T;
+  let initialized = false;
+  return () => {
+    if (!initialized) {
+      value = build();
+      initialized = true;
+    }
+    return value;
+  };
 }
 
 function workEntryPreview(
@@ -960,7 +881,8 @@ function extractWorkLogRequestKind(
   if (
     payload?.requestKind === "command" ||
     payload?.requestKind === "file-read" ||
-    payload?.requestKind === "file-change"
+    payload?.requestKind === "file-change" ||
+    payload?.requestKind === "mcp-tool-call"
   ) {
     return payload.requestKind;
   }
@@ -1062,6 +984,11 @@ function isEmptyMessage(entry: RawThreadFeedEntry): boolean {
 
 function groupAdjacentActivities(entries: ReadonlyArray<RawThreadFeedEntry>): ThreadFeedEntry[] {
   const grouped: ThreadFeedEntry[] = [];
+  // Mutable backing array for the trailing group so appending an activity is
+  // O(1) instead of re-copying the group (which made this loop quadratic on
+  // long tool runs). The array is only mutated while it is the trailing group.
+  let openGroupActivities: ThreadFeedActivity[] | null = null;
+  let openGroupTurnId: TurnId | null = null;
 
   for (const entry of entries) {
     // Skip empty messages so they don't break activity grouping.
@@ -1071,63 +998,170 @@ function groupAdjacentActivities(entries: ReadonlyArray<RawThreadFeedEntry>): Th
 
     if (entry.type !== "activity") {
       grouped.push(entry);
+      openGroupActivities = null;
       continue;
     }
 
-    const previous = grouped.at(-1);
-    if (previous?.type === "activity-group" && previous.turnId === entry.turnId) {
-      grouped[grouped.length - 1] = {
-        ...previous,
-        activities: [...previous.activities, entry.activity],
-      };
+    if (openGroupActivities !== null && openGroupTurnId === entry.turnId) {
+      openGroupActivities.push(entry.activity);
       continue;
     }
 
+    openGroupActivities = [entry.activity];
+    openGroupTurnId = entry.turnId;
     grouped.push({
       type: "activity-group",
       id: entry.id,
       createdAt: entry.createdAt,
       turnId: entry.turnId,
-      activities: [entry.activity],
+      activities: openGroupActivities,
     });
   }
 
   return grouped;
 }
 
-export function deriveThreadFeedResponseGrouping(
+function computeElapsedMs(startIso: string, endIso: string): number | null {
+  const start = Date.parse(startIso);
+  const end = Date.parse(endIso);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    return null;
+  }
+  return Math.max(0, end - start);
+}
+
+function maxIsoTimestamp(a: string | null, b: string | null): string | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  const aMs = Date.parse(a);
+  const bMs = Date.parse(b);
+  if (!Number.isFinite(aMs)) return b;
+  if (!Number.isFinite(bMs)) return a;
+  return bMs > aMs ? b : a;
+}
+
+function deriveUnsettledTurnId(latestTurn: ThreadFeedLatestTurn | null): TurnId | null {
+  if (!latestTurn) {
+    return null;
+  }
+  const settled = latestTurn.completedAt !== null && latestTurn.state !== "running";
+  return settled ? null : latestTurn.turnId;
+}
+
+interface ThreadFeedTurnFold {
+  readonly turnId: TurnId;
+  readonly createdAt: string;
+  readonly hiddenEntryIds: ReadonlySet<string>;
+  readonly label: string;
+}
+
+function deriveThreadFeedTurnFolds(
   feed: ReadonlyArray<ThreadFeedEntry>,
   latestTurn: ThreadFeedLatestTurn | null,
-): ThreadResponseGrouping {
-  const entries = feed.flatMap<ThreadResponseGroupingEntry>((entry) => {
-    if (entry.type === "activity-group") {
-      return [{ kind: "work", id: entry.id, createdAt: entry.createdAt, turnId: entry.turnId }];
+): ReadonlyMap<string, ThreadFeedTurnFold> {
+  const terminalAssistantMessageIdByTurn = new Map<TurnId, string>();
+  for (const entry of feed) {
+    if (entry.type === "message" && entry.message.role === "assistant" && entry.message.turnId) {
+      terminalAssistantMessageIdByTurn.set(entry.message.turnId, entry.id);
     }
-    if (entry.type !== "message" || entry.message.role === "system") {
-      return [];
-    }
-    if (entry.message.role === "user") {
-      return [{ kind: "user", id: entry.id, createdAt: entry.createdAt }];
-    }
-    return [
-      {
-        kind: "assistant",
-        id: entry.id,
-        createdAt: entry.createdAt,
-        updatedAt: entry.message.updatedAt,
-        turnId: entry.message.turnId,
-        streaming: entry.message.streaming,
-      },
-    ];
-  });
+  }
 
-  return deriveThreadResponseGrouping({ entries, latestTurn });
+  interface TurnGroup {
+    readonly entries: ThreadFeedEntry[];
+    readonly startBoundary: string | null;
+  }
+  const groupsByTurnId = new Map<TurnId, TurnGroup>();
+  let pendingUserBoundary: string | null = null;
+  for (const entry of feed) {
+    if (entry.type === "message" && entry.message.role === "user") {
+      pendingUserBoundary = entry.message.createdAt;
+      continue;
+    }
+    const turnId =
+      entry.type === "message" && entry.message.role === "assistant"
+        ? entry.message.turnId
+        : entry.type === "activity-group"
+          ? entry.turnId
+          : null;
+    if (!turnId) {
+      continue;
+    }
+    let group = groupsByTurnId.get(turnId);
+    if (!group) {
+      group = {
+        entries: [],
+        startBoundary: pendingUserBoundary,
+      };
+      pendingUserBoundary = null;
+      groupsByTurnId.set(turnId, group);
+    }
+    group.entries.push(entry);
+  }
+
+  const unsettledTurnId = deriveUnsettledTurnId(latestTurn);
+  const foldsByAnchorId = new Map<string, ThreadFeedTurnFold>();
+  for (const [turnId, group] of groupsByTurnId) {
+    const { entries } = group;
+    if (turnId === unsettledTurnId) {
+      continue;
+    }
+    if (entries.some((entry) => entry.type === "message" && entry.message.streaming)) {
+      continue;
+    }
+
+    const terminalAssistantMessageId = terminalAssistantMessageIdByTurn.get(turnId);
+    const hiddenEntryIds = new Set(
+      entries.filter((entry) => entry.id !== terminalAssistantMessageId).map((entry) => entry.id),
+    );
+    if (hiddenEntryIds.size === 0) {
+      continue;
+    }
+
+    const firstEntry = entries[0];
+    const lastEntry = entries.at(-1);
+    if (!firstEntry || !lastEntry) {
+      continue;
+    }
+    const terminalEntry = terminalAssistantMessageId
+      ? entries.find((entry) => entry.id === terminalAssistantMessageId)
+      : null;
+    const latestTurnMatches = latestTurn?.turnId === turnId;
+    const lastEntryEnd =
+      lastEntry.type === "message" ? lastEntry.message.updatedAt : lastEntry.createdAt;
+    const elapsedMs =
+      latestTurnMatches && latestTurn.startedAt && latestTurn.completedAt
+        ? computeElapsedMs(latestTurn.startedAt, latestTurn.completedAt)
+        : computeElapsedMs(
+            group.startBoundary ?? firstEntry.createdAt,
+            maxIsoTimestamp(
+              terminalEntry?.type === "message" ? terminalEntry.message.updatedAt : null,
+              lastEntryEnd,
+            ) ?? lastEntryEnd,
+          );
+    const duration = elapsedMs === null ? null : formatDuration(elapsedMs);
+    const interrupted = latestTurnMatches && latestTurn.state === "interrupted";
+    const label = interrupted
+      ? duration
+        ? `You stopped after ${duration}`
+        : "You stopped this response"
+      : duration
+        ? `Worked for ${duration}`
+        : "Worked";
+
+    foldsByAnchorId.set(firstEntry.id, {
+      turnId,
+      createdAt: firstEntry.createdAt,
+      hiddenEntryIds,
+      label,
+    });
+  }
+  return foldsByAnchorId;
 }
 
 export function deriveThreadFeedPresentation(
   feed: ReadonlyArray<ThreadFeedEntry>,
   latestTurn: ThreadFeedLatestTurn | null,
-  expandedResponseIds: ReadonlySet<string>,
+  expandedTurnIds: ReadonlySet<TurnId>,
   expandedWorkGroupIds: ReadonlySet<string> = new Set(),
   activeWorkStartedAt: string | null = null,
 ): ThreadFeedEntry[] {
@@ -1135,10 +1169,10 @@ export function deriveThreadFeedPresentation(
     (entry) =>
       entry.type !== "turn-fold" && entry.type !== "work-toggle" && entry.type !== "working",
   );
-  const { foldsByAnchorEntryId } = deriveThreadFeedResponseGrouping(sourceFeed, latestTurn);
+  const foldsByAnchorId = deriveThreadFeedTurnFolds(sourceFeed, latestTurn);
   const collapsedEntryIds = new Set<string>();
-  for (const fold of foldsByAnchorEntryId.values()) {
-    if (!expandedResponseIds.has(fold.responseId)) {
+  for (const fold of foldsByAnchorId.values()) {
+    if (!expandedTurnIds.has(fold.turnId)) {
       for (const entryId of fold.hiddenEntryIds) {
         collapsedEntryIds.add(entryId);
       }
@@ -1147,16 +1181,15 @@ export function deriveThreadFeedPresentation(
 
   const result: ThreadFeedEntry[] = [];
   for (const entry of sourceFeed) {
-    const fold = foldsByAnchorEntryId.get(entry.id);
+    const fold = foldsByAnchorId.get(entry.id);
     if (fold) {
       result.push({
         type: "turn-fold",
-        id: `turn-fold:${fold.responseId}`,
+        id: `turn-fold:${fold.turnId}`,
         createdAt: fold.createdAt,
-        responseId: fold.responseId,
-        turnId: TurnId.make(fold.turnId),
+        turnId: fold.turnId,
         label: fold.label,
-        expanded: expandedResponseIds.has(fold.responseId),
+        expanded: expandedTurnIds.has(fold.turnId),
       });
     }
     if (!collapsedEntryIds.has(entry.id)) {
@@ -1184,12 +1217,7 @@ function appendPresentedFeedEntry(
   }
 
   const activities = entry.activities.filter(
-    (activity) =>
-      !(
-        activity.toolLike &&
-        activity.status === "neutral" &&
-        activity.toolCall?.status !== "inProgress"
-      ),
+    (activity) => !(activity.toolLike && activity.status === "neutral"),
   );
   if (activities.length === 0) {
     return;
@@ -1228,13 +1256,24 @@ function appendPresentedFeedEntry(
   });
 }
 
-export function derivePendingApprovals(
+/**
+ * Sorts activities into lifecycle order. `derivePendingApprovals` and
+ * `derivePendingUserInputs` both expect this ordering; sorting once and
+ * passing the result to both avoids re-sorting the full activity history
+ * per derivation.
+ */
+export function sortThreadActivities(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
+): ReadonlyArray<OrchestrationThreadActivity> {
+  return Arr.sort(activities, activityOrder);
+}
+
+export function derivePendingApprovals(
+  sortedActivities: ReadonlyArray<OrchestrationThreadActivity>,
 ): PendingApproval[] {
   const openByRequestId = new Map<ApprovalRequestId, PendingApproval>();
-  const ordered = Arr.sort(activities, activityOrder);
 
-  for (const activity of ordered) {
+  for (const activity of sortedActivities) {
     const payload =
       activity.payload && typeof activity.payload === "object"
         ? (activity.payload as Record<string, unknown>)
@@ -1282,12 +1321,11 @@ export function derivePendingApprovals(
 }
 
 export function derivePendingUserInputs(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  sortedActivities: ReadonlyArray<OrchestrationThreadActivity>,
 ): PendingUserInput[] {
   const openByRequestId = new Map<ApprovalRequestId, PendingUserInput>();
-  const ordered = Arr.sort(activities, activityOrder);
 
-  for (const activity of ordered) {
+  for (const activity of sortedActivities) {
     const payload =
       activity.payload && typeof activity.payload === "object"
         ? (activity.payload as Record<string, unknown>)
@@ -1382,35 +1420,34 @@ export function buildThreadFeed(
           );
         })
         .map<RawThreadFeedEntry>((entry) => {
-          const summary = entry.toolCall?.title ?? workEntryHeading(entry);
-          const detail = entry.toolCall?.preview ?? workEntryPreview(entry);
-          const fullDetail = buildWorkEntryExpandedBody(entry);
-          const activity: ThreadFeedActivity = {
-            id: entry.id,
-            createdAt: entry.createdAt,
-            turnId: entry.turnId,
-            summary,
-            detail,
-            fullDetail,
-            icon: workEntryIcon(entry),
-            copyText: [summary, detail]
+          const summary = workEntryHeading(entry);
+          const detail = workEntryPreview(entry);
+          const getFullDetail = memoizeValue(() => buildWorkEntryExpandedBody(entry));
+          const getCopyText = memoizeValue(() =>
+            [summary, detail, getFullDetail()]
               .filter((value, index, values): value is string => {
                 return Boolean(value) && values.indexOf(value) === index;
               })
               .join("\n"),
-            toolLike: workLogEntryIsToolLike(entry),
-            status: workEntryStatus(entry),
-            ...(entry.toolCall ? { toolCall: entry.toolCall } : {}),
-          };
-          if (entry.toolCallInputs && entry.toolCallInputs.length > 0) {
-            activityToolCallInputs.set(activity, entry.toolCallInputs);
-          }
+          );
           return {
             type: "activity",
             id: entry.id,
             createdAt: entry.createdAt,
             turnId: entry.turnId,
-            activity,
+            activity: {
+              id: entry.id,
+              createdAt: entry.createdAt,
+              turnId: entry.turnId,
+              summary,
+              detail,
+              canExpand: workEntryHasExpandedBody(entry),
+              getFullDetail,
+              getCopyText,
+              icon: workEntryIcon(entry),
+              toolLike: workLogEntryIsToolLike(entry),
+              status: workEntryStatus(entry),
+            },
           };
         }),
     ],
@@ -1419,22 +1456,4 @@ export function buildThreadFeed(
   );
 
   return groupAdjacentActivities(entries);
-}
-
-const cachedThreadFeeds = new WeakMap<OrchestrationThread, ThreadFeedEntry[]>();
-
-/**
- * Reuses the feed for an unchanged immutable thread snapshot across screen remounts.
- * A replacement snapshot recomputes automatically, and the weak key does not extend
- * the lifetime of retained thread data.
- */
-export function buildCachedThreadFeed(thread: OrchestrationThread): ThreadFeedEntry[] {
-  const cachedFeed = cachedThreadFeeds.get(thread);
-  if (cachedFeed) {
-    return cachedFeed;
-  }
-
-  const feed = buildThreadFeed(thread);
-  cachedThreadFeeds.set(thread, feed);
-  return feed;
 }

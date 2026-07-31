@@ -1,23 +1,33 @@
 # Tangent
 
-Tangent is my personal fork of [T3 Code](https://github.com/pingdotgg/t3code), a minimal web GUI
-for coding agents. It carries a small distribution-specific layer while staying close to upstream.
+Tangent is my personal fork of [T3 Code](https://github.com/pingdotgg/t3code), an agent-harness
+control surface for web, desktop, and mobile. It carries a small distribution-specific layer while
+staying close to upstream.
+
+It works with Claude Code, Codex, Cursor, Grok Build, OpenCode, and the fork's early-access Hermes
+Agent integration.
+
+## "Wait, what are you selling me?"
+
+Nothing. We built T3 Code because we wanted the best possible development experience with agents. We were inspired by existing solutions like the Codex desktop app, Conductor, Claude Desktop and Cursor Glass, but none met our bar.
+
+We wanted something performant, remote-ready, and truly open. If we ever go the wrong direction, we want you to have everything you need to fork and build the editor that you want.
 
 ## Installation
 
 > [!WARNING]
-> Tangent currently supports Codex, Claude, Cursor, and OpenCode.
 > Install and authenticate at least one provider before use:
 >
 > - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
 > - Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
 > - Cursor: install [Cursor CLI](https://cursor.com/cli) and run `agent login`
+> - Grok Build: install [Grok Build CLI](https://x.ai/cli) and run `grok login`
 > - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
 
 ### Run the server without installing
 
 Download `tangent-server-X.Y.Z.tgz` from the matching
-[GitHub Release](https://github.com/bpdev97/tangent/releases), then run:
+[Tangent release](https://github.com/bpdev97/tangent/releases), then run:
 
 ```bash
 npx --yes ./tangent-server-X.Y.Z.tgz
@@ -27,33 +37,35 @@ Use `npx --yes ./tangent-server-X.Y.Z.tgz --help` for the full CLI reference.
 
 ### Desktop app
 
-Install the latest Tangent desktop build from
-[GitHub Releases](https://github.com/bpdev97/tangent/releases). The upstream package-manager
-installers continue to install T3 Code rather than this fork.
+Install the latest Tangent macOS artifact from
+[GitHub Releases](https://github.com/bpdev97/tangent/releases).
 
 ## Some notes
 
 We are very very early in this project. Expect bugs.
 
-We are not accepting contributions yet.
-
-There's no public docs site yet, checkout the miscellaneous markdown files in [docs](./docs).
+We are (mostly) not accepting contributions yet. Small fixes may be considered. Big features will not be.
 
 ## Documentation
 
-- [Getting started](./docs/getting-started/quick-start.md)
-- [Remote access](./docs/user/remote-access.md)
-- [Keeping Tangent in sync](./docs/user/server-updates.md)
-- [Architecture overview](./docs/architecture/overview.md)
-- [Provider guides](./docs/providers/codex.md)
-- [Operations](./docs/operations/ci.md)
-- [Reference](./docs/reference/encyclopedia.md)
+Full docs live in [docs/](./docs). There's no docs site yet.
+
+- [Install and first run](./docs/user/install.md)
+- [Permission modes](./docs/user/permission-modes.md)
+- [Keyboard shortcuts](./docs/user/keybindings.md)
+- [Remote access from a phone or another machine](./docs/user/remote-access.md)
+- [Keeping app and server in sync](./docs/user/updating.md)
+- [Source control integrations](./docs/user/source-control.md)
+- Multiple accounts: [Codex](./docs/user/providers-codex.md) · [Claude](./docs/user/providers-claude.md)
+- Linux: [run T3 Code as a background service](./docs/user/background-service.md)
+
+Building from source? Start at [docs/internals/overview.md](./docs/internals/overview.md).
 
 ## If you REALLY want to contribute still.... read this first
 
 ### Install `vp`
 
-Tangent uses Vite+ so you'll need to install the global `vp` command-line tool.
+T3 Code uses Vite+ so you'll need to install the global `vp` command-line tool.
 
 #### macOS / Linux
 
