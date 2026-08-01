@@ -17,6 +17,12 @@ describe("image normalization", () => {
     expect(hasHeifSignature(Buffer.from("000000206674797061766966", "hex"))).toBe(false);
   });
 
+  it("detects a HEIC compatible brand when the major brand is generic", () => {
+    const bytes = Buffer.from("00000018667479706d69663100000000686569636d696631", "hex");
+
+    expect(hasHeifSignature(bytes)).toBe(true);
+  });
+
   it.effect("passes other image formats through unchanged", () =>
     Effect.gen(function* () {
       const bytes = Buffer.from([0xff, 0xd8, 0xff]);

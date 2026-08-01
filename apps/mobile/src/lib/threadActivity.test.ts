@@ -13,11 +13,42 @@ import {
 
 import {
   buildThreadFeed,
+  derivePendingApprovals,
   deriveThreadFeedPresentation,
   derivePendingUserInputs,
   type ThreadFeedActivity,
   type ThreadFeedEntry,
 } from "./threadActivity";
+
+describe("derivePendingApprovals", () => {
+  it("derives MCP tool approvals with persistence capabilities", () => {
+    const activities = [
+      makeActivity({
+        id: EventId.make("approval-open-mcp-tool"),
+        createdAt: "2026-04-01T00:00:01.000Z",
+        kind: "approval.requested",
+        summary: "MCP tool approval requested",
+        tone: "approval",
+        payload: {
+          requestId: "req-mcp-tool",
+          requestKind: "mcp-tool-call",
+          detail: "Use computer tool preview_open?",
+          supportsSessionPersistence: true,
+        },
+      }),
+    ];
+
+    expect(derivePendingApprovals(activities)).toEqual([
+      {
+        requestId: "req-mcp-tool",
+        requestKind: "mcp-tool-call",
+        createdAt: "2026-04-01T00:00:01.000Z",
+        detail: "Use computer tool preview_open?",
+        supportsSessionPersistence: true,
+      },
+    ]);
+  });
+});
 
 function makeActivity(
   input: Partial<OrchestrationThreadActivity> &

@@ -141,6 +141,21 @@ it.layer(testLayer)("HermesAdapter gateway", (it) => {
           payload: { text: "hello" },
         });
         emitter.current?.({
+          type: "subagent.start",
+          session_id: "live-1",
+          payload: { subagent_id: "research-1", goal: "Inspect the adapter" },
+        });
+        emitter.current?.({
+          type: "subagent.tool",
+          session_id: "live-1",
+          payload: { subagent_id: "research-1", tool_name: "terminal", text: "Reading files" },
+        });
+        emitter.current?.({
+          type: "subagent.complete",
+          session_id: "live-1",
+          payload: { subagent_id: "research-1", status: "completed", summary: "Done" },
+        });
+        emitter.current?.({
           type: "message.complete",
           session_id: "live-1",
           payload: { text: "hello", status: "complete", usage: { total: 42 } },
@@ -164,6 +179,24 @@ it.layer(testLayer)("HermesAdapter gateway", (it) => {
           events.some(
             (event) =>
               event.type === "item.completed" && event.payload.itemType === "command_execution",
+          ),
+        );
+        assert.isTrue(
+          events.some(
+            (event) => event.type === "task.started" && event.payload.taskId === "research-1",
+          ),
+        );
+        assert.isTrue(
+          events.some(
+            (event) =>
+              event.type === "task.progress" &&
+              event.payload.taskId === "research-1" &&
+              event.payload.lastToolName === "terminal",
+          ),
+        );
+        assert.isTrue(
+          events.some(
+            (event) => event.type === "task.completed" && event.payload.taskId === "research-1",
           ),
         );
         assert.isTrue(

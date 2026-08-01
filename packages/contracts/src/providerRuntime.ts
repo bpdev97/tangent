@@ -6,7 +6,6 @@ import {
   NonNegativeInt,
   ProviderItemId,
   PositiveInt,
-  RuntimeAgentId,
   RuntimeItemId,
   RuntimeRequestId,
   RuntimeTaskId,
@@ -180,9 +179,6 @@ const ProviderRuntimeEventType = Schema.Literals([
   "task.started",
   "task.progress",
   "task.completed",
-  "agent.started",
-  "agent.updated",
-  "agent.completed",
   "hook.started",
   "hook.progress",
   "hook.completed",
@@ -233,9 +229,6 @@ const UserInputResolvedType = Schema.Literal("user-input.resolved");
 const TaskStartedType = Schema.Literal("task.started");
 const TaskProgressType = Schema.Literal("task.progress");
 const TaskCompletedType = Schema.Literal("task.completed");
-const AgentStartedType = Schema.Literal("agent.started");
-const AgentUpdatedType = Schema.Literal("agent.updated");
-const AgentCompletedType = Schema.Literal("agent.completed");
 const HookStartedType = Schema.Literal("hook.started");
 const HookProgressType = Schema.Literal("hook.progress");
 const HookCompletedType = Schema.Literal("hook.completed");
@@ -492,41 +485,6 @@ const TaskCompletedPayload = Schema.Struct({
   usage: Schema.optional(Schema.Unknown),
 });
 export type TaskCompletedPayload = typeof TaskCompletedPayload.Type;
-
-const AgentIdentityPayload = {
-  agentId: RuntimeAgentId,
-  parentAgentId: Schema.optional(RuntimeAgentId),
-  role: Schema.optional(TrimmedNonEmptyStringSchema),
-  description: Schema.optional(TrimmedNonEmptyStringSchema),
-  prompt: Schema.optional(TrimmedNonEmptyStringSchema),
-  model: Schema.optional(TrimmedNonEmptyStringSchema),
-  agentPath: Schema.optional(TrimmedNonEmptyStringSchema),
-  providerThreadId: Schema.optional(TrimmedNonEmptyStringSchema),
-};
-
-const AgentStartedPayload = Schema.Struct({
-  ...AgentIdentityPayload,
-  status: Schema.optional(Schema.Literals(["pending", "running"])),
-});
-export type AgentStartedPayload = typeof AgentStartedPayload.Type;
-
-const AgentUpdatedPayload = Schema.Struct({
-  ...AgentIdentityPayload,
-  status: Schema.Literals(["pending", "running", "waiting"]),
-  summary: Schema.optional(TrimmedNonEmptyStringSchema),
-  usage: Schema.optional(Schema.Unknown),
-  lastToolName: Schema.optional(TrimmedNonEmptyStringSchema),
-});
-export type AgentUpdatedPayload = typeof AgentUpdatedPayload.Type;
-
-const AgentCompletedPayload = Schema.Struct({
-  ...AgentIdentityPayload,
-  status: Schema.Literals(["completed", "failed", "stopped"]),
-  summary: Schema.optional(TrimmedNonEmptyStringSchema),
-  usage: Schema.optional(Schema.Unknown),
-  durationMs: Schema.optional(Schema.Number),
-});
-export type AgentCompletedPayload = typeof AgentCompletedPayload.Type;
 
 const HookStartedPayload = Schema.Struct({
   hookId: TrimmedNonEmptyStringSchema,
@@ -887,27 +845,6 @@ const ProviderRuntimeTaskCompletedEvent = Schema.Struct({
 });
 export type ProviderRuntimeTaskCompletedEvent = typeof ProviderRuntimeTaskCompletedEvent.Type;
 
-const ProviderRuntimeAgentStartedEvent = Schema.Struct({
-  ...ProviderRuntimeEventBase.fields,
-  type: AgentStartedType,
-  payload: AgentStartedPayload,
-});
-export type ProviderRuntimeAgentStartedEvent = typeof ProviderRuntimeAgentStartedEvent.Type;
-
-const ProviderRuntimeAgentUpdatedEvent = Schema.Struct({
-  ...ProviderRuntimeEventBase.fields,
-  type: AgentUpdatedType,
-  payload: AgentUpdatedPayload,
-});
-export type ProviderRuntimeAgentUpdatedEvent = typeof ProviderRuntimeAgentUpdatedEvent.Type;
-
-const ProviderRuntimeAgentCompletedEvent = Schema.Struct({
-  ...ProviderRuntimeEventBase.fields,
-  type: AgentCompletedType,
-  payload: AgentCompletedPayload,
-});
-export type ProviderRuntimeAgentCompletedEvent = typeof ProviderRuntimeAgentCompletedEvent.Type;
-
 const ProviderRuntimeHookStartedEvent = Schema.Struct({
   ...ProviderRuntimeEventBase.fields,
   type: HookStartedType,
@@ -1062,9 +999,6 @@ export const ProviderRuntimeEventV2 = Schema.Union([
   ProviderRuntimeTaskStartedEvent,
   ProviderRuntimeTaskProgressEvent,
   ProviderRuntimeTaskCompletedEvent,
-  ProviderRuntimeAgentStartedEvent,
-  ProviderRuntimeAgentUpdatedEvent,
-  ProviderRuntimeAgentCompletedEvent,
   ProviderRuntimeHookStartedEvent,
   ProviderRuntimeHookProgressEvent,
   ProviderRuntimeHookCompletedEvent,

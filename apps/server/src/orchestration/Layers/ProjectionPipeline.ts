@@ -819,10 +819,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           }
           yield* projectionThreadRepository.upsert({
             ...existingRow.value,
-            // activeTurnId is cleared when a turn settles, but latestTurnId must
-            // continue addressing that completed turn for shell snapshots and
-            // unread-completion indicators.
-            latestTurnId: event.payload.session.activeTurnId ?? existingRow.value.latestTurnId,
+            latestTurnId: event.payload.session.activeTurnId,
             updatedAt: event.occurredAt,
           });
           yield* refreshThreadShellSummary(event.payload.threadId);

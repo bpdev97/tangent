@@ -330,61 +330,6 @@ describe("AcpSessionRuntime", () => {
     ),
   );
 
-  it.effect("segments consecutive assistant messages when ACP message ids change", () =>
-    Effect.gen(function* () {
-      const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
-      yield* runtime.start();
-
-      const promptResult = yield* runtime.prompt({
-        prompt: [{ type: "text", text: "emit two messages" }],
-      });
-      expect(promptResult).toMatchObject({ stopReason: "end_turn" });
-
-      const notes = Array.from(yield* Stream.runCollect(Stream.take(runtime.getEvents(), 7)));
-      expect(notes.map((note) => note._tag)).toEqual([
-        "AssistantItemStarted",
-        "ContentDelta",
-        "ContentDelta",
-        "AssistantItemCompleted",
-        "AssistantItemStarted",
-        "ContentDelta",
-        "AssistantItemCompleted",
-      ]);
-      const starts = notes.filter((note) => note._tag === "AssistantItemStarted");
-      const deltas = notes.filter((note) => note._tag === "ContentDelta");
-      expect(starts).toHaveLength(2);
-      expect(deltas).toHaveLength(3);
-      if (
-        starts[0]?._tag === "AssistantItemStarted" &&
-        starts[1]?._tag === "AssistantItemStarted" &&
-        deltas[0]?._tag === "ContentDelta" &&
-        deltas[1]?._tag === "ContentDelta" &&
-        deltas[2]?._tag === "ContentDelta"
-      ) {
-        expect(deltas[0].itemId).toBe(starts[0].itemId);
-        expect(deltas[1].itemId).toBe(starts[0].itemId);
-        expect(deltas[2].itemId).toBe(starts[1].itemId);
-      }
-    }).pipe(
-      Effect.provide(
-        AcpSessionRuntime.layer({
-          spawn: {
-            command: mockAgentCommand,
-            args: mockAgentArgs,
-            env: {
-              T3_ACP_EMIT_MESSAGE_IDS: "1",
-            },
-          },
-          cwd: process.cwd(),
-          clientInfo: { name: "t3-test", version: "0.0.0" },
-          authMethodId: "test",
-        }),
-      ),
-      Effect.scoped,
-      Effect.provide(NodeServices.layer),
-    ),
-  );
-
   it.effect("suppresses generic placeholder tool updates until completion", () =>
     Effect.gen(function* () {
       const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;

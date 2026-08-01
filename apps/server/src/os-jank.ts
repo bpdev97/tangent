@@ -11,8 +11,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as NodeOS from "node:os";
 
-import { PERSONAL_DISTRIBUTION } from "../../../downstream/config.ts";
-
 function logPathHydrationWarning(message: string, error?: unknown): void {
   process.stderr.write(
     `[server] ${message} ${error instanceof Error ? error.message : (error ?? "")}\n`,
@@ -107,7 +105,7 @@ export const expandHomePath = Effect.fn(function* (input: string) {
 export const resolveBaseDir = Effect.fn(function* (raw: string | undefined) {
   const { join, resolve } = yield* Path.Path;
   if (!raw || raw.trim().length === 0) {
-    return join(NodeOS.homedir(), PERSONAL_DISTRIBUTION.macos.stateHomeDirectoryName);
+    return join(NodeOS.homedir(), ".t3");
   }
   return resolve(yield* expandHomePath(raw.trim()));
 });

@@ -13,13 +13,17 @@ export function isTerminal(state: RelayAgentActivityState): boolean {
   return state.phase === "completed" || state.phase === "failed";
 }
 
-function isFresh(state: RelayAgentActivityState, nowMs: number): boolean {
+export function activityExpiresAtMs(state: RelayAgentActivityState): number {
   const updatedAt = Date.parse(state.updatedAt);
-  if (!Number.isFinite(updatedAt)) return false;
-  if (isTerminal(state)) return nowMs - updatedAt <= TERMINAL_TTL_MS;
+  if (!Number.isFinite(updatedAt)) return 0;
+  if (isTerminal(state)) return updatedAt + TERMINAL_TTL_MS;
   const ttl =
     state.phase === "starting" || state.phase === "running" ? RUNNING_TTL_MS : WAITING_TTL_MS;
-  return nowMs - updatedAt <= ttl;
+  return updatedAt + ttl;
+}
+
+function isFresh(state: RelayAgentActivityState, nowMs: number): boolean {
+  return activityExpiresAtMs(state) >= nowMs;
 }
 
 function statusForPhase(phase: RelayAgentActivityState["phase"]): string {

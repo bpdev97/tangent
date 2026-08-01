@@ -187,7 +187,6 @@ describe("AcpRuntimeModel", () => {
           detail: "bun run typecheck",
           data: {
             toolCallId: "tool-1",
-            providerTitle: "Terminal",
             kind: "execute",
             command: "bun run typecheck",
             rawInput: {
@@ -254,35 +253,6 @@ describe("AcpRuntimeModel", () => {
         command: "bun run typecheck",
       });
     }
-
-    const contentOnlyPatch = parseSessionUpdateEvent({
-      sessionId: "session-1",
-      update: {
-        sessionUpdate: "tool_call_update",
-        toolCallId: "tool-1",
-        status: "completed",
-        content: [
-          {
-            type: "content",
-            content: { type: "text", text: "typecheck passed" },
-          },
-        ],
-      },
-    } satisfies EffectAcpSchema.SessionNotification);
-    const contentOnlyPatchEvent = contentOnlyPatch.events[0];
-    if (
-      createdEvent?._tag === "ToolCallUpdated" &&
-      contentOnlyPatchEvent?._tag === "ToolCallUpdated"
-    ) {
-      expect(contentOnlyPatchEvent.toolCall.title).toBeUndefined();
-      expect(
-        mergeToolCallState(createdEvent.toolCall, contentOnlyPatchEvent.toolCall),
-      ).toMatchObject({
-        title: "Ran command",
-        detail: "typecheck passed",
-        status: "completed",
-      });
-    }
   });
 
   it("trims padded current mode updates before emitting a mode change", () => {
@@ -341,7 +311,6 @@ describe("AcpRuntimeModel", () => {
       sessionId: "session-1",
       update: {
         sessionUpdate: "agent_message_chunk",
-        messageId: "message-1",
         content: {
           type: "text",
           text: "hello from acp",
@@ -352,41 +321,15 @@ describe("AcpRuntimeModel", () => {
     expect(contentResult.events).toEqual([
       {
         _tag: "ContentDelta",
-        messageId: "message-1",
-        streamKind: "assistant_text",
         text: "hello from acp",
         rawPayload: {
           sessionId: "session-1",
           update: {
             sessionUpdate: "agent_message_chunk",
-            messageId: "message-1",
             content: {
               type: "text",
               text: "hello from acp",
             },
-          },
-        },
-      },
-    ]);
-
-    const thoughtResult = parseSessionUpdateEvent({
-      sessionId: "session-1",
-      update: {
-        sessionUpdate: "agent_thought_chunk",
-        content: { type: "text", text: "thinking" },
-      },
-    } satisfies EffectAcpSchema.SessionNotification);
-
-    expect(thoughtResult.events).toEqual([
-      {
-        _tag: "ContentDelta",
-        streamKind: "reasoning_text",
-        text: "thinking",
-        rawPayload: {
-          sessionId: "session-1",
-          update: {
-            sessionUpdate: "agent_thought_chunk",
-            content: { type: "text", text: "thinking" },
           },
         },
       },

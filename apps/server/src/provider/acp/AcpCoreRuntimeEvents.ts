@@ -164,8 +164,6 @@ export function makeAcpToolCallEvent(input: {
   readonly turnId: TurnId | undefined;
   readonly toolCall: AcpToolCallState;
   readonly rawPayload: unknown;
-  readonly source?: AcpAdapterRawSource;
-  readonly method?: string;
 }): ProviderRuntimeEvent {
   const runtimeStatus = runtimeItemStatusFromAcpToolStatus(input.toolCall.status);
   return {
@@ -186,8 +184,8 @@ export function makeAcpToolCallEvent(input: {
       ...(Object.keys(input.toolCall.data).length > 0 ? { data: input.toolCall.data } : {}),
     },
     raw: {
-      source: input.source ?? "acp.jsonrpc",
-      method: input.method ?? "session/update",
+      source: "acp.jsonrpc",
+      method: "session/update",
       payload: input.rawPayload,
     },
   };
@@ -221,7 +219,6 @@ export function makeAcpContentDeltaEvent(input: {
   readonly threadId: ThreadId;
   readonly turnId: TurnId | undefined;
   readonly itemId?: string;
-  readonly streamKind?: "assistant_text" | "reasoning_text";
   readonly text: string;
   readonly rawPayload: unknown;
 }): ProviderRuntimeEvent {
@@ -233,7 +230,7 @@ export function makeAcpContentDeltaEvent(input: {
     turnId: input.turnId,
     ...(input.itemId ? { itemId: RuntimeItemId.make(input.itemId) } : {}),
     payload: {
-      streamKind: input.streamKind ?? "assistant_text",
+      streamKind: "assistant_text",
       delta: input.text,
     },
     raw: {

@@ -97,6 +97,7 @@ describe("runAppUpdateCheck", () => {
     expect(client.fetchUpdateAsync).not.toHaveBeenCalled();
     expect(failures).toEqual(["offline"]);
     expect(states).toEqual(["checking", "idle"]);
+    expect(reportError).not.toHaveBeenCalled();
     reportError.mockRestore();
   });
 
@@ -167,6 +168,7 @@ describe("runAppUpdateCheck", () => {
     expect(client.checkForUpdateAsync).toHaveBeenCalledOnce();
     expect(failures).toEqual(["offline"]);
     expect(manualStates).toEqual(["checking", "idle"]);
+    expect(reportError).not.toHaveBeenCalled();
     reportError.mockRestore();
   });
 

@@ -104,6 +104,24 @@ standard notification fails but APNs accepts the alert embedded in the Live Acti
 alert satisfies the notification channel as well. Invalid tokens are cleared so the app can
 re-register them.
 
+## Retention and delivery bounds
+
+This service is sized for a personal tailnet, not an unbounded multi-tenant deployment:
+
+- activity rows expire physically from SQLite: starting/running after two hours, approval/input/stale
+  after 24 hours, and completed/failed after 15 minutes;
+- each accepted publication computes one aggregate snapshot and fans it out with at most four
+  concurrent device deliveries;
+- publications remain ordered so phase transitions and channel watermarks cannot race, but the
+  in-process queue is capped at 256 and returns HTTP 429 when full;
+- APNs provider JWTs and HTTP/2 sessions are reused by APNs environment; retryable failures keep the
+  same APNs request ID and use bounded backoff;
+- startup and snapshot reads also prune expired rows, covering environments that disappear without
+  sending `state: null`.
+
+A slow APNs request can still delay later ordered publications, and SQLite remains a single-process
+store. Those are deliberate personal-service constraints, not a claim of multi-tenant scalability.
+
 ## Verification
 
 ```sh

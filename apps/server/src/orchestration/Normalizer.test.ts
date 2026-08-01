@@ -83,7 +83,7 @@ describe("canonicalizeClientCommandTimestamps", () => {
     expect(result.bootstrap?.createThread?.createdAt).toBe(serverReceivedAt);
   });
 
-  it.effect("persists canonical JPEG bytes and metadata for a real HEIC upload", () =>
+  it.effect("persists canonical JPEG bytes for a HEIC upload declared as octet-stream", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const serverConfig = yield* ServerConfig.ServerConfig;
@@ -102,7 +102,7 @@ describe("canonicalizeClientCommandTimestamps", () => {
               name: "camera-original.heic",
               mimeType: "image/heic",
               sizeBytes: heicBytes.byteLength,
-              dataUrl: `data:image/heic;base64,${HEIC_FIXTURE_BASE64}`,
+              dataUrl: `data:application/octet-stream;base64,${HEIC_FIXTURE_BASE64}`,
             },
           ],
         },

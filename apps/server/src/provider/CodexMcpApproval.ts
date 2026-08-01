@@ -1,15 +1,12 @@
 import type { ProviderApprovalDecision } from "@t3tools/contracts";
 import type * as EffectCodexSchema from "effect-codex-app-server/schema";
+import * as Predicate from "effect/Predicate";
 
 export interface CodexMcpToolApproval {
   readonly supportsSessionPersistence: boolean;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function supportsPersistMode(meta: Record<string, unknown>, mode: string): boolean {
+function supportsPersistMode(meta: Readonly<Record<PropertyKey, unknown>>, mode: string): boolean {
   const persist = meta.persist;
   return persist === mode || (Array.isArray(persist) && persist.some((value) => value === mode));
 }
@@ -17,17 +14,18 @@ function supportsPersistMode(meta: Record<string, unknown>, mode: string): boole
 export function parseCodexMcpToolApproval(
   payload: EffectCodexSchema.McpServerElicitationRequestParams,
 ): CodexMcpToolApproval | null {
+  const meta = payload._meta;
   if (
     payload.mode !== "form" ||
     Object.keys(payload.requestedSchema.properties).length !== 0 ||
-    !isRecord(payload._meta) ||
-    payload._meta.codex_approval_kind !== "mcp_tool_call"
+    !Predicate.isObject(meta) ||
+    meta.codex_approval_kind !== "mcp_tool_call"
   ) {
     return null;
   }
 
   return {
-    supportsSessionPersistence: supportsPersistMode(payload._meta, "session"),
+    supportsSessionPersistence: supportsPersistMode(meta, "session"),
   };
 }
 

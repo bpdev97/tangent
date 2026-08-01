@@ -13,6 +13,7 @@ import type {
 } from "./apns.ts";
 import type { RelayConfig } from "./config.ts";
 import { startServer, type PushRelayServer } from "./server.ts";
+import { RelayStore } from "./store.ts";
 
 const preferences: RelayAgentAwarenessPreferences = {
   liveActivitiesEnabled: true,
@@ -198,6 +199,54 @@ describe("personal push relay HTTP integration", () => {
       },
     });
     expect(apns.liveActivities).toHaveLength(0);
+  });
+
+  it("computes one aggregate snapshot per publication regardless of device count", async () => {
+    const aggregate = vi.spyOn(RelayStore.prototype, "aggregate");
+    const apns = new RecordingApnsClient();
+    server = await startServer(config, { apns });
+    await registerDevice(server, { liveActivitiesEnabled: false });
+    aggregate.mockClear();
+
+    await publish(server, "running");
+
+    expect(aggregate).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects publications when the ordered delivery queue is full", async () => {
+    let releaseNotification!: (result: ApnsResult) => void;
+    const apns = new RecordingApnsClient();
+    apns.sendNotification = (input: NotificationInput) => {
+      apns.notifications.push(input);
+      return new Promise((resolve) => {
+        releaseNotification = resolve;
+      });
+    };
+    server = await startServer(config, { apns, maxPendingPublications: 1 });
+    await registerDevice(server, { liveActivitiesEnabled: false });
+    await publish(server, "running");
+
+    const first = request(server, "/v1/agent-activities", {
+      method: "POST",
+      body: {
+        environmentId: "environment-1",
+        threadId: "thread-1",
+        state: activityState("waiting_for_approval"),
+      },
+    });
+    await vi.waitFor(() => expect(apns.notifications).toHaveLength(1));
+    const rejected = await request(server, "/v1/agent-activities", {
+      method: "POST",
+      body: {
+        environmentId: "environment-1",
+        threadId: "thread-1",
+        state: activityState("waiting_for_approval"),
+      },
+    });
+
+    expect(rejected).toEqual({ status: 429, body: { error: "publication_queue_full" } });
+    releaseNotification(success);
+    expect(await first).toEqual({ status: 200, body: { ok: true } });
   });
 
   it("retries an identical notification after transient APNs failure", async () => {

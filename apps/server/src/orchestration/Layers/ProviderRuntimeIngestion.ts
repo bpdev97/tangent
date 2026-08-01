@@ -2,7 +2,6 @@ import {
   ApprovalRequestId,
   type AssistantDeliveryMode,
   CommandId,
-  EventId,
   MessageId,
   type OrchestrationEvent,
   type OrchestrationMessage,
@@ -95,14 +94,7 @@ const BUFFERED_PROPOSED_PLAN_BY_ID_TTL = Duration.minutes(120);
 const TASK_DESCRIPTION_BY_TASK_CACHE_CAPACITY = 10_000;
 const TASK_DESCRIPTION_BY_TASK_TTL = Duration.minutes(120);
 const MAX_BUFFERED_ASSISTANT_CHARS = 24_000;
-const MAX_REASONING_ACTIVITY_CHARS = 24_000;
 const STRICT_PROVIDER_LIFECYCLE_GUARD = process.env.T3CODE_STRICT_PROVIDER_LIFECYCLE_GUARD !== "0";
-
-interface ReasoningActivityState {
-  readonly threadId: ThreadId;
-  readonly turnId: TurnId | undefined;
-  readonly text: string;
-}
 
 type TurnStartRequestedDomainEvent = Extract<
   OrchestrationEvent,
@@ -212,72 +204,6 @@ function maxCheckpointTurnCount(
 
 function truncateDetail(value: string, limit = 180): string {
   return value.length > limit ? `${value.slice(0, limit - 3)}...` : value;
-}
-
-function appendBoundedReasoningText(previous: string, delta: string): string {
-  const next = previous + delta;
-  if (next.length <= MAX_REASONING_ACTIVITY_CHARS) {
-    return next;
-  }
-  return `…${next.slice(-(MAX_REASONING_ACTIVITY_CHARS - 1))}`;
-}
-
-function projectReasoningActivity(
-  stateByKey: Map<string, ReasoningActivityState>,
-  event: ProviderRuntimeEvent,
-): OrchestrationThreadActivity | undefined {
-  if (
-    event.type !== "content.delta" ||
-    (event.payload.streamKind !== "reasoning_text" &&
-      event.payload.streamKind !== "reasoning_summary_text") ||
-    event.payload.delta.length === 0
-  ) {
-    return undefined;
-  }
-
-  const turnId = toTurnId(event.turnId);
-  const reasoningScope = String(event.itemId ?? turnId ?? event.eventId);
-  const key = `${event.threadId}:${reasoningScope}:${event.payload.streamKind}`;
-  const previous = stateByKey.get(key)?.text ?? "";
-  const text = appendBoundedReasoningText(previous, event.payload.delta);
-  stateByKey.set(key, { threadId: event.threadId, turnId, text });
-
-  const eventWithSequence = event as ProviderRuntimeEvent & { sessionSequence?: number };
-  return {
-    id: EventId.make(`reasoning:${key}`),
-    createdAt: event.createdAt,
-    tone: "info",
-    kind: "task.progress",
-    summary: "Thinking",
-    payload: {
-      taskId: reasoningScope,
-      summary: "Thinking",
-      detail: text,
-      streamKind: event.payload.streamKind,
-    },
-    turnId: turnId ?? null,
-    ...(eventWithSequence.sessionSequence !== undefined
-      ? { sequence: eventWithSequence.sessionSequence }
-      : {}),
-  };
-}
-
-function clearFinishedReasoningActivityState(
-  stateByKey: Map<string, ReasoningActivityState>,
-  event: Extract<
-    ProviderRuntimeEvent,
-    { type: "turn.completed" | "turn.aborted" | "session.exited" }
-  >,
-): void {
-  const completedTurnId = toTurnId(event.turnId);
-  for (const [key, state] of stateByKey) {
-    if (
-      state.threadId === event.threadId &&
-      (event.type === "session.exited" || state.turnId === completedTurnId)
-    ) {
-      stateByKey.delete(key);
-    }
-  }
 }
 
 function normalizeProposedPlanMarkdown(planMarkdown: string | undefined): string | undefined {
@@ -414,7 +340,7 @@ export function runtimeEventToActivities(
                 : requestKind === "file-change"
                   ? "File-change approval requested"
                   : requestKind === "mcp-tool-call"
-                    ? "Computer-use approval requested"
+                    ? "MCP tool approval requested"
                     : "Approval requested",
           payload: {
             requestId: toApprovalRequestId(event.requestId),
@@ -654,89 +580,6 @@ export function runtimeEventToActivities(
       ];
     }
 
-    case "agent.started": {
-      const title = event.payload.role ? `${event.payload.role} subagent` : "Subagent";
-      return [
-        {
-          id: event.eventId,
-          createdAt: event.createdAt,
-          tone: "tool",
-          kind: "agent.started",
-          summary: `${title} started`,
-          payload: {
-            itemType: "collab_agent_tool_call",
-            itemId: event.payload.agentId,
-            agentId: event.payload.agentId,
-            status: "inProgress",
-            title,
-            ...(event.payload.description
-              ? { detail: truncateDetail(event.payload.description) }
-              : {}),
-            data: event.payload,
-          },
-          turnId: toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
-        },
-      ];
-    }
-
-    case "agent.updated": {
-      const title = event.payload.role ? `${event.payload.role} subagent` : "Subagent";
-      return [
-        {
-          id: event.eventId,
-          createdAt: event.createdAt,
-          tone: "tool",
-          kind: "agent.updated",
-          summary: `${title} ${event.payload.status}`,
-          payload: {
-            itemType: "collab_agent_tool_call",
-            itemId: event.payload.agentId,
-            agentId: event.payload.agentId,
-            status: "inProgress",
-            title,
-            ...(event.payload.summary || event.payload.description
-              ? {
-                  detail: truncateDetail(event.payload.summary ?? event.payload.description ?? ""),
-                }
-              : {}),
-            data: event.payload,
-          },
-          turnId: toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
-        },
-      ];
-    }
-
-    case "agent.completed": {
-      const title = event.payload.role ? `${event.payload.role} subagent` : "Subagent";
-      return [
-        {
-          id: event.eventId,
-          createdAt: event.createdAt,
-          tone: event.payload.status === "failed" ? "error" : "tool",
-          kind: "agent.completed",
-          summary:
-            event.payload.status === "failed"
-              ? `${title} failed`
-              : event.payload.status === "stopped"
-                ? `${title} stopped`
-                : `${title} completed`,
-          payload: {
-            itemType: "collab_agent_tool_call",
-            itemId: event.payload.agentId,
-            agentId: event.payload.agentId,
-            status: event.payload.status,
-            title,
-            ...(event.payload.summary ? { detail: truncateDetail(event.payload.summary) } : {}),
-            data: event.payload,
-          },
-          turnId: toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
-        },
-      ];
-    }
-
     case "thread.state.changed": {
       if (event.payload.state !== "compacted") {
         return [];
@@ -791,10 +634,8 @@ export function runtimeEventToActivities(
           kind: "tool.updated",
           summary: event.payload.title ?? "Tool updated",
           payload: {
-            ...(event.itemId ? { itemId: event.itemId } : {}),
             itemType: event.payload.itemType,
             ...(event.payload.status ? { status: event.payload.status } : {}),
-            ...(event.payload.title ? { title: event.payload.title } : {}),
             ...(event.payload.detail ? { detail: truncateDetail(event.payload.detail) } : {}),
             ...(event.payload.data !== undefined ? { data: event.payload.data } : {}),
           },
@@ -816,10 +657,7 @@ export function runtimeEventToActivities(
           kind: "tool.completed",
           summary: event.payload.title ?? "Tool",
           payload: {
-            ...(event.itemId ? { itemId: event.itemId } : {}),
             itemType: event.payload.itemType,
-            ...(event.payload.status ? { status: event.payload.status } : {}),
-            ...(event.payload.title ? { title: event.payload.title } : {}),
             ...(event.payload.detail ? { detail: truncateDetail(event.payload.detail) } : {}),
             ...(event.payload.data !== undefined ? { data: event.payload.data } : {}),
           },
@@ -841,40 +679,8 @@ export function runtimeEventToActivities(
           kind: "tool.started",
           summary: `${event.payload.title ?? "Tool"} started`,
           payload: {
-            ...(event.itemId ? { itemId: event.itemId } : {}),
             itemType: event.payload.itemType,
-            ...(event.payload.status ? { status: event.payload.status } : {}),
-            ...(event.payload.title ? { title: event.payload.title } : {}),
             ...(event.payload.detail ? { detail: truncateDetail(event.payload.detail) } : {}),
-            ...(event.payload.data !== undefined ? { data: event.payload.data } : {}),
-          },
-          turnId: toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
-        },
-      ];
-    }
-
-    case "tool.progress": {
-      const itemId = event.itemId ?? event.payload.toolUseId;
-      const summary = event.payload.summary ?? event.payload.toolName ?? "Tool running";
-      return [
-        {
-          id: event.eventId,
-          createdAt: event.createdAt,
-          tone: "tool",
-          kind: "tool.progress",
-          summary,
-          payload: {
-            ...(itemId ? { itemId } : {}),
-            ...(event.payload.toolUseId ? { toolUseId: event.payload.toolUseId } : {}),
-            ...(event.payload.toolName
-              ? { toolName: event.payload.toolName, title: event.payload.toolName }
-              : {}),
-            status: "inProgress",
-            ...(event.payload.summary ? { detail: truncateDetail(event.payload.summary) } : {}),
-            ...(event.payload.elapsedSeconds !== undefined
-              ? { elapsedSeconds: event.payload.elapsedSeconds }
-              : {}),
           },
           turnId: toTurnId(event.turnId) ?? null,
           ...maybeSequence,
@@ -896,7 +702,6 @@ const make = Effect.gen(function* () {
   const providerService = yield* ProviderService;
   const projectionTurnRepository = yield* ProjectionTurnRepository;
   const serverSettingsService = yield* ServerSettingsService;
-  const reasoningActivityState = new Map<string, ReasoningActivityState>();
   const providerCommandId = (event: ProviderRuntimeEvent, tag: string) =>
     crypto.randomUUIDv4.pipe(
       Effect.map((uuid) => CommandId.make(`provider:${event.eventId}:${tag}:${uuid}`)),
@@ -1969,7 +1774,6 @@ const make = Effect.gen(function* () {
       }
 
       const activities = runtimeEventToActivities(event, taskTitle);
-      const reasoningActivity = projectReasoningActivity(reasoningActivityState, event);
       yield* Effect.forEach(activities, (activity) =>
         providerCommandId(event, "thread-activity-append").pipe(
           Effect.flatMap((commandId) =>
@@ -1983,27 +1787,6 @@ const make = Effect.gen(function* () {
           ),
         ),
       ).pipe(Effect.asVoid);
-      if (reasoningActivity) {
-        yield* providerCommandId(event, "thread-reasoning-activity-upsert").pipe(
-          Effect.flatMap((commandId) =>
-            orchestrationEngine.dispatch({
-              type: "thread.activity.append",
-              commandId,
-              threadId: thread.id,
-              activity: reasoningActivity,
-              createdAt: reasoningActivity.createdAt,
-            }),
-          ),
-        );
-      }
-
-      if (
-        event.type === "turn.completed" ||
-        event.type === "turn.aborted" ||
-        event.type === "session.exited"
-      ) {
-        clearFinishedReasoningActivityState(reasoningActivityState, event);
-      }
     });
 
   const processDomainEvent = (_event: TurnStartRequestedDomainEvent) => Effect.void;

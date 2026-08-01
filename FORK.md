@@ -1,119 +1,197 @@
-# About this fork
+# Tangent fork inventory
 
-This is Tangent, my personal build of [T3 Code](https://github.com/pingdotgg/t3code). I keep it in
-[`bpdev97/tangent`](https://github.com/bpdev97/tangent) so I can install it alongside the
-official app and ship my own iOS and macOS updates.
+Tangent is a personal distribution of [T3 Code](https://github.com/pingdotgg/t3code), maintained at
+[`bpdev97/tangent`](https://github.com/bpdev97/tangent). It is installed alongside the official app
+and ships independently on macOS and iOS.
 
-## Branches
+This file is the authoritative list of behavior Tangent intentionally carries beyond upstream.
+Before rebasing from upstream or changing one of these features, read its maintenance record and
+review the ownership map below. A path differing from upstream is not automatically a fork feature:
+generated assets, packaging identity, and additive registrations often account for shared-file
+diffs.
 
-- `main` is the version I install and release. It should always be buildable and is never
-  force-pushed.
-- `upstream/main` tracks the original repository.
-- I make changes on `codex/*` branches and merge them through PRs.
-- The weekly upstream sync uses `sync/upstream-main` and opens a PR instead of merging on its own.
+## Branch and release policy
 
-## Fork-specific configuration
+- `main` is the installed and released branch. It must remain buildable and is never force-pushed.
+- `upstream/main` tracks `pingdotgg/t3code`.
+- `origin/main` is Tangent's published branch.
+- Tangent releases use `personal-vX.Y.Z` tags.
+- macOS and the matching server archive are built by `personal-macos-release.yml`.
+- iOS native builds and compatible OTA updates use the EAS `personal` channel through
+  `personal-ios-release.yml`.
 
-App names, bundle IDs, URL schemes, and other public identifiers live in
-`downstream/config.ts`. Credentials stay in Expo, App Store Connect, or GitHub Actions.
+The upstream release workflows remain in the tree for mergeability and must stay disabled in this
+repository's Actions settings. Tangent workflows begin with `personal-`.
 
-Most features should go in the same package they would use upstream. The `downstream` directory is
-only for the small amount of configuration that makes this a separate installable app.
+## Distribution identity
 
-These are the main files to check when an upstream merge conflicts with the fork setup:
+All canonical public identity belongs in [`downstream/config.ts`](downstream/config.ts): product
+names, repository, update tag and artifact names, bundle IDs, URL schemes, Expo ownership, Apple
+team, service name, and state directories. Credentials belong only in GitHub Actions, Expo, App
+Store Connect, or deployed secret files.
 
-| File                                         | What it controls                         |
-| -------------------------------------------- | ---------------------------------------- |
-| `downstream/config.ts`                       | Canonical personal distribution identity |
-| `apps/mobile/app.config.ts`                  | Expo project and iOS app identity        |
-| `apps/mobile/eas.json`                       | Personal iOS build and update channel    |
-| `scripts/build-desktop-artifact.ts`          | macOS packaging identity                 |
-| `apps/desktop/scripts/electron-launcher.mjs` | macOS development bundle identity        |
-| `apps/desktop/src/app/DesktopEnvironment.ts` | Desktop name and local storage locations |
+Tangent uses `~/.bpdev-code` and Electron's `bpdev-code` directory. It must never fall back to the
+official app's state or update source. Each macOS release includes
+`tangent-server-X.Y.Z.tgz` and its SHA-256 sidecar; local update, SSH launch, service installation,
+and pinned runtime resolution all use that verified GitHub Release artifact rather than the
+upstream npm package.
 
-The fork's workflows start with `personal-`. The upstream release workflows are left alone to keep
-syncs simple, but they should be disabled in this repository's Actions settings:
+## Active fork features
 
-- `CI`
-- `Release`
-- `Deploy Relay`
-- `Mobile EAS Preview`
-- `Mobile EAS Production`
+The dated [2026-08-01 audit](docs/fork/audit-2026-08-01.md) records the complete downstream commit
+ledger, the keep/restore review, defects found, and their disposition.
 
-## Releases
+| ID                 | Kept behavior                                                                   | Status               | Maintenance record                                           | Focused verification                                                                                                                                                                                                                                                                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FORK-DIST-001`    | Tangent identity, macOS/iOS release, server self-update, and service boundaries | Active               | [Personal distribution](docs/personal-distribution.md)       | `vp test scripts/personal-distribution-identity.test.ts scripts/build-desktop-artifact.test.ts apps/server/src/cloud/serverRelease.test.ts apps/server/src/cloud/pinnedRuntime.test.ts apps/server/src/cloud/selfUpdate.test.ts apps/server/src/cli/service.test.ts apps/desktop/src/app/DesktopEnvironment.test.ts packages/ssh/src/command.test.ts` |
+| `FORK-CHAT-001`    | Managed generic chats without a user project                                    | Active               | [Generic chat](docs/fork/generic-chat.md)                    | `vp test packages/shared/src/genericChat.test.ts packages/client-runtime/src/state/projectGrouping.genericChat.test.ts apps/server/src/genericChat.test.ts apps/server/src/orchestration/Layers/ProviderCommandReactor.genericChat.test.ts apps/mobile/src/lib/repositoryGroups.test.ts`                                                              |
+| `FORK-HERMES-001`  | Hermes TUI-gateway provider and automation management                           | Active, early access | [Hermes](docs/fork/hermes.md)                                | `vp test apps/server/src/provider/hermes apps/server/src/persistence/Migrations/036_CloseInterruptedHermesUserInputs.test.ts packages/client-runtime/src/operations/hermesAutomations.test.ts apps/web/src/components/settings/SettingsPanels.logic.test.ts`                                                                                          |
+| `FORK-PUSH-001`    | Personal APNs notifications and Live Activities                                 | Active               | [Personal push relay](docs/fork/personal-push-relay.md)      | `vp test apps/push-relay/src apps/server/src/personalPush apps/server/src/relay/AgentAwarenessRelay.test.ts apps/mobile/src/features/agent-awareness/remoteRegistration.test.ts`                                                                                                                                                                      |
+| `FORK-IMAGE-001`   | Shared HEIC/HEIF-to-JPEG upload normalization                                   | Active               | [Image normalization](docs/fork/image-normalization.md)      | `vp test apps/server/src/imageNormalization.test.ts apps/server/src/orchestration/Normalizer.test.ts`                                                                                                                                                                                                                                                 |
+| `FORK-CODEX-001`   | Codex MCP tool-call approval elicitations                                       | Active, temporary    | [Codex MCP approvals](docs/fork/codex-mcp-tool-approvals.md) | `vp test apps/server/src/provider/CodexMcpApproval.test.ts apps/server/src/provider/Layers/CodexAdapter.test.ts apps/server/src/provider/Layers/CodexSessionRuntime.test.ts apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.test.ts apps/web/src/session-logic.test.ts apps/mobile/src/lib/threadActivity.test.ts`                      |
+| `FORK-PALETTE-001` | Control-N/Control-P command-palette navigation                                  | Active, temporary    | [Ownership map](#fork-palette-001)                           | `vp test apps/web/src/components/CommandPalette.logic.test.ts` plus a web keyboard smoke test                                                                                                                                                                                                                                                         |
 
-The iOS app is distributed through TestFlight. Native builds and OTA updates use the EAS
-`personal` channel. Expo's fingerprint runtime policy keeps an OTA update from reaching a binary
-with incompatible native code.
+## Restored to upstream on 2026-08-01
 
-The macOS app is published through this repository's GitHub Releases. It uses `~/.bpdev-code` for
-state and `bpdev-code` for Electron data, so it can run next to the official app without sharing
-files. Each `personal-vX.Y.Z` release also carries `tangent-server-X.Y.Z.tgz` and its SHA-256 file;
-remote launch, manual relaunch, self-update, and background-service setup must use that artifact
-rather than the upstream npm package.
+These changes were deliberately removed. Do not reintroduce them during conflict resolution unless
+they are separately reviewed and registered again.
 
-## Fork feature delta registry
+| Former delta                                                                                                                             | Restored behavior                                                                                                                                                                  |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude lifecycle patch (`b9726d12c`, `5e79c1f72`)                                                                                        | Claude adapter and turn lifecycle now match upstream.                                                                                                                              |
+| Cursor ACP compatibility patch (`fbbd07304`)                                                                                             | Cursor and shared ACP runtime/protocol code now match upstream.                                                                                                                    |
+| Rich tool rendering, custom payload projection, and tool-history scrolling (`e32b3937e` through `17ceb6a0d`, `062a208a4`, `8065e635f`)   | Tool projection, transport, folding, and web/mobile presentation now match upstream.                                                                                               |
+| Provider-neutral `agent.*` lifecycle (`7cd6494ce`)                                                                                       | Custom contracts and client rows were removed. Hermes `subagent.*` notifications use upstream `task.started`, `task.progress`, and `task.completed` events keyed by `subagent_id`. |
+| Mobile caching, loading, scrolling, foreground wakeup, and rendering patches (`bf2b71fb1`, `49ce8bf1b`, general portions of `cef261314`) | Those paths now match upstream. The notification endpoint reconciliation portion of `cef261314` remains under `FORK-PUSH-001`.                                                     |
+| Completed-turn retention and snapshot/activity limits (`4d3557ff4`, remaining `FORK-ACTIVITY-001`)                                       | Projection and retention behavior now match upstream.                                                                                                                              |
+| iOS smart-dash override (`869ab2727`)                                                                                                    | The native composer now matches upstream; Tangent no longer owns mobile text behavior.                                                                                             |
+| User-message response grouping (`139da6bb5`)                                                                                             | Web and mobile use upstream provider-turn folding.                                                                                                                                 |
+| Mobile thread-list default (`81d721e43`)                                                                                                 | Already absorbed by upstream and has no remaining Tangent ownership.                                                                                                               |
 
-Agents must read the referenced maintenance record before rebasing upstream or modifying a listed
-feature.
+The historical Claude, Cursor, activity-retention, mobile-reliability, tool-presentation, and
+provider-neutral-agent maintenance files were removed with their code so they cannot be mistaken
+for active requirements.
 
-| ID                 | Feature                                           | Status               | Maintenance record                                                                 | Tests                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| ------------------ | ------------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `FORK-CHAT-001`    | Directoryless generic chat                        | Active               | [`docs/fork/generic-chat.md`](docs/fork/generic-chat.md)                           | `vp test packages/shared/src/genericChat.test.ts packages/client-runtime/src/state/projectGrouping.genericChat.test.ts apps/server/src/genericChat.test.ts apps/server/src/orchestration/Layers/ProviderCommandReactor.genericChat.test.ts apps/web/src/components/chat/MessagesTimeline.logic.test.ts apps/mobile/src/lib/repositoryGroups.test.ts apps/mobile/src/lib/threadActivity.test.ts`                                                                                                   |
-| `FORK-CLAUDE-001`  | Claude subagent lifecycle correctness             | Active, temporary    | [`docs/fork/claude-subagent-lifecycle.md`](docs/fork/claude-subagent-lifecycle.md) | `vp test apps/server/src/provider/Layers/ClaudeAdapter.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `FORK-HERMES-001`  | Hermes Agent provider and automation management   | Active, early access | [`docs/fork/hermes.md`](docs/fork/hermes.md)                                       | `vp test apps/server/src/provider/hermes apps/server/src/persistence/Migrations/036_CloseInterruptedHermesUserInputs.test.ts apps/web/src/session-logic.test.ts apps/mobile/src/lib/threadActivity.test.ts packages/contracts/src/settings.test.ts packages/client-runtime/src/operations/hermesAutomations.test.ts apps/web/src/components/settings/SettingsPanels.logic.test.ts`                                                                                                                |
-| `FORK-IMAGE-001`   | Provider-safe HEIC/HEIF upload normalization      | Active               | [`docs/fork/image-normalization.md`](docs/fork/image-normalization.md)             | `vp test run apps/server/src/imageNormalization.test.ts apps/server/src/orchestration/Normalizer.test.ts`                                                                                                                                                                                                                                                                                                                                                                                         |
-| `FORK-PUSH-001`    | Tailnet APNs notification and Live Activity relay | Active               | [`docs/fork/personal-push-relay.md`](docs/fork/personal-push-relay.md)             | `vp test apps/push-relay/src apps/server/src/personalPush apps/server/src/serverSettings.test.ts apps/server/src/relay/AgentAwarenessRelay.test.ts apps/mobile/src/features/agent-awareness/remoteRegistration.test.ts packages/contracts/src/settings.test.ts`                                                                                                                                                                                                                                   |
-| `FORK-CODEX-001`   | Codex MCP tool approval prompts                   | Active, temporary    | [`docs/fork/codex-mcp-tool-approvals.md`](docs/fork/codex-mcp-tool-approvals.md)   | `vp test apps/server/src/provider/CodexMcpApproval.test.ts apps/server/src/provider/Layers/CodexAdapter.test.ts apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.test.ts apps/web/src/session-logic.test.ts apps/mobile/src/lib/threadActivity.test.ts`                                                                                                                                                                                                                              |
-| `FORK-CURSOR-001`  | Cursor ACP protocol compatibility                 | Active, temporary    | [`docs/fork/cursor-acp-protocol.md`](docs/fork/cursor-acp-protocol.md)             | `vp test apps/server/src/provider/Layers/CursorAdapter.test.ts apps/server/src/provider/acp/AcpAdapterSupport.test.ts apps/server/src/provider/acp/AcpJsonRpcConnection.test.ts apps/server/src/provider/acp/AcpRuntimeModel.test.ts apps/server/src/provider/acp/CursorAcpExtension.test.ts`                                                                                                                                                                                                     |
-| `FORK-IOS-001`     | CLI-safe iOS composer input                       | Active               | [`FORK-IOS-001 ownership map`](#fork-ios-001-ownership-map)                        | `vp run lint:mobile`, iOS Simulator composer smoke test                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `FORK-PALETTE-001` | Control-key command palette navigation            | Active               | [`FORK-PALETTE-001 ownership map`](#fork-palette-001-ownership-map)                | `vp test apps/web/src/components/CommandPalette.logic.test.ts`, web command palette smoke test                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `FORK-AGENT-001`   | Provider-neutral subagent lifecycle               | Active               | [`docs/fork/subagent-lifecycle.md`](docs/fork/subagent-lifecycle.md)               | `vp test packages/contracts/src/providerRuntime.test.ts apps/server/src/provider/Layers/CodexAdapter.test.ts apps/server/src/provider/Layers/CodexSessionRuntime.test.ts apps/server/src/provider/Layers/ClaudeAdapter.test.ts apps/server/src/provider/Layers/OpenCodeAdapter.test.ts apps/server/src/provider/Layers/CursorAdapter.test.ts apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.test.ts apps/web/src/session-logic.test.ts apps/mobile/src/lib/threadActivity.test.ts` |
+## Ownership and sync rules
 
-## Retired fork deltas
-
-- On 2026-07-30, `FORK-TOOLS-001` was retired in favor of upstream's
-  `ActivityPayloadProjection`. Network snapshots now keep upstream's compact non-MCP fields, pass
-  only a 32 KiB bounded MCP item projection, and leave the full payload only in persistence.
-  Tangent's provider-specific detail model, custom web/mobile detail renderers, and
-  pre-persistence payload bounds were removed.
-- On 2026-07-30, the user-message response grouping that had been maintained with generic chat was
-  retired. Web and mobile now use upstream provider-turn folding. A provider that splits one user
-  response across multiple turns can therefore produce multiple work groups, and a rapid follow-up
-  attached to an existing provider turn can share that turn's group.
-
-### FORK-PALETTE-001 ownership map
+### FORK-DIST-001
 
 Fork-owned paths:
 
-- `FORK.md`
+- `downstream/config.ts`
+- `.github/workflows/personal-*.yml`
+- `apps/mobile/src/features/updates/app-updates.ts` and its focused test
+- `docs/personal-distribution.md`
+- `scripts/personal-distribution-identity.test.ts`
 
 Shared upstream touchpoints:
 
-- `apps/web/src/components/CommandPalette.tsx`
-- `apps/web/src/components/CommandPalette.logic.ts`
-- `apps/web/src/components/CommandPalette.logic.test.ts`
+- branding assets and identity consumers under `apps/web`, `apps/desktop`, `apps/mobile`, and
+  `assets/`;
+- `apps/mobile/app.config.ts`, `apps/mobile/eas.json`, and widget asset configuration;
+- desktop package, environment, launcher, window, and packaging scripts;
+- server release, pinned-runtime, self-update, service, CLI, and SSH-launch paths;
+- install, update, and operations documentation.
 
-Keep unmodified Control-N and Control-P mapped to the command palette's existing next and previous
-item navigation so highlighting, wrapping, and scrolling remain consistent with the arrow keys.
-Remove this delta when upstream provides equivalent control-key navigation.
+Invariants:
 
-### FORK-IOS-001 ownership map
+- Preserve the repository, `personal-v` tag prefix, `tangent-server` artifact prefix,
+  `tangent.service`, source-identity sentinel, personal Expo channel, bundle IDs, URL schemes, and
+  separate state roots.
+- The updater streams into a unique temporary file, verifies SHA-256 before rename, and retains the
+  current plus one prior archive. Never restore whole-response archive buffering.
+- Automatic mobile update checks treat network and dev-client errors as recoverable operation
+  failures. They stay quiet on launch; a user-initiated check reports the error in the settings UI.
+- A matching upstream package version is not an equivalent update source.
+- Release workflows must not publish unless checks pass and the requested version is absent.
+
+### FORK-CHAT-001
 
 Fork-owned paths:
 
-- `FORK.md`
+- `packages/shared/src/genericChat.ts`
+- `apps/server/src/genericChat.ts` and focused generic-chat tests
+- `apps/mobile/src/features/threads/use-start-generic-chat.ts`
+- `apps/mobile/src/features/threads/ProjectThreadRouteGuard.tsx`
+- `docs/fork/generic-chat.md`
 
-Shared upstream touchpoints:
+Shared upstream touchpoints include project grouping, server startup, provider session creation,
+new-thread actions, and the web/mobile project-capability seams.
 
-- `apps/mobile/modules/t3-composer-editor/ios/T3ComposerEditorView.swift`
+Invariants:
 
-Keep `UITextView.smartDashesType` disabled in the native composer so iOS does not rewrite ASCII
-`--` into an em dash and corrupt CLI flags such as `--global`. Preserve normal autocorrection and
-spell-check behavior. Remove this delta when upstream provides equivalent literal-input handling
-for the iOS composer.
+- `t3code-generic-chat` is the stable capability marker. Never infer the feature from a title or
+  path, and never create per-device IDs.
+- Startup creates or repairs the managed project without replacing its model preference or
+  deleting threads.
+- Every turn receives the generic-chat provider context, uses `approval-required`, and is pinned to
+  the app-owned scratch cwd even when stale thread metadata contains a worktree.
+- Web and mobile hide files, Git, worktrees, terminals, diffs, scripts, and related deep links.
+- The prompt and cwd are best-effort behavior, not a provider-independent filesystem jail. Do not
+  document them as containment.
+- Conversation folding, activities, and tool calls stay upstream-owned.
 
-### FORK-IMAGE-001 ownership map
+### FORK-HERMES-001
+
+Fork-owned paths:
+
+- `apps/server/src/provider/hermes/`
+- Hermes automation routes, state, and UI under `apps/web` and `apps/mobile`
+- `packages/contracts/src/hermesAutomation.ts`
+- Hermes automation operations/state under `packages/client-runtime`
+- `docs/fork/hermes.md` and `docs/user/hermes.md`
+
+Shared touchpoints are additive provider registrations in contracts, settings, RPC, server
+drivers, orchestration ingestion, provider pickers/icons, navigation, and settings surfaces.
+
+Invariants:
+
+- Manual chats use the authenticated, supervised loopback TUI gateway, not ACP.
+- One provider instance owns one explicit profile and one gateway backend.
+- Durable cursors remain `{ schemaVersion: 2, transport: "tui-gateway", sessionId }`; legacy ACP
+  cursors are intentionally not loaded.
+- `prompt.submit` is supervised without blocking `sendTurn`, preserving steering and interruption.
+- Gateway event order is preserved per session and all client-visible state uses canonical runtime
+  events.
+- Open-ended prompts remain valid with an empty options list.
+- `subagent.*` events require a stable `subagent_id` and project through upstream task events; there
+  is no Tangent `agent.*` contract.
+- Thread lock entries are reference-counted and removed when no operation is using them.
+- Provider setup stays terminal-owned; the app reports the remediation command but does not run it.
+- Automation delivery and the gateway desktop cron ticker remain disabled.
+
+Current compatibility baseline: Hermes Agent 0.19.0, TUI gateway contract 2. Revalidate the
+programmatic guide, gateway types/transport/server handlers, focused fixtures, and a real binary
+before raising the baseline. Remove this feature only when upstream can continue or migrate the
+versioned sessions and provides equivalent profile-aware gateway behavior.
+
+### FORK-PUSH-001
+
+Fork-owned paths:
+
+- `apps/push-relay/`
+- `apps/server/src/personalPush/`
+- `.github/workflows/personal-push-relay-image.yml`
+- `docs/fork/personal-push-relay.md`
+
+Shared touchpoints include relay/settings contracts, server configuration and HTTP/WS wiring, the
+canonical awareness relay, web settings, mobile startup, and remote registration.
+
+Invariants:
+
+- The relay URL is server-owned; its bearer token remains in `ServerSecretStore` and is redacted
+  from settings snapshots and logs.
+- Notification and Live Activity watermarks are independent and advance only after APNs accepts
+  that channel. Invalid tokens are cleared; transient failures remain retryable.
+- Activity rows carry phase-specific expirations and are physically pruned from SQLite.
+- One aggregate is computed per ordered publication, delivery fan-out is bounded, and the ordered
+  queue rejects excess work instead of growing without limit.
+- APNs provider tokens and HTTP/2 sessions are reused and closed on shutdown.
+- Mobile reconciles the durable environment catalog and keeps the last usable bearer endpoint while
+  a prepared socket is replaced. Connection churn must not trigger duplicate APNs registration.
+- Keep personal publishing as a second sink beside upstream awareness behavior.
+
+### FORK-IMAGE-001
 
 Fork-owned paths:
 
@@ -122,324 +200,67 @@ Fork-owned paths:
 - `apps/server/src/testFixtures/heic.ts`
 - `docs/fork/image-normalization.md`
 
-Shared upstream touchpoints containing image normalization:
+Shared touchpoints are the server package/lockfile and orchestration upload normalizer.
 
-- `apps/server/package.json`
-- `pnpm-lock.yaml`
-- `apps/server/src/orchestration/Normalizer.ts`
-- `apps/server/src/orchestration/Normalizer.test.ts`
-- `docs/fork/hermes.md`
+Invariants:
 
-Keep normalization at the shared upload-ingestion boundary so every provider and persisted asset
-sees the same canonical JPEG bytes and metadata. Remove this feature only when upstream accepts
-HEIC/HEIF uploads end to end, including providers that reject those filename extensions or MIME
-types.
+- Normalize once at shared upload ingestion, before attachment metadata/path creation, so all
+  providers and persisted assets see the same JPEG.
+- Recognize HEIC-family MIME types and bounded ISO-BMFF major/compatible HEIC brands. A correctly
+  signed `application/octet-stream` upload is allowed; unrelated non-image payloads are rejected.
+- Do not treat AVIF's `avif` brand as HEIC merely because it uses an ISO-BMFF container.
+- Decode in a resource-limited worker, enforce pixel/time/output bounds, and preserve byte-for-byte
+  pass-through for supported non-HEIC images.
 
-### Image normalization upstream sync playbook
-
-1. Compare upstream changes to upload contracts, `imageMime.ts`, attachment persistence,
-   `Normalizer.ts`, asset serving, and every provider's image capability boundary.
-2. Preserve normalization before attachment metadata and paths are created. Do not move conversion
-   into Hermes or duplicate it across provider adapters.
-3. Review upstream dependency and bundling changes for `heic-decode`, `libheif-js`, worker threads,
-   and `jpeg-js`; confirm the packaged server can resolve both direct dependencies.
-4. Keep signature-based detection for mislabeled HEIC/HEIF files and byte-for-byte pass-through for
-   JPEG, PNG, GIF, WebP, and AVIF.
-5. Run the focused image tests, the affected provider attachment tests, the server bundle build,
-   `vp check`, and `vp run typecheck`.
-6. Verify one real HEIC upload on each affected client surface. Record server-only coverage
-   separately when browser, simulator, or provider-binary verification did not run.
-
-### Image normalization compatibility baseline
-
-| Date       | Upstream baseline | Provider baseline   | Verification                                                                                                                                                                                                                                                                                                                                                                              |
-| ---------- | ----------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-07-25 | `ece05087`        | Hermes Agent 0.19.0 | Source review confirmed Hermes rejects `.heic`/`.heif` at `image.attach`. A generated real HEIC fixture passed decode, JPEG normalization, metadata/path creation, and persistence tests. Hermes-focused tests, server bundle, `vp check`, and repository typecheck passed. Live web/mobile verification did not run because the isolated local server could not bind within the sandbox. |
-
-### FORK-CLAUDE-001 ownership map
+### FORK-CODEX-001
 
 Fork-owned paths:
 
-- `docs/fork/claude-subagent-lifecycle.md`
-
-Shared upstream touchpoints containing the Claude subagent lifecycle fix:
-
-- `apps/server/src/provider/Layers/ClaudeAdapter.ts`
-- `apps/server/src/provider/Layers/ClaudeAdapter.test.ts`
-
-Preserve isolation of nested Claude conversation messages from the parent turn's content-block
-index namespace. Once a Claude task lifecycle starts, prefer the SDK's authoritative
-`session_state_changed: idle` signal. If that event is lost, recover only after every observed task
-is terminal; fail explicitly rather than hanging forever if a task remains active past the hard
-timeout. Keep `task_updated` as internal bookkeeping rather than a runtime warning. Remove this
-patch when upstream provides equivalent nested-message isolation and bounded task-aware completion.
-
-### FORK-CODEX-001 ownership map
-
-Fork-owned paths:
-
-- `apps/server/src/provider/CodexMcpApproval.ts`
+- `apps/server/src/provider/CodexMcpApproval.ts` and its tests
 - `docs/fork/codex-mcp-tool-approvals.md`
 
-Shared upstream touchpoints containing the MCP approval path:
+Shared touchpoints include Codex session/adapter mapping, request contracts, orchestration activity
+projection, and web/mobile approval derivation/actions.
 
-- `packages/contracts/src/orchestration.ts`
-- `packages/contracts/src/providerRuntime.ts`
-- `packages/effect-codex-app-server/src/errors.ts`
-- `apps/server/src/provider/Layers/CodexSessionRuntime.ts`
-- `apps/server/src/provider/Layers/CodexAdapter.ts`
-- `apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts`
-- `apps/web/src/session-logic.ts`
-- `apps/web/src/components/chat/ComposerPendingApprovalPanel.tsx`
-- `apps/web/src/components/chat/ComposerPendingApprovalActions.tsx`
-- `apps/web/src/components/chat/ChatComposer.tsx`
-- `apps/mobile/src/lib/threadActivity.ts`
-- `apps/mobile/src/features/threads/PendingApprovalCard.tsx`
+Invariants:
 
-Remove this feature when upstream T3 handles Codex `mcpServer/elicitation/request` messages tagged
-with `codex_approval_kind: "mcp_tool_call"`, including session-persistence metadata and web/mobile
-approval rendering. Preserve the immediate cancel response for unsupported structured or URL
-elicitations unless upstream adds a complete input flow for them.
+- Handle `mcpServer/elicitation/request` only when it is an empty form explicitly tagged
+  `_meta.codex_approval_kind: "mcp_tool_call"`. Cancel rich forms, URLs, and unknown elicitations;
+  Tangent does not implement arbitrary MCP elicitation UI.
+- Preserve `accept`, `decline`, and `cancel` semantics. Advertise session approval only when Codex
+  includes `session` in `_meta.persist`.
+- Label the request as an MCP tool call, not as a guaranteed computer-use call.
+- Remove this extension when the upstream Codex adapter handles the same tagged request and
+  persistence contract end to end.
 
-### FORK-CURSOR-001 ownership map
+### FORK-PALETTE-001
 
-Fork-owned paths:
+Shared touchpoints:
 
-- `docs/fork/cursor-acp-protocol.md`
+- `apps/web/src/components/CommandPalette.tsx`
+- `apps/web/src/components/CommandPalette.logic.ts`
+- `apps/web/src/components/CommandPalette.logic.test.ts`
 
-Shared upstream touchpoints containing Cursor protocol compatibility behavior:
+Keep unmodified Control-N and Control-P mapped to the palette's existing next/previous navigation,
+including wraparound, highlighted-item state, and scrolling. Do not install global handlers outside
+the open palette. Remove this delta when upstream provides equivalent control-key navigation.
 
-- `README.md`
-- `apps/server/scripts/acp-mock-agent.ts`
-- `apps/server/src/provider/Layers/CursorAdapter.ts`
-- `apps/server/src/provider/Layers/CursorAdapter.test.ts`
-- `apps/server/src/provider/acp/AcpAdapterSupport.ts`
-- `apps/server/src/provider/acp/AcpAdapterSupport.test.ts`
-- `apps/server/src/provider/acp/AcpCoreRuntimeEvents.ts`
-- `apps/server/src/provider/acp/AcpJsonRpcConnection.test.ts`
-- `apps/server/src/provider/acp/AcpRuntimeModel.ts`
-- `apps/server/src/provider/acp/AcpRuntimeModel.test.ts`
-- `apps/server/src/provider/acp/AcpSessionRuntime.ts`
-- `apps/server/src/provider/acp/CursorAcpExtension.ts`
-- `apps/server/src/provider/acp/CursorAcpExtension.test.ts`
+## Current upstream baseline
 
-Keep Cursor-specific extension decoding at the adapter boundary while preserving generic ACP
-behavior for other providers. Remove this feature only when upstream handles the same Cursor CLI
-authentication command, mode/model configuration, interactive extension requests, task/todo/plan
-events, and session lifecycle without weakening the shared ACP protocol implementation.
+This reduction was reviewed after merging `upstream/main` at `283c7ac4` into Tangent, producing
+merge commit `dbba8fff8`. The upstream comparison for future syncs starts at `283c7ac4`; update this
+line and the audit whenever the baseline moves.
 
-### FORK-AGENT-001 ownership map
+## Required verification
 
-Fork-owned paths:
-
-- `docs/fork/subagent-lifecycle.md`
-
-Shared upstream touchpoints containing provider-neutral subagent handling:
-
-- `packages/contracts/src/baseSchemas.ts`
-- `packages/contracts/src/providerRuntime.ts`
-- `packages/shared/src/toolActivity.ts`
-- `apps/server/src/provider/Layers/CodexSessionRuntime.ts`
-- `apps/server/src/provider/Layers/CodexAdapter.ts`
-- `apps/server/src/provider/Layers/ClaudeAdapter.ts`
-- `apps/server/src/provider/Layers/OpenCodeAdapter.ts`
-- `apps/server/src/provider/Layers/CursorAdapter.ts`
-- `apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts`
-- `apps/web/src/session-logic.ts`
-- `apps/web/src/components/chat/MessagesTimeline.tsx`
-- `apps/mobile/src/lib/threadActivity.ts`
-- focused tests for the modules above
-
-Keep agent lifecycle distinct from the collaboration tool call that created or interacted with an
-agent. Child provider transcripts must never enter the parent assistant stream unless they carry a
-stable agent identity and are rendered in an isolated transcript. Web and mobile correlate the
-projected lifecycle by stable ID and use compact upstream work rows; the retired rich tool
-presentation is not part of this feature. Hermes remains outside this compatibility layer until its
-direct runtime integration emits the same canonical events. Remove this patch when upstream has
-equivalent provider-neutral lifecycle, hierarchy, isolation, and cross-platform presentation.
-
-### FORK-PUSH-001 ownership map
-
-Fork-owned paths:
-
-- `.dockerignore`
-- `.github/workflows/personal-push-relay-image.yml`
-- `apps/push-relay/`
-- `apps/server/src/personalPush/`
-- `docs/fork/personal-push-relay.md`
-
-Shared upstream touchpoints containing additive personal-relay behavior:
-
-- `.gitignore`
-- `packages/contracts/src/settings.ts`
-- `packages/contracts/src/rpc.ts`
-- `packages/contracts/src/server.ts`
-- `packages/client-runtime/src/state/server.ts`
-- `packages/contracts/src/relay.ts`
-- `apps/server/src/config.ts`
-- `apps/server/src/cli/config.ts`
-- `apps/server/src/http.ts`
-- `apps/server/src/server.ts`
-- `apps/server/src/serverSettings.ts`
-- `apps/server/src/ws.ts`
-- `apps/server/src/relay/AgentAwarenessRelay.ts`
-- `apps/web/src/components/settings/SettingsPanels.tsx`
-- `apps/mobile/src/App.tsx`
-- `apps/mobile/src/features/agent-awareness/remoteRegistration.ts`
-
-The personal relay runs alongside the hosted relay path. Its URL and password are server-owned
-settings; the password must remain in `ServerSecretStore` and be redacted from settings snapshots.
-Keep notification and Live Activity delivery watermarks independent and advance each only after APNs
-accepts that channel so transient failures remain retryable without duplicating successful sends.
-During upstream syncs, preserve the
-canonical awareness projection and its confirmation/deduplication worker, then reapply personal
-publishing as a second sink. Review mobile registration changes for new token APIs or authentication
-methods before adapting the connection bridge. The bridge reconciles the durable environment
-catalog and retains the last usable personal bearer endpoint while a prepared socket connection is
-being replaced; prepared-connection churn must not trigger APNs or Live Activity re-registration.
-The APNs key and relay bearer token must never enter git, logs, issues, or PR text.
-
-### FORK-CHAT-001 ownership map
-
-Fork-owned paths:
-
-- `packages/shared/src/genericChat.ts`
-- `packages/client-runtime/src/state/projectGrouping.genericChat.test.ts`
-- `apps/server/src/genericChat.ts`
-- focused `genericChat.test.ts` files
-- `apps/mobile/src/features/threads/use-start-generic-chat.ts`
-- `apps/mobile/src/features/threads/ProjectThreadRouteGuard.tsx`
-- `docs/fork/generic-chat.md`
-
-Shared upstream touchpoints containing additive generic-chat behavior:
-
-- `packages/shared/package.json`
-- `packages/client-runtime/src/state/projectGrouping.ts`
-- `apps/server/src/serverRuntimeStartup.ts`
-- `apps/server/src/orchestration/Layers/ProviderCommandReactor.ts`
-- `apps/web/src/hooks/useHandleNewThread.ts`
-- `apps/web/src/components/NoActiveThreadState.tsx`
-- `apps/web/src/components/Sidebar.tsx`
-- `apps/web/src/components/ChatView.tsx`
-- `apps/web/src/components/RightPanelTabs.tsx`
-- mobile home, thread-list, new-task, workspace, Git, file, and terminal surfaces under
-  `apps/mobile/src/`
-
-The protocol still requires projects and provider cwd values. The managed scratch workspace preserves
-those invariants; the reserved project ID selects provider context, runtime restrictions, logical
-grouping, and client capability guards.
-
-### Generic chat upstream sync playbook
-
-1. Compare upstream changes to project startup, provider session creation, runtime-mode restarts,
-   project grouping, and new-thread flows on web and mobile.
-2. Preserve the reserved ID and idempotent startup repair behavior.
-3. Reapply UI guards through shared capability seams; do not fork whole upstream components.
-4. Verify that provider context is still added to every initial, resumed, and attachment-only turn.
-5. Run the focused tests plus `vp check`, `vp run typecheck`, and `vp run lint:mobile`.
-
-Remove `FORK-CHAT-001` only when upstream provides equivalent non-project chat semantics, including
-safe migration or continuation of threads stored under the reserved project. A cosmetic New Chat
-button without the provider and capability boundaries is not equivalent.
-
-### FORK-HERMES-001 ownership map
-
-Fork-owned paths:
-
-- `apps/server/src/provider/hermes/`
-- `apps/web/src/components/HermesIcon.tsx`
-- `apps/web/src/components/automations/`
-- `apps/web/src/routes/automations.tsx`
-- `apps/web/src/state/hermesAutomations.ts`
-- `apps/mobile/src/features/automations/`
-- `apps/mobile/src/state/hermesAutomations.ts`
-- `packages/contracts/src/hermesAutomation.ts`
-- `packages/client-runtime/src/operations/hermesAutomations.ts`
-- `packages/client-runtime/src/state/hermesAutomations.ts`
-- `docs/fork/hermes.md`
-- `docs/providers/hermes.md`
-
-Shared upstream touchpoints containing small additive entries:
-
-- `AGENTS.md`
-- `packages/contracts/src/index.ts`
-- `packages/contracts/src/rpc.ts`
-- `packages/contracts/src/settings.ts`
-- `packages/contracts/src/model.ts`
-- `packages/client-runtime/package.json`
-- `packages/client-runtime/src/operations/index.ts`
-- `apps/server/src/provider/builtInDrivers.ts`
-- `packages/contracts/src/providerRuntime.ts`
-- `apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts`
-- `apps/server/src/ws.ts`
-- `apps/web/src/routeTree.gen.ts`
-- `apps/web/src/components/Sidebar.tsx`
-- `apps/web/src/session-logic.ts`
-- `apps/web/src/components/settings/providerDriverMeta.ts`
-- `apps/web/src/components/settings/SettingsPanels.tsx`
-- `apps/web/src/components/settings/SettingsPanels.logic.ts`
-- `apps/web/src/components/chat/providerIconUtils.ts`
-- `apps/mobile/src/Stack.tsx`
-- `apps/mobile/src/features/settings/SettingsRouteScreen.tsx`
-- `apps/mobile/src/features/settings/components/settings-sheet-targets.ts`
-- `apps/mobile/src/components/ProviderIcon.tsx`
-- `docs/README.md`
-
-The provider is deliberately absent from the legacy `ServerSettings.providers` object. It is
-registered only through `providerInstances`, so removing this fork from a build leaves its settings
-as a preserved unavailable-driver envelope rather than corrupting configuration.
-
-### Hermes upstream sync playbook
-
-1. Record the old and new `upstream/main` SHAs.
-2. Intersect the upstream diff with the shared touchpoints above.
-3. Preserve fork-owned paths unless an upstream provider interface changed.
-4. Resolve shared-file conflicts by reapplying only the additive Hermes entry or the reasoning-stream
-   compatibility case; do not replace the upstream file wholesale.
-5. Review changes to provider instances, Hermes gateway contracts, canonical runtime events, settings forms,
-   and mobile notification ingestion even when Git reports no textual conflict.
-6. Run the Hermes-focused tests, `vp check`, `vp run typecheck`, and `vp run lint:mobile`.
-7. Add a row to the sync ledger describing conflicts and behavioral changes.
-
-### Hermes compatibility baseline
-
-Runtime compatibility is capability-probed; newer Hermes versions are not rejected merely because
-their version differs. The detailed source-review and real-binary smoke coverage lives in
-`docs/fork/hermes.md`. A source review or partial transport smoke must not be presented as a
-successful end-to-end chat.
-
-| Date       | Old upstream | New upstream | Hermes baseline                                        | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ---------- | ------------ | ------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 2026-07-12 | —            | `f61fa949`   | Hermes Agent 0.18.2 (`4281151`) source / ACP SDK 0.9.0 | Deterministic ACP tests passed; a Mac mini smoke reached model selection and verified detailed error output.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| 2026-07-13 | `f61fa949`   | `c1ec1915`   | Hermes Agent 0.18.2 (`4281151`) source / ACP SDK 0.9.0 | No Hermes touchpoints changed; mobile conflicts preserved generic-chat guards and personal app identity.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| 2026-07-14 | `c1ec1915`   | `735240f3`   | Hermes Agent 0.18.2 (`4281151`) source / ACP SDK 0.9.0 | No Hermes touchpoints changed; the additive shared favicon export preserved generic-chat package exports.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| 2026-07-15 | `735240f3`   | `ecb35f75`   | Hermes Agent 0.18.2 (`4281151`) source / ACP SDK 0.9.0 | Upstream added mobile legal routes and Android beta assets; the config conflict preserved personal identity while adopting the new asset layout.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| 2026-07-16 | `ecb35f75`   | `fdca1547`   | Hermes Agent 0.18.2 (`4281151`) source / ACP SDK 0.9.0 | No Hermes provider interfaces changed; mobile conflicts combined share-target flows with generic-chat guards and personal app identity.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| 2026-07-17 | `8b546986`   | `24f9c2a0`   | Hermes Agent 0.18.2 (`4281151`) source / ACP SDK 0.9.0 | Upstream centralized brand assets and added restart-safe ACP assistant IDs; conflicts retained personal identity and combined the runtime UUID with Hermes message boundaries. Codex developer-instruction changes were merged with the fork's approval reviewer. No fork feature had an upstream-equivalent end-to-end implementation.                                                                                                                                                                                                                                                                                                                      |
-| 2026-07-17 | `24f9c2a0`   | `5ca32661`   | Hermes Agent 0.18.2 (`4281151`) source / ACP SDK 0.9.0 | No Hermes touchpoints changed. Upstream's higher-contrast question descriptions were adopted unchanged; its macOS development launcher identity work was adapted to the canonical personal distribution identity.                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| 2026-07-18 | —            | —            | Hermes Agent 0.18.2 / TUI gateway contract 2           | Replaced ACP chat and utility integration with the supervised authenticated loopback TUI gateway. Reviewed Hermes main `614dc194` (contract 3); a real 0.18.2 probe verified ready, setup, model discovery, durable session creation, and close. Legacy ACP sessions are intentionally not migrated.                                                                                                                                                                                                                                                                                                                                                         |
-| 2026-07-19 | `1735e27d`   | `53e3c98a`   | Hermes Agent 0.18.2 / TUI gateway contract 2           | No Hermes runtime interfaces changed. The shared Sidebar conflict kept Tangent branding and Hermes navigation while adopting upstream's nightly/dev header art. The isolated testing workflow was adapted to the personal `.bpdev-code` state root.                                                                                                                                                                                                                                                                                                                                                                                                          |
-| 2026-07-20 | `53e3c98a`   | `5d34f9ff`   | Hermes Agent 0.18.2 / TUI gateway contract 2           | Upstream's T3 Connect, OpenCode resume/title recovery, task-title projection, complete approval details, desktop preview hardening, and mobile glass/header work were adopted. Conflicts preserved generic chat, bounded tool payloads, provider-neutral descendant agents, MCP approvals, Hermes, and personal distribution identity. The redundant compact mobile brand title was retired in favor of the upstream Threads title; the managed chat project gained a server-side deletion guard, and Tangent Connect uses a distinct `tangent.service` unit. No registered fork feature was fully superseded.                                               |
-| 2026-07-24 | `5d34f9ff`   | `ece05087`   | Hermes Agent 0.18.2 / TUI gateway contract 2           | Adopted upstream's first-class `Auto` runtime mode and retired `FORK-CODEX-002` plus its independent reviewer setting. Adopted upstream server self-update and systemd lifecycle management with Tangent distribution boundaries: verified `bpdev97/tangent` GitHub Release archives, source-identity sentinels, `tangent.service`, matching manual/SSH launch URLs, and no upstream npm fallback. Conflicts preserved generic chat, Hermes, push relay, structured tool calls, provider-neutral agents, project grouping, and personal desktop/mobile identity.                                                                                             |
-| 2026-07-25 | `ece05087`   | `5719e8ac`   | Hermes Agent 0.18.2 / TUI gateway contract 2           | Adopted Claude Opus 5 model discovery and aliases plus the web diff collapse-all and fast-mode presentation updates. The merge was conflict-free. The shared model-contract change is Claude-only and does not alter Hermes registration or runtime interfaces; the additive Claude adapter test does not overlap the fork's subagent lifecycle behavior. No registered fork feature was superseded.                                                                                                                                                                                                                                                         |
-| 2026-07-30 | `5719e8ac`   | `605c2bb7`   | Hermes Agent 0.19.0 / TUI gateway contract 2           | Adopted upstream's payload projection, provider-turn folding, connection/runtime work, mobile thread-list v2, settings refactor, self-update progress, and dependency updates. Retired `FORK-TOOLS-001`, Tangent's pre-persistence payload bounds, and user-message response grouping. Preserved generic chat, Hermes, push relay, MCP approvals, provider-neutral agent lifecycle correlation, personal release/service boundaries, and personal desktop/mobile identity.                                                                                                                                                                                   |
-| 2026-08-01 | `605c2bb7`   | `d3037064`   | Hermes Agent 0.19.0 / TUI gateway contract 2           | Adopted upstream's rollback-safe service launcher, bounded reconnect replay, Ghostty web terminal, mobile snooze and thread-list refinements, settings search, pairing CLI, and screenshot tooling. Adapted the launcher to verified personal GitHub Release assets, source-identity sentinels, and `tangent.service`; delayed generic-chat bootstrap until a trial commits and parked the personal push relay at the activation boundary. Preserved generic chat, Hermes, dual push relays, MCP approvals, provider-neutral agent lifecycle correlation, project grouping, and personal desktop/mobile identity. No registered fork feature was superseded. |
-
-Remove `FORK-HERMES-001` only when upstream T3 ships equivalent profile-aware Hermes TUI gateway support and
-current versioned gateway cursors can be migrated or continued without losing sessions. Compare behavior
-and tests before replacing the fork implementation; matching provider branding alone is not
-sufficient.
-
-## Before merging
-
-Run:
+Every completed fork change runs:
 
 ```sh
 vp check
 vp run typecheck
 ```
 
-Also run `vp run lint:mobile` after changing mobile native code or configuration.
-
-Never put credentials in commits, issues, PRs, or chat. The complete setup and first-release notes
-are in `docs/personal-distribution.md`.
+Run `vp run lint:mobile` when mobile TypeScript, configuration, or native code changes. Run the
+focused commands from the registry for touched features. User-visible web/mobile work also receives
+one integrated client pass. Before a release, verify personal identity, build/release inputs, clean
+git scope, and workflow availability; never put credentials in commits, logs, issues, or chat.

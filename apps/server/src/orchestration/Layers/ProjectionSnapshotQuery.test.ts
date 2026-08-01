@@ -967,7 +967,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
     }),
   );
 
-  it.effect("keeps activity ordering consistent and returns only the latest retained history", () =>
+  it.effect("keeps thread detail activity ordering consistent with shell snapshot ordering", () =>
     Effect.gen(function* () {
       const snapshotQuery = yield* ProjectionSnapshotQuery;
       const sql = yield* SqlClient.SqlClient;
@@ -1126,50 +1126,6 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           createdAt: "2026-04-01T00:00:04.000Z",
         },
       ]);
-
-      yield* sql`
-        WITH RECURSIVE activity_sequence(value) AS (
-          SELECT 3
-          UNION ALL
-          SELECT value + 1 FROM activity_sequence WHERE value < 503
-        )
-        INSERT INTO projection_thread_activities (
-          activity_id,
-          thread_id,
-          turn_id,
-          tone,
-          kind,
-          summary,
-          payload_json,
-          sequence,
-          created_at
-        )
-        SELECT
-          printf('activity-sequence-%03d', value),
-          'thread-1',
-          NULL,
-          'info',
-          'runtime.note',
-          printf('sequence %d', value),
-          '{}',
-          value,
-          '2026-04-01T00:00:07.000Z'
-        FROM activity_sequence
-      `;
-
-      const retainedSnapshot = yield* snapshotQuery.getSnapshot();
-      const retainedThreadDetail = yield* snapshotQuery.getThreadDetailById(
-        ThreadId.make("thread-1"),
-      );
-      const retainedSnapshotActivities = retainedSnapshot.threads[0]?.activities ?? [];
-
-      assert.equal(retainedThreadDetail._tag, "Some");
-      assert.equal(retainedSnapshotActivities.length, 500);
-      assert.equal(retainedSnapshotActivities[0]?.sequence, 4);
-      assert.equal(retainedSnapshotActivities.at(-1)?.sequence, 503);
-      if (retainedThreadDetail._tag === "Some") {
-        assert.deepEqual(retainedThreadDetail.value.activities, retainedSnapshotActivities);
-      }
     }),
   );
 

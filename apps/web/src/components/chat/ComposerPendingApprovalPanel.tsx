@@ -17,7 +17,7 @@ export const ComposerPendingApprovalPanel = memo(function ComposerPendingApprova
         ? "File-read approval requested"
         : approval.requestKind === "file-change"
           ? "File-change approval requested"
-          : "Computer-use approval requested";
+          : "MCP tool approval requested";
   const detailLabel =
     approval.requestKind === "command"
       ? "Command"

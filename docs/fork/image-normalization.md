@@ -19,7 +19,7 @@ The upload path is:
 
 ```text
 client data URL
-  -> validate MIME and compressed-byte limit
+  -> validate compressed-byte limit and image/HEIC identity
   -> detect HEIC/HEIF MIME or ISO BMFF ftyp brand
   -> worker-thread decode and JPEG encode
   -> create canonical metadata and .jpg persistence path
@@ -31,10 +31,15 @@ client data URL
 `apps/server/src/orchestration/Normalizer.ts` owns when conversion occurs. Provider adapters must
 remain consumers of the canonical attachment and must not add their own HEIC conversion.
 
-Files that are not HEIC/HEIF remain byte-for-byte pass-through. Detection uses both the declared
-MIME type and the ISO BMFF `ftyp` brand so mislabeled camera uploads still normalize. The first image
-in a HEIF sequence becomes the canonical JPEG; auxiliary images, depth maps, and container metadata
-are intentionally not persisted.
+Files that are not HEIC/HEIF remain byte-for-byte pass-through. Detection accepts a declared
+HEIC/HEIF MIME type or a valid ISO-BMFF `ftyp` box containing a known HEIC major or compatible brand:
+`heic`, `heix`, `hevc`, `hevx`, `heim`, `heis`, `hevm`, or `hevs`. This catches files whose generic
+major brand is `mif1`/`msf1` but whose compatible list identifies HEIC. An
+`application/octet-stream` data URL is accepted only when that signature check succeeds; unrelated
+non-image payloads remain invalid. The `avif` brand is not treated as HEIC.
+
+The first image in a HEIF sequence becomes the canonical JPEG; auxiliary images, depth maps, and
+container metadata are intentionally not persisted.
 
 ## Output policy
 
@@ -80,25 +85,21 @@ single provider's native decoder is not equivalent.
 
 ## Compatibility baseline
 
-On 2026-07-25, Hermes Agent 0.19.0 source review confirmed the gateway extension rejection. A real
-HEIC fixture generated from a repository image verified signature detection, decoding, JPEG output,
-canonical `.jpg`/`image/jpeg` metadata, attachment-path creation, and persisted JPEG bytes. The
-Hermes-focused deterministic suite, server bundle build, `vp check`, and repository-wide typecheck
-passed.
-
-Live web and mobile upload automation did not run: the isolated development server could not bind
-inside the sandbox, and permission to launch it outside the sandbox was rejected. This baseline
-must not be represented as browser-, simulator-, or real-provider-verified attachment coverage.
+On 2026-08-01, deterministic tests used a real HEIC fixture to verify declared-MIME detection,
+compatible-brand detection, `application/octet-stream` ingestion, decoding, JPEG output, canonical
+`.jpg`/`image/jpeg` metadata, attachment-path creation, and persisted JPEG bytes. Client rendering
+and a real-provider upload are separate checks and must not be inferred from those server tests.
 
 ## Revalidation procedure
 
 1. Run
-   `vp test run apps/server/src/imageNormalization.test.ts apps/server/src/orchestration/Normalizer.test.ts`.
+   `vp test apps/server/src/imageNormalization.test.ts apps/server/src/orchestration/Normalizer.test.ts`.
 2. Run the focused attachment tests for every affected provider.
 3. Run `vp run --filter t3 build:bundle`, `vp check`, and `vp run typecheck`.
 4. Upload a real HEIC through web and one representative mobile client. Confirm the persisted
    attachment uses `.jpg`, reports `image/jpeg`, renders in the conversation, and reaches the
    selected provider.
-5. Verify JPEG, PNG, GIF, WebP, and AVIF remain byte-for-byte pass-through.
+5. Verify JPEG, PNG, GIF, WebP, and AVIF remain byte-for-byte pass-through. Include a fixture whose
+   HEIF identity appears only in compatible brands before claiming general signature detection.
 6. Record only checks that actually ran; distinguish deterministic server tests, packaged-server
    checks, provider-binary smokes, and full client coverage.

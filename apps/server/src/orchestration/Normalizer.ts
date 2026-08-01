@@ -13,7 +13,7 @@ import {
 import { createAttachmentId, resolveAttachmentPath } from "../attachmentStore.ts";
 import { ServerConfig } from "../config.ts";
 import { parseBase64DataUrl } from "../imageMime.ts";
-import { normalizeUploadedImage } from "../imageNormalization.ts";
+import { hasHeifSignature, normalizeUploadedImage } from "../imageNormalization.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
 
 export const canonicalizeClientCommandTimestamps = (
@@ -110,13 +110,18 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
       (attachment) =>
         Effect.gen(function* () {
           const parsed = parseBase64DataUrl(attachment.dataUrl);
-          if (!parsed || !parsed.mimeType.startsWith("image/")) {
+          if (!parsed) {
             return yield* new OrchestrationDispatchCommandError({
               message: `Invalid image attachment payload for '${attachment.name}'.`,
             });
           }
 
           const bytes = Buffer.from(parsed.base64, "base64");
+          if (!parsed.mimeType.startsWith("image/") && !hasHeifSignature(bytes)) {
+            return yield* new OrchestrationDispatchCommandError({
+              message: `Invalid image attachment payload for '${attachment.name}'.`,
+            });
+          }
           if (bytes.byteLength === 0 || bytes.byteLength > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
             return yield* new OrchestrationDispatchCommandError({
               message: `Image attachment '${attachment.name}' is empty or too large.`,

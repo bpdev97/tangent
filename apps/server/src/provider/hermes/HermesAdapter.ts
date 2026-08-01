@@ -6,7 +6,6 @@ import {
   ProviderInstanceId,
   type ProviderRuntimeEvent,
   type ProviderSession,
-  RuntimeAgentId,
   RuntimeItemId,
   RuntimeRequestId,
   RuntimeTaskId,
@@ -226,7 +225,9 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
     (yield* makeHermesGatewayRuntime(hermesSettings, options.environment ?? process.env));
   const sessions = new Map<ThreadId, HermesSessionContext>();
   const parentScope = yield* Scope.Scope;
-  const locks = yield* SynchronizedRef.make(new Map<string, Semaphore.Semaphore>());
+  const locks = yield* SynchronizedRef.make(
+    new Map<string, { readonly semaphore: Semaphore.Semaphore; readonly users: number }>(),
+  );
   const events = yield* PubSub.unbounded<ProviderRuntimeEvent>();
   const runtimeContext = yield* Effect.context<never>();
   const runFork = Effect.runForkWith(runtimeContext);
@@ -262,17 +263,32 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
   const getLock = (threadId: ThreadId) =>
     SynchronizedRef.modifyEffect(locks, (current) => {
       const found = current.get(threadId);
-      if (found) return Effect.succeed([found, current] as const);
+      if (found) {
+        const next = new Map(current);
+        next.set(threadId, { ...found, users: found.users + 1 });
+        return Effect.succeed([found.semaphore, next] as const);
+      }
       return Semaphore.make(1).pipe(
         Effect.map((semaphore) => {
           const next = new Map(current);
-          next.set(threadId, semaphore);
+          next.set(threadId, { semaphore, users: 1 });
           return [semaphore, next] as const;
         }),
       );
     });
+  const releaseLock = (threadId: ThreadId) =>
+    SynchronizedRef.update(locks, (current) => {
+      const found = current.get(threadId);
+      if (!found) return current;
+      const next = new Map(current);
+      if (found.users === 1) next.delete(threadId);
+      else next.set(threadId, { ...found, users: found.users - 1 });
+      return next;
+    });
   const withLock = <A, E, R>(threadId: ThreadId, effect: Effect.Effect<A, E, R>) =>
-    Effect.flatMap(getLock(threadId), (lock) => lock.withPermit(effect));
+    Effect.flatMap(getLock(threadId), (lock) =>
+      lock.withPermit(effect).pipe(Effect.ensuring(releaseLock(threadId))),
+    );
   const requireSession = (threadId: ThreadId) => {
     const context = sessions.get(threadId);
     return !context || context.stopped
@@ -796,44 +812,50 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
       case "subagent.tool":
       case "subagent.progress":
       case "subagent.complete": {
-        const agentId = RuntimeAgentId.make(text(payload.subagent_id) ?? (yield* uuid));
-        const identity = {
-          agentId,
-          ...(text(payload.parent_id)
-            ? { parentAgentId: RuntimeAgentId.make(text(payload.parent_id)!) }
-            : {}),
-          ...(text(payload.goal) ? { description: text(payload.goal) } : {}),
-          ...(text(payload.model) ? { model: text(payload.model) } : {}),
-        };
+        const subagentId = text(payload.subagent_id);
+        if (!subagentId) return;
+        const taskId = RuntimeTaskId.make(subagentId);
+        const description =
+          text(payload.goal) ??
+          text(payload.description) ??
+          (event.type === "subagent.tool"
+            ? `Hermes subagent used ${text(payload.tool_name) ?? "a tool"}`
+            : "Hermes subagent");
         if (event.type === "subagent.complete") {
           yield* publish({
-            type: "agent.completed",
+            type: "task.completed",
             ...(yield* stamp()),
             ...base(context, event),
             payload: {
-              ...identity,
-              status: text(payload.status) === "failed" ? "failed" : "completed",
+              taskId,
+              status:
+                text(payload.status) === "failed"
+                  ? "failed"
+                  : text(payload.status) === "stopped"
+                    ? "stopped"
+                    : "completed",
               ...(text(payload.summary) ? { summary: text(payload.summary) } : {}),
             },
           });
         } else if (event.type === "subagent.start" || event.type === "subagent.spawn_requested") {
           yield* publish({
-            type: "agent.started",
+            type: "task.started",
             ...(yield* stamp()),
             ...base(context, event),
             payload: {
-              ...identity,
-              status: event.type === "subagent.start" ? "running" : "pending",
+              taskId,
+              description,
+              taskType: "hermes-subagent",
             },
           });
         } else {
           yield* publish({
-            type: "agent.updated",
+            type: "task.progress",
             ...(yield* stamp()),
             ...base(context, event),
             payload: {
-              ...identity,
-              status: "running",
+              taskId,
+              description,
               ...((text(payload.summary) ?? text(payload.text))
                 ? { summary: text(payload.summary) ?? text(payload.text) }
                 : {}),

@@ -3,7 +3,6 @@ import * as Updates from "expo-updates";
 import {
   type AtomCommandResult,
   isAtomCommandInterrupted,
-  reportAtomCommandResult,
   settlePromise,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
@@ -207,7 +206,6 @@ function reportUpdateFailure(
   fallback: string,
   onFailure: AppUpdateCheckOptions["onFailure"],
 ): void {
-  reportAtomCommandResult(result, { label: "app update check" });
   if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return;
   const error = squashAtomCommandFailure(result);
   onFailure?.(error instanceof Error ? error.message : fallback);

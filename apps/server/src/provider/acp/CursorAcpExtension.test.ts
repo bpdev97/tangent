@@ -2,14 +2,9 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   CursorListAvailableModelsResponse,
-  extractPlanApprovalQuestion,
   extractAskQuestions,
   extractPlanMarkdown,
-  makeCursorAskQuestionCancelledResponse,
-  makeCursorAskQuestionResponse,
-  makeCursorCreatePlanResponse,
-  makeCursorCreatePlanResponseFromAnswers,
-  updateCursorTodoState,
+  extractTodosAsPlan,
 } from "./CursorAcpExtension.ts";
 
 describe("CursorAcpExtension", () => {
@@ -89,132 +84,26 @@ describe("CursorAcpExtension", () => {
     expect(planMarkdown).toBe("# Plan\n\n1. Add schemas\n2. Remove casts");
   });
 
-  it("merges todo updates by id and removes cancelled entries", () => {
-    const initial = updateCursorTodoState(new Map(), {
-      toolCallId: "todos-1",
-      todos: [
-        { id: "1", content: "Inspect state", status: "completed" },
-        { id: "2", content: "Apply fix", status: "pending" },
-      ],
-      merge: false,
-    });
-    const updated = updateCursorTodoState(initial.todos, {
-      toolCallId: "todos-2",
-      todos: [
-        { id: "2", content: "Apply fix", status: "in_progress" },
-        { id: "1", content: "Inspect state", status: "cancelled" },
-        { id: "3", content: "Verify behavior", status: "pending" },
-      ],
-      merge: true,
-    });
-
-    expect(updated.plan).toEqual([
-      { step: "Apply fix", status: "inProgress" },
-      { step: "Verify behavior", status: "pending" },
-    ]);
-  });
-
-  it("replaces todo state when merge is false", () => {
-    const current = new Map([
-      ["old", { id: "old", content: "Old step", status: "pending" as const }],
-    ]);
+  it("projects todo updates into a plan shape and drops invalid entries", () => {
     expect(
-      updateCursorTodoState(current, {
+      extractTodosAsPlan({
         toolCallId: "todos-1",
         todos: [
           { id: "1", content: "Inspect state", status: "completed" },
           { id: "2", content: "  Apply fix  ", status: "in_progress" },
+          { id: "3", title: "Fallback title", status: "pending" },
+          { id: "4", content: "Unknown status", status: "weird_status" },
+          { id: "5", content: "   " },
         ],
-        merge: false,
-      }).plan,
-    ).toEqual([
-      { step: "Inspect state", status: "completed" },
-      { step: "Apply fix", status: "inProgress" },
-    ]);
-  });
-
-  it("encodes ask-question answers with Cursor option ids", () => {
-    const params = {
-      toolCallId: "ask-3",
-      questions: [
-        {
-          id: "scope",
-          prompt: "Which scope?",
-          options: [
-            { id: "workspace", label: "Workspace" },
-            { id: "session", label: "Session" },
-          ],
-          allowMultiple: true,
-        },
-      ],
-    };
-
-    expect(makeCursorAskQuestionResponse(params, { scope: ["Workspace", "session"] })).toEqual({
-      outcome: {
-        outcome: "answered",
-        answers: [{ questionId: "scope", selectedOptionIds: ["workspace", "session"] }],
-      },
-    });
-    expect(makeCursorAskQuestionResponse(params, { scope: "custom text" })).toEqual({
-      outcome: {
-        outcome: "skipped",
-        reason: "No supported option was selected.",
-      },
-    });
-    expect(makeCursorAskQuestionCancelledResponse()).toEqual({
-      outcome: { outcome: "cancelled" },
-    });
-  });
-
-  it("encodes create-plan decisions with the documented outcome envelope", () => {
-    expect(makeCursorCreatePlanResponse("accepted")).toEqual({
-      outcome: { outcome: "accepted" },
-    });
-    expect(makeCursorCreatePlanResponse("rejected")).toEqual({
-      outcome: { outcome: "rejected" },
-    });
-  });
-
-  it("maps explicit plan approval answers to Cursor decisions", () => {
-    expect(
-      extractPlanApprovalQuestion({
-        toolCallId: "plan-2",
-        name: "Refactor parser",
-        overview: "Tighten ACP parsing",
-        plan: "# Plan",
-        todos: [],
-        isProject: false,
+        merge: true,
       }),
     ).toEqual({
-      id: "cursor-plan-approval",
-      header: "Plan approval",
-      question: "Approve the plan “Refactor parser”?",
-      multiSelect: false,
-      options: [
-        {
-          label: "Accept plan",
-          description: "Allow Cursor to continue with this plan.",
-        },
-        {
-          label: "Reject plan",
-          description: "Reject the plan and stop this plan step.",
-        },
+      plan: [
+        { step: "Inspect state", status: "completed" },
+        { step: "Apply fix", status: "inProgress" },
+        { step: "Fallback title", status: "pending" },
+        { step: "Unknown status", status: "pending" },
       ],
-    });
-    expect(
-      makeCursorCreatePlanResponseFromAnswers({
-        "cursor-plan-approval": "Accept plan",
-      }),
-    ).toEqual({ outcome: { outcome: "accepted" } });
-    expect(
-      makeCursorCreatePlanResponseFromAnswers({
-        "cursor-plan-approval": "The plan needs another step",
-      }),
-    ).toEqual({
-      outcome: {
-        outcome: "rejected",
-        reason: "The plan needs another step",
-      },
     });
   });
 

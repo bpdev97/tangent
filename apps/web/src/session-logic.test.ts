@@ -123,7 +123,7 @@ describe("derivePendingApprovals", () => {
         id: "approval-open-mcp-tool",
         createdAt: "2026-02-23T00:00:01.000Z",
         kind: "approval.requested",
-        summary: "Computer-use approval requested",
+        summary: "MCP tool approval requested",
         tone: "approval",
         payload: {
           requestId: "req-mcp-tool",
@@ -758,7 +758,7 @@ describe("workEntryIndicatesToolFailure", () => {
 });
 
 describe("deriveWorkLogEntries", () => {
-  it("collapses matching tool starts into their completed row", () => {
+  it("omits tool started entries and keeps completed entries", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({
         id: "tool-complete",
@@ -776,74 +776,6 @@ describe("deriveWorkLogEntries", () => {
 
     const entries = deriveWorkLogEntries(activities);
     expect(entries.map((entry) => entry.id)).toEqual(["tool-complete"]);
-  });
-
-  it("keeps live tool calls visible and correlates non-adjacent lifecycle updates", () => {
-    const activities: OrchestrationThreadActivity[] = [
-      makeActivity({
-        id: "tool-start",
-        createdAt: "2026-02-23T00:00:01.000Z",
-        summary: "Run tests started",
-        kind: "tool.started",
-        payload: {
-          itemId: "command-1",
-          itemType: "command_execution",
-          status: "inProgress",
-          title: "Run tests",
-          data: { item: { command: ["vp", "test"], cwd: "/workspace" } },
-        },
-      }),
-      makeActivity({
-        id: "warning",
-        createdAt: "2026-02-23T00:00:02.000Z",
-        summary: "Connection is slow",
-        kind: "runtime.warning",
-        tone: "info",
-      }),
-      makeActivity({
-        id: "tool-progress",
-        createdAt: "2026-02-23T00:00:03.000Z",
-        summary: "Still running",
-        kind: "tool.progress",
-        payload: {
-          itemId: "command-1",
-          status: "inProgress",
-          elapsedSeconds: 2,
-          detail: "Still running",
-        },
-      }),
-    ];
-
-    const liveEntries = deriveWorkLogEntries(activities);
-    expect(liveEntries.map((entry) => entry.id)).toEqual(["warning", "tool-progress"]);
-    expect(liveEntries[1]).toMatchObject({
-      toolLifecycleStatus: "inProgress",
-      sourceActivityKind: "tool.progress",
-    });
-
-    const completedEntries = deriveWorkLogEntries([
-      ...activities,
-      makeActivity({
-        id: "tool-complete",
-        createdAt: "2026-02-23T00:00:04.000Z",
-        summary: "Run tests",
-        kind: "tool.completed",
-        payload: {
-          itemId: "command-1",
-          itemType: "command_execution",
-          status: "completed",
-          title: "Run tests",
-          data: { item: { aggregatedOutput: "All tests passed", exitCode: 0 } },
-        },
-      }),
-    ]);
-    expect(completedEntries.map((entry) => entry.id)).toEqual(["warning", "tool-complete"]);
-    expect(completedEntries[1]).toMatchObject({
-      itemType: "command_execution",
-      toolTitle: "Run tests",
-      toolLifecycleStatus: "completed",
-      sourceActivityKind: "tool.completed",
-    });
   });
 
   it("omits task.started but shows task.progress and task.completed", () => {
@@ -875,56 +807,6 @@ describe("deriveWorkLogEntries", () => {
     expect(entries.map((entry) => entry.id)).toEqual(["task-progress", "task-complete"]);
   });
 
-  it("collapses subagent lifecycle into one attributed agent card", () => {
-    const basePayload = {
-      itemType: "collab_agent_tool_call",
-      itemId: "agent-1",
-      agentId: "agent-1",
-      title: "reviewer subagent",
-      data: {
-        agentId: "agent-1",
-        parentAgentId: "root-agent",
-        role: "reviewer",
-        description: "Review the provider adapters",
-        prompt: "Find lifecycle bugs",
-        model: "gpt-5.3-codex",
-      },
-    };
-    const entries = deriveWorkLogEntries([
-      makeActivity({
-        id: "agent-start",
-        createdAt: "2026-02-23T00:00:01.000Z",
-        kind: "agent.started",
-        summary: "reviewer subagent started",
-        tone: "tool",
-        payload: { ...basePayload, status: "inProgress" },
-      }),
-      makeActivity({
-        id: "agent-complete",
-        createdAt: "2026-02-23T00:00:03.000Z",
-        kind: "agent.completed",
-        summary: "reviewer subagent completed",
-        tone: "tool",
-        payload: {
-          ...basePayload,
-          status: "completed",
-          detail: "No lifecycle bugs found",
-          data: { ...basePayload.data, summary: "No lifecycle bugs found" },
-        },
-      }),
-    ]);
-
-    expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({
-      id: "agent-complete",
-      itemType: "collab_agent_tool_call",
-      toolLifecycleStatus: "completed",
-      sourceActivityKind: "agent.completed",
-      toolTitle: "reviewer subagent",
-      detail: "No lifecycle bugs found",
-    });
-  });
-
   it("uses payload summary as label for task entries when available", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({
@@ -939,29 +821,6 @@ describe("deriveWorkLogEntries", () => {
 
     const entries = deriveWorkLogEntries(activities);
     expect(entries[0]?.label).toBe("Searching for API endpoints");
-  });
-
-  it("renders projected reasoning as a thinking entry with live detail", () => {
-    const entries = deriveWorkLogEntries([
-      makeActivity({
-        id: "reasoning:thread-1:turn-1:reasoning_text",
-        createdAt: "2026-02-23T00:00:02.000Z",
-        kind: "task.progress",
-        summary: "Thinking",
-        tone: "info",
-        payload: {
-          summary: "Thinking",
-          detail: "Inspecting the provider event stream.",
-          streamKind: "reasoning_text",
-        },
-      }),
-    ]);
-
-    expect(entries[0]).toMatchObject({
-      label: "Thinking",
-      detail: "Inspecting the provider event stream.",
-      tone: "thinking",
-    });
   });
 
   it("uses payload detail as label for task.completed and preserves error tone", () => {

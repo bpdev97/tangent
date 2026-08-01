@@ -839,6 +839,24 @@ describe("makeRelayDeviceRegistrationRequest", () => {
     }).pipe(Effect.provide(relayTestLayer));
   });
 
+  it("stops native reconciliation when the final personal server is removed", () => {
+    const end = vi.fn(() => Promise.resolve());
+    widgetMocks.getInstances.mockReturnValue([{ end }] as never);
+
+    syncAgentAwarenessConnections([savedConnection()]);
+
+    const pushListener = vi.mocked(Notifications.addPushTokenListener).mock.results.at(-1)?.value;
+    expect(pushListener).toBeDefined();
+    expect(appStateMock.listeners).toHaveLength(1);
+
+    syncAgentAwarenessConnections([]);
+
+    expect(pushListener?.remove).toHaveBeenCalledTimes(1);
+    expect(appStateMock.listeners).toHaveLength(0);
+    expect(end).toHaveBeenCalledWith("immediate");
+    expect(getAgentAwarenessRegistrationStatus()).toBe("unknown");
+  });
+
   it.effect(
     "registers Live Activity update tokens through a direct personal server connection",
     () => {

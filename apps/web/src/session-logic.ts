@@ -13,7 +13,6 @@ import {
   type ThreadId,
   type TurnId,
 } from "@t3tools/contracts";
-import { extractToolCallIdentity, isToolLifecycleActivityKind } from "@t3tools/shared/toolActivity";
 
 import type {
   ChatMessage,
@@ -717,9 +716,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
       ? stripTrailingExitCode(payload.detail).output
       : null
     : extractToolDetail(payload, title ?? activity.summary);
-  const toolCallId = isTaskActivity
-    ? null
-    : (extractToolCallIdentity(activity.payload) ?? extractToolCallId(payload));
+  const toolCallId = isTaskActivity ? null : extractToolCallId(payload);
   const entry: DerivedWorkLogEntry = {
     id: activity.id,
     createdAt: activity.createdAt,
@@ -766,10 +763,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
     entry.toolCallId = toolCallId;
   }
   let toolLifecycleStatus = extractWorkLogToolLifecycleStatus(payload);
-  if (
-    !toolLifecycleStatus &&
-    (activity.kind === "tool.completed" || activity.kind === "agent.completed")
-  ) {
+  if (!toolLifecycleStatus && activity.kind === "tool.completed") {
     toolLifecycleStatus = "completed";
   }
   if (toolLifecycleStatus) {
@@ -801,13 +795,13 @@ function shouldCollapseToolLifecycleEntries(
   previous: DerivedWorkLogEntry,
   next: DerivedWorkLogEntry,
 ): boolean {
-  if (!isToolLifecycleActivityKind(previous.activityKind)) {
+  if (previous.activityKind !== "tool.updated" && previous.activityKind !== "tool.completed") {
     return false;
   }
-  if (!isToolLifecycleActivityKind(next.activityKind)) {
+  if (next.activityKind !== "tool.updated" && next.activityKind !== "tool.completed") {
     return false;
   }
-  if (previous.activityKind === "tool.completed" || previous.activityKind === "agent.completed") {
+  if (previous.activityKind === "tool.completed") {
     return false;
   }
   if (previous.collapseKey !== undefined && previous.collapseKey === next.collapseKey) {
@@ -866,7 +860,7 @@ function mergeChangedFiles(
 }
 
 function deriveToolLifecycleCollapseKey(entry: DerivedWorkLogEntry): string | undefined {
-  if (!isToolLifecycleActivityKind(entry.activityKind)) {
+  if (entry.activityKind !== "tool.updated" && entry.activityKind !== "tool.completed") {
     return undefined;
   }
   if (entry.toolCallId) {

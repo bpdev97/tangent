@@ -339,42 +339,37 @@ export const makeAcpPatchedProtocol = Effect.fn("makeAcpPatchedProtocol")(functi
     return Queue.offer(serverQueue, message).pipe(Effect.asVoid);
   };
 
-  const handleExitEncoded = (message: RpcMessage.ResponseExitEncoded) => {
-    const normalizedMessage = normalizeProtocolErrorDefect(message);
-    return Ref.get(extPending).pipe(
+  const handleExitEncoded = (message: RpcMessage.ResponseExitEncoded) =>
+    Ref.get(extPending).pipe(
       Effect.flatMap((pending) => {
-        const pendingRequest = pending.get(String(normalizedMessage.requestId));
+        const pendingRequest = pending.get(String(message.requestId));
         if (!pendingRequest) {
-          return Queue.offer(clientQueue, normalizedMessage).pipe(Effect.asVoid);
+          return Queue.offer(clientQueue, message).pipe(Effect.asVoid);
         }
-        if (normalizedMessage.exit._tag === "Success") {
-          return completeExtPendingSuccess(
-            normalizedMessage.requestId,
-            normalizedMessage.exit.value,
-          );
+        if (message.exit._tag === "Success") {
+          return completeExtPendingSuccess(message.requestId, message.exit.value);
         }
-        const failure = normalizedMessage.exit.cause.find((entry) => entry._tag === "Fail");
+        const failure = message.exit.cause.find((entry) => entry._tag === "Fail");
         if (failure && isProtocolError(failure.error)) {
           return completeExtPendingFailure(
-            normalizedMessage.requestId,
+            message.requestId,
             AcpError.AcpRequestError.fromProtocolError(failure.error, {
               method: pendingRequest.method,
-              requestId: normalizedMessage.requestId,
-              cause: normalizedMessage.exit.cause,
+              requestId: message.requestId,
+              cause: message.exit.cause,
             }),
           );
         }
         return completeExtPendingFailure(
-          normalizedMessage.requestId,
+          message.requestId,
           AcpError.AcpRequestError.fromExtensionResponseFailure(
             pendingRequest.method,
-            normalizedMessage.requestId,
-            normalizedMessage.exit.cause,
+            message.requestId,
+            message.exit.cause,
           ),
         );
       }),
     );
-  };
 
   const routeDecodedMessage = (
     message: RpcMessage.FromClientEncoded | RpcMessage.FromServerEncoded,
@@ -576,34 +571,4 @@ function isProtocolError(
     "message" in value &&
     typeof value.message === "string"
   );
-}
-
-function normalizeProtocolErrorDefect(
-  message: RpcMessage.ResponseExitEncoded,
-): RpcMessage.ResponseExitEncoded {
-  if (message.exit._tag !== "Failure") {
-    return message;
-  }
-
-  let changed = false;
-  const cause = message.exit.cause.map((entry) => {
-    if (entry._tag !== "Die" || !isProtocolError(entry.defect)) {
-      return entry;
-    }
-    changed = true;
-    return {
-      _tag: "Fail" as const,
-      error: entry.defect,
-    };
-  });
-
-  return changed
-    ? {
-        ...message,
-        exit: {
-          ...message.exit,
-          cause,
-        },
-      }
-    : message;
 }

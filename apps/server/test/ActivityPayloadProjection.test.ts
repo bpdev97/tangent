@@ -14,7 +14,6 @@ import { buildThreadFeed, type ThreadFeedActivity } from "../../mobile/src/lib/t
 import { deriveLatestContextWindowSnapshot } from "../../web/src/lib/contextWindow.ts";
 import { deriveWorkLogEntries } from "../../web/src/session-logic.ts";
 import {
-  MCP_ACTIVITY_DATA_MAX_BYTES,
   projectActivityEvent,
   projectActivityPayload,
   projectThreadDetailSnapshot,
@@ -185,49 +184,8 @@ describe("projectActivityPayload", () => {
     });
   });
 
-  it("keeps MCP rendering data while dropping unread top-level fields", () => {
-    expect(projectActivityPayload(fixtures[4]!).payload).toEqual({
-      itemType: "mcp_tool_call",
-      title: "mcp_tool_call",
-      detail: "mcp_tool_call detail",
-      status: "completed",
-      requestKind: "command",
-      data: {
-        item: {
-          server: "repository",
-          tool: "search",
-          arguments: { query: "activity projection" },
-          aggregatedOutput: "mcp payload remains available",
-        },
-      },
-    });
-  });
-
-  it("bounds MCP tool data on snapshot and live-event transports", () => {
-    const activity = makeActivity("large-mcp", "mcp_tool_call", {
-      toolCallId: "large-mcp-call",
-      item: {
-        server: "repository",
-        tool: "read",
-        arguments: { path: "src/large.ts" },
-        aggregatedOutput: "output".repeat(100_000),
-      },
-    });
-
-    const projected = projectActivityPayload(activity);
-    const data = (projected.payload as { data: Record<string, unknown> }).data;
-    expect(new TextEncoder().encode(JSON.stringify(data)).byteLength).toBeLessThanOrEqual(
-      MCP_ACTIVITY_DATA_MAX_BYTES,
-    );
-    expect(data).toMatchObject({
-      toolCallId: "large-mcp-call",
-      truncated: true,
-      item: {
-        server: "repository",
-        tool: "read",
-        arguments: { path: "src/large.ts" },
-      },
-    });
+  it("passes MCP tool data through unchanged", () => {
+    expect(projectActivityPayload(fixtures[4]!)).toBe(fixtures[4]);
   });
 
   it("keeps current web and mobile derived output identical for every tool item type", () => {
@@ -370,12 +328,12 @@ describe("context-window snapshot dedup", () => {
     );
   });
 
-  it("does not drop rows from snapshots without context-window activities", () => {
+  it("leaves snapshots without context-window activities untouched", () => {
     const projected = projectThreadDetailSnapshot({
       snapshotSequence: 7,
       thread: makeThread([fixtures[4]!]),
     });
-    expect(projected.thread.activities).toEqual([projectActivityPayload(fixtures[4]!)]);
+    expect(projected.thread.activities).toEqual([fixtures[4]]);
   });
 
   it("does not filter live activity-appended events", () => {

@@ -39,6 +39,10 @@ The personal iOS workflow supports two manually selected operations:
 Use `build` whenever the Expo fingerprint changes. Use `update` only when the installed native
 runtime is compatible.
 
+The mobile app checks this channel once per JavaScript launch. Offline and development-client
+failures are recoverable and stay quiet during that automatic check. A manual check from Settings
+continues to show its concrete failure so the user can retry or diagnose the release channel.
+
 ## macOS signing and notarization
 
 Configure these GitHub Actions secrets:
@@ -62,6 +66,18 @@ application with hardened runtime support and notarizes it through Apple.
 5. Dispatch the macOS workflow with version `1.0.0`.
 6. Install the DMG and confirm the About panel reports the `Tangent` GitHub update feed.
 7. Publish `1.0.1` and exercise the in-app desktop updater.
+
+## Server release artifacts
+
+Every personal macOS release also publishes `tangent-server-X.Y.Z.tgz` and its SHA-256 sidecar.
+Manual launch, SSH launch, background-service installation, and self-update must resolve that exact
+GitHub Release asset. They must not fall back to the upstream npm package merely because its version
+matches.
+
+The self-updater streams the archive into a unique temporary file while enforcing the 200 MiB limit
+and computing SHA-256. It renames the file into place only after the sidecar checksum matches,
+removes failed temporary files, and keeps the current archive plus one previous download under
+`<Tangent home>/runtime/downloads`.
 
 ## Upstream synchronization
 

@@ -22,7 +22,7 @@ export function PendingApprovalCard(props: PendingApprovalCardProps) {
         ? "File read"
         : props.approval.requestKind === "file-change"
           ? "File change"
-          : "Computer use";
+          : "MCP tool call";
   const rejectionDecision = isMcpToolApproval ? "cancel" : "decline";
   const rejectionLabel = isMcpToolApproval ? "Cancel" : "Decline";
 

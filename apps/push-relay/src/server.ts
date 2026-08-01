@@ -14,6 +14,7 @@ import type { RelayConfig } from "./config.ts";
 import { RelayStore, type DeliveryTarget } from "./store.ts";
 
 const MAX_BODY_BYTES = 64 * 1_024;
+const MAX_PENDING_PUBLICATIONS = 256;
 const LIVE_ACTIVITY_END_DELAY_MS = 5 * 60 * 1_000;
 const decodeDevice = Schema.decodeUnknownSync(RelayDeviceRegistrationRequest);
 const decodeLiveActivity = Schema.decodeUnknownSync(RelayLiveActivityRegistrationRequest);
@@ -91,6 +92,7 @@ export interface PushRelayServer {
 export interface PushRelayServerDependencies {
   readonly apns?: ApnsDeliveryClient;
   readonly liveActivityEndDelayMs?: number;
+  readonly maxPendingPublications?: number;
 }
 
 export async function startServer(
@@ -107,7 +109,9 @@ export async function startServer(
   >();
   const activityEndTimers = new Map<string, AbortController>();
   const activityEndDelayMs = dependencies.liveActivityEndDelayMs ?? LIVE_ACTIVITY_END_DELAY_MS;
+  const maxPendingPublications = dependencies.maxPendingPublications ?? MAX_PENDING_PUBLICATIONS;
   let publishQueue = Promise.resolve();
+  let pendingPublications = 0;
 
   const cancelActivityEnd = (deviceId: string): void => {
     const controller = activityEndTimers.get(deviceId);
@@ -172,9 +176,9 @@ export async function startServer(
   const deliver = async (
     target: DeliveryTarget,
     state: ReturnType<typeof decodePublish>["state"],
+    aggregate: ReturnType<RelayStore["aggregate"]>,
     updateNotificationWatermark: boolean,
   ): Promise<void> => {
-    const aggregate = store.aggregate();
     const alert = liveActivityAlert({
       state,
       previous: target.lastNotificationAggregate,
@@ -277,10 +281,16 @@ export async function startServer(
         }
         if (request.method === "POST" && url.pathname === "/v1/live-activities") {
           const registration = await decodeBody(request, decodeLiveActivity);
+          const registrationTime = Date.now();
+          for (const [deviceId, recent] of recentLiveActivityRegistrations) {
+            if (registrationTime - recent.registeredAt >= 5_000) {
+              recentLiveActivityRegistrations.delete(deviceId);
+            }
+          }
           const recent = recentLiveActivityRegistrations.get(registration.deviceId);
           if (
             recent?.token === registration.activityPushToken &&
-            Date.now() - recent.registeredAt < 5_000
+            registrationTime - recent.registeredAt < 5_000
           ) {
             json(response, 200, { ok: true });
             return;
@@ -291,11 +301,11 @@ export async function startServer(
           }
           recentLiveActivityRegistrations.set(registration.deviceId, {
             token: registration.activityPushToken,
-            registeredAt: Date.now(),
+            registeredAt: registrationTime,
           });
           const target = store.target(registration.deviceId);
           if (target?.activityPushToken && target.preferences.liveActivitiesEnabled) {
-            await deliver(target, null, false);
+            await deliver(target, null, store.aggregate(), false);
           }
           json(response, 200, { ok: true });
           return;
@@ -313,11 +323,23 @@ export async function startServer(
           ) {
             throw new InvalidRequestError("activity identity does not match its envelope");
           }
-          const publicationOperation = publishQueue.then(async () => {
-            const targets = store.targets();
-            store.publish(publication);
-            await mapConcurrent(targets, 4, (target) => deliver(target, publication.state, true));
-          });
+          if (pendingPublications >= maxPendingPublications) {
+            json(response, 429, { error: "publication_queue_full" });
+            return;
+          }
+          pendingPublications += 1;
+          const publicationOperation = publishQueue
+            .then(async () => {
+              const targets = store.targets();
+              store.publish(publication);
+              const aggregate = store.aggregate();
+              await mapConcurrent(targets, 4, (target) =>
+                deliver(target, publication.state, aggregate, true),
+              );
+            })
+            .finally(() => {
+              pendingPublications -= 1;
+            });
           publishQueue = publicationOperation.catch(() => undefined);
           await publicationOperation;
           json(response, 200, { ok: true });
@@ -358,6 +380,7 @@ export async function startServer(
         server.close((error) => (error ? reject(error) : resolve())),
       );
       await publishQueue;
+      await apns.close?.();
       store.close();
     },
   };

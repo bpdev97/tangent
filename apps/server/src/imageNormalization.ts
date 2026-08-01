@@ -10,7 +10,7 @@ const HEIF_MIME_TYPES = new Set([
   "image/heif",
   "image/heif-sequence",
 ]);
-const HEIF_BRANDS = new Set(["heic", "heix", "hevc", "hevx", "mif1", "msf1"]);
+const HEIC_BRANDS = new Set(["heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs"]);
 const JPEG_QUALITIES = [90, 75, 60] as const;
 const MAX_DECODED_PIXELS = 40_000_000;
 const NORMALIZATION_TIMEOUT_MS = 30_000;
@@ -102,11 +102,15 @@ function readAscii(bytes: Uint8Array, start: number, end: number): string {
 }
 
 export function hasHeifSignature(bytes: Uint8Array): boolean {
-  return (
-    bytes.byteLength >= 12 &&
-    readAscii(bytes, 4, 8) === "ftyp" &&
-    HEIF_BRANDS.has(readAscii(bytes, 8, 12))
-  );
+  if (bytes.byteLength < 16 || readAscii(bytes, 4, 8) !== "ftyp") return false;
+  const declaredBoxSize = new DataView(bytes.buffer, bytes.byteOffset, 4).getUint32(0);
+  const boxEnd = declaredBoxSize === 0 ? bytes.byteLength : declaredBoxSize;
+  if (boxEnd < 16 || boxEnd > bytes.byteLength || (boxEnd - 16) % 4 !== 0) return false;
+  if (HEIC_BRANDS.has(readAscii(bytes, 8, 12))) return true;
+  for (let offset = 16; offset + 4 <= boxEnd; offset += 4) {
+    if (HEIC_BRANDS.has(readAscii(bytes, offset, offset + 4))) return true;
+  }
+  return false;
 }
 
 function jpegFileName(name: string): string {
@@ -182,7 +186,7 @@ export const normalizeUploadedImage = Effect.fn("imageNormalization.normalizeUpl
     readonly mimeType: string;
     readonly name: string;
   }) {
-    const mimeType = input.mimeType.toLowerCase();
+    const mimeType = input.mimeType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
     if (!HEIF_MIME_TYPES.has(mimeType) && !hasHeifSignature(input.bytes)) {
       return {
         ...input,

@@ -11,7 +11,6 @@ import {
   type CanonicalItemType,
   type CanonicalRequestType,
   type CodexSettings,
-  EventId,
   ProviderDriverKind,
   type ProviderEvent,
   ProviderInstanceId,
@@ -20,7 +19,6 @@ import {
   type ThreadTokenUsageSnapshot,
   type ProviderUserInputAnswers,
   RuntimeItemId,
-  RuntimeAgentId,
   RuntimeRequestId,
   ProviderApprovalDecision,
   ThreadId,
@@ -501,116 +499,6 @@ function mapItemLifecycle(
   };
 }
 
-function mapCodexAgentStatus(
-  status: EffectCodexSchema.ServerNotification__CollabAgentStatus,
-): "pending" | "running" | "completed" | "failed" | "stopped" {
-  switch (status) {
-    case "pendingInit":
-      return "pending";
-    case "running":
-      return "running";
-    case "completed":
-      return "completed";
-    case "interrupted":
-    case "shutdown":
-      return "stopped";
-    case "errored":
-    case "notFound":
-      return "failed";
-  }
-}
-
-function mapAgentLifecycle(
-  event: ProviderEvent,
-  canonicalThreadId: ThreadId,
-  lifecycle: "item.started" | "item.completed",
-): ReadonlyArray<ProviderRuntimeEvent> {
-  const payload =
-    readPayload(EffectCodexSchema.V2ItemStartedNotification, event.payload) ??
-    readPayload(EffectCodexSchema.V2ItemCompletedNotification, event.payload);
-  const item = payload?.item;
-  if (!item) return [];
-
-  if (item.type === "subAgentActivity") {
-    const agentId = RuntimeAgentId.make(item.agentThreadId);
-    const base = {
-      ...runtimeEventBase(event, canonicalThreadId),
-      eventId: EventId.make(`${event.id}:agent:${item.agentThreadId}`),
-    };
-    const identity = {
-      agentId,
-      agentPath: item.agentPath,
-      providerThreadId: item.agentThreadId,
-    };
-    if (item.kind === "interrupted") {
-      return [{ ...base, type: "agent.completed", payload: { ...identity, status: "stopped" } }];
-    }
-    if (item.kind === "interacted") {
-      return [{ ...base, type: "agent.updated", payload: { ...identity, status: "running" } }];
-    }
-    return [
-      {
-        ...base,
-        type: "agent.started",
-        payload: { ...identity, status: lifecycle === "item.started" ? "pending" : "running" },
-      },
-    ];
-  }
-
-  if (item.type !== "collabAgentToolCall") return [];
-
-  const targetAgentIds = [
-    ...new Set([...item.receiverThreadIds, ...Object.keys(item.agentsStates)]),
-  ];
-  return targetAgentIds.map((targetAgentId): ProviderRuntimeEvent => {
-    const agentId = RuntimeAgentId.make(targetAgentId);
-    const state = item.agentsStates[targetAgentId];
-    const status = state ? mapCodexAgentStatus(state.status) : "pending";
-    const base = {
-      ...runtimeEventBase(event, canonicalThreadId),
-      eventId: EventId.make(`${event.id}:agent:${targetAgentId}`),
-    };
-    const identity = {
-      agentId,
-      ...(item.senderThreadId !== targetAgentId
-        ? { parentAgentId: RuntimeAgentId.make(item.senderThreadId) }
-        : {}),
-      ...(trimText(item.prompt)
-        ? { description: trimText(item.prompt), prompt: trimText(item.prompt) }
-        : {}),
-      ...(trimText(item.model) ? { model: trimText(item.model) } : {}),
-      providerThreadId: targetAgentId,
-    };
-    if (status === "completed" || status === "failed" || status === "stopped") {
-      return {
-        ...base,
-        type: "agent.completed",
-        payload: {
-          ...identity,
-          status,
-          ...(trimText(state?.message) ? { summary: trimText(state?.message) } : {}),
-        },
-      };
-    }
-    if (lifecycle === "item.started" && item.tool === "spawnAgent") {
-      return {
-        ...base,
-        type: "agent.started",
-        payload: { ...identity, status },
-      };
-    }
-    return {
-      ...base,
-      type: "agent.updated",
-      payload: {
-        ...identity,
-        status,
-        ...(trimText(state?.message) ? { summary: trimText(state?.message) } : {}),
-      },
-    };
-  });
-}
-
 function mapToRuntimeEvents(
   event: ProviderEvent,
   canonicalThreadId: ThreadId,
@@ -968,10 +856,7 @@ function mapToRuntimeEvents(
 
   if (event.method === "item/started") {
     const started = mapItemLifecycle(event, canonicalThreadId, "item.started");
-    return [
-      ...(started ? [started] : []),
-      ...mapAgentLifecycle(event, canonicalThreadId, "item.started"),
-    ];
+    return started ? [started] : [];
   }
 
   if (event.method === "item/completed") {
@@ -997,10 +882,7 @@ function mapToRuntimeEvents(
       ];
     }
     const completed = mapItemLifecycle(event, canonicalThreadId, "item.completed");
-    return [
-      ...(completed ? [completed] : []),
-      ...mapAgentLifecycle(event, canonicalThreadId, "item.completed"),
-    ];
+    return completed ? [completed] : [];
   }
 
   if (

@@ -7,7 +7,7 @@ import type {
   RelayLiveActivityRegistrationRequest,
 } from "@t3tools/contracts/relay";
 
-import { makeAggregate } from "./aggregate.ts";
+import { activityExpiresAtMs, makeAggregate } from "./aggregate.ts";
 
 export interface DeliveryTarget {
   readonly deviceId: string;
@@ -39,6 +39,11 @@ interface ActivityRow {
   state_json: string;
 }
 
+interface ActivityMigrationRow extends ActivityRow {
+  environment_id: string;
+  thread_id: string;
+}
+
 export class RelayStore {
   readonly #database: NodeSqlite.DatabaseSync;
 
@@ -66,10 +71,49 @@ export class RelayStore {
         thread_id TEXT NOT NULL,
         state_json TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        expires_at TEXT,
         PRIMARY KEY (environment_id, thread_id)
       );
     `);
     this.#migrateDeliveryWatermarks();
+    this.#migrateActivityExpiry();
+    this.pruneExpiredActivities();
+  }
+
+  #migrateActivityExpiry(): void {
+    const columns = new Set(
+      (
+        this.#database.prepare("PRAGMA table_info(activities)").all() as unknown as TableColumnRow[]
+      ).map((column) => column.name),
+    );
+    if (!columns.has("expires_at")) {
+      this.#database.exec("ALTER TABLE activities ADD COLUMN expires_at TEXT");
+    }
+    const rows = this.#database
+      .prepare(
+        "SELECT environment_id, thread_id, state_json FROM activities WHERE expires_at IS NULL",
+      )
+      .all() as unknown as ActivityMigrationRow[];
+    if (rows.length === 0) return;
+
+    const update = this.#database.prepare(
+      "UPDATE activities SET expires_at = ? WHERE environment_id = ? AND thread_id = ?",
+    );
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      for (const row of rows) {
+        const state = JSON.parse(row.state_json) as RelayAgentActivityState;
+        update.run(
+          new Date(activityExpiresAtMs(state)).toISOString(),
+          row.environment_id,
+          row.thread_id,
+        );
+      }
+      this.#database.exec("COMMIT");
+    } catch (error) {
+      this.#database.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   #migrateDeliveryWatermarks(): void {
@@ -145,20 +189,36 @@ export class RelayStore {
       this.#database
         .prepare("DELETE FROM activities WHERE environment_id = ? AND thread_id = ?")
         .run(input.environmentId, input.threadId);
+      this.pruneExpiredActivities();
       return;
     }
     this.#database
       .prepare(`
-      INSERT INTO activities (environment_id, thread_id, state_json, updated_at)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO activities (environment_id, thread_id, state_json, updated_at, expires_at)
+      VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(environment_id, thread_id) DO UPDATE SET
         state_json = excluded.state_json,
-        updated_at = excluded.updated_at
+        updated_at = excluded.updated_at,
+        expires_at = excluded.expires_at
     `)
-      .run(input.environmentId, input.threadId, JSON.stringify(input.state), input.state.updatedAt);
+      .run(
+        input.environmentId,
+        input.threadId,
+        JSON.stringify(input.state),
+        input.state.updatedAt,
+        new Date(activityExpiresAtMs(input.state)).toISOString(),
+      );
+    this.pruneExpiredActivities();
+  }
+
+  pruneExpiredActivities(nowMs = Date.now()): void {
+    this.#database
+      .prepare("DELETE FROM activities WHERE expires_at IS NULL OR expires_at < ?")
+      .run(new Date(nowMs).toISOString());
   }
 
   aggregate(): RelayAgentActivityAggregateState | null {
+    this.pruneExpiredActivities();
     const rows = this.#database
       .prepare("SELECT state_json FROM activities")
       .all() as unknown as ActivityRow[];

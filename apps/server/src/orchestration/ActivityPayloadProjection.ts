@@ -4,12 +4,6 @@ import type {
   OrchestrationThreadDetailSnapshot,
 } from "@t3tools/contracts";
 
-export const MCP_ACTIVITY_DATA_MAX_BYTES = 32 * 1024;
-const MCP_ACTIVITY_MAX_DEPTH = 8;
-const MCP_ACTIVITY_MAX_COLLECTION_ENTRIES = 64;
-const JSON_TRUNCATION_MARKER = "…";
-const jsonTextEncoder = new TextEncoder();
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -22,141 +16,6 @@ function asTrimmedString(value: unknown): string | null {
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
-}
-
-function jsonByteLength(value: unknown): number | null {
-  try {
-    const encoded = JSON.stringify(value);
-    return encoded === undefined ? null : jsonTextEncoder.encode(encoded).byteLength;
-  } catch {
-    return null;
-  }
-}
-
-interface JsonProjectionBudget {
-  remainingBytes: number;
-  readonly seen: WeakSet<object>;
-}
-
-function projectJsonString(value: string, budget: JsonProjectionBudget): string | undefined {
-  const fullBytes = jsonByteLength(value);
-  if (fullBytes !== null && fullBytes <= budget.remainingBytes) {
-    budget.remainingBytes -= fullBytes;
-    return value;
-  }
-
-  let low = 0;
-  let high = value.length;
-  let projected: string | undefined;
-  let projectedBytes = 0;
-  while (low <= high) {
-    const middle = Math.floor((low + high) / 2);
-    const candidate = `${value.slice(0, middle)}${JSON_TRUNCATION_MARKER}`;
-    const candidateBytes = jsonByteLength(candidate) ?? Number.POSITIVE_INFINITY;
-    if (candidateBytes <= budget.remainingBytes) {
-      projected = candidate;
-      projectedBytes = candidateBytes;
-      low = middle + 1;
-    } else {
-      high = middle - 1;
-    }
-  }
-  if (projected === undefined) {
-    return undefined;
-  }
-  budget.remainingBytes -= projectedBytes;
-  return projected;
-}
-
-function projectJsonValue(value: unknown, budget: JsonProjectionBudget, depth: number): unknown {
-  if (typeof value === "string") {
-    return projectJsonString(value, budget);
-  }
-  if (value === null || typeof value === "boolean") {
-    const bytes = jsonByteLength(value);
-    if (bytes === null || bytes > budget.remainingBytes) return undefined;
-    budget.remainingBytes -= bytes;
-    return value;
-  }
-  if (typeof value === "number") {
-    const normalized = Number.isFinite(value) ? value : null;
-    const bytes = jsonByteLength(normalized);
-    if (bytes === null || bytes > budget.remainingBytes) return undefined;
-    budget.remainingBytes -= bytes;
-    return normalized;
-  }
-  if (typeof value !== "object") {
-    return undefined;
-  }
-  if (depth >= MCP_ACTIVITY_MAX_DEPTH || budget.seen.has(value)) {
-    return projectJsonString(JSON_TRUNCATION_MARKER, budget);
-  }
-
-  budget.seen.add(value);
-  if (Array.isArray(value)) {
-    if (budget.remainingBytes < 2) return undefined;
-    budget.remainingBytes -= 2;
-    const projected: unknown[] = [];
-    for (const entry of value.slice(0, MCP_ACTIVITY_MAX_COLLECTION_ENTRIES)) {
-      const separatorBytes = projected.length === 0 ? 0 : 1;
-      if (budget.remainingBytes <= separatorBytes) break;
-      budget.remainingBytes -= separatorBytes;
-      const next = projectJsonValue(entry, budget, depth + 1);
-      if (next === undefined) {
-        budget.remainingBytes += separatorBytes;
-        break;
-      }
-      projected.push(next);
-    }
-    budget.seen.delete(value);
-    return projected;
-  }
-
-  if (budget.remainingBytes < 2) return undefined;
-  budget.remainingBytes -= 2;
-  const projected: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value).slice(0, MCP_ACTIVITY_MAX_COLLECTION_ENTRIES)) {
-    const keyBytes = jsonByteLength(key);
-    if (keyBytes === null) continue;
-    const framingBytes = keyBytes + 1 + (Object.keys(projected).length === 0 ? 0 : 1);
-    if (framingBytes >= budget.remainingBytes) break;
-    budget.remainingBytes -= framingBytes;
-    const next = projectJsonValue(entry, budget, depth + 1);
-    if (next === undefined) {
-      budget.remainingBytes += framingBytes;
-      continue;
-    }
-    projected[key] = next;
-  }
-  budget.seen.delete(value);
-  return projected;
-}
-
-function projectMcpData(data: Record<string, unknown>): Record<string, unknown> {
-  const candidate: Record<string, unknown> = {};
-  if ("toolCallId" in data) candidate.toolCallId = data.toolCallId;
-  if ("kind" in data) candidate.kind = data.kind;
-  if ("item" in data) candidate.item = data.item;
-
-  const candidateBytes = jsonByteLength(candidate);
-  if (candidateBytes !== null && candidateBytes <= MCP_ACTIVITY_DATA_MAX_BYTES) {
-    return candidate;
-  }
-
-  const boundedCandidate: Record<string, unknown> = {};
-  if ("toolCallId" in candidate) boundedCandidate.toolCallId = candidate.toolCallId;
-  if ("kind" in candidate) boundedCandidate.kind = candidate.kind;
-  boundedCandidate.truncated = true;
-  if ("item" in candidate) boundedCandidate.item = candidate.item;
-  const projected = projectJsonValue(
-    boundedCandidate,
-    {
-      remainingBytes: MCP_ACTIVITY_DATA_MAX_BYTES,
-      seen: new WeakSet(),
-    },
-    0,
-  );
-  return asRecord(projected) ?? { truncated: true };
 }
 
 function pushChangedFile(target: string[], seen: Set<string>, value: unknown): void {
@@ -301,18 +160,8 @@ export function projectActivityPayload(
 ): OrchestrationThreadActivity {
   const payload = asRecord(activity.payload);
   const data = asRecord(payload?.data);
-  if (!payload || !data) {
+  if (!payload || !data || payload.itemType === "mcp_tool_call") {
     return activity;
-  }
-
-  if (payload.itemType === "mcp_tool_call") {
-    return {
-      ...activity,
-      payload: {
-        ...payload,
-        data: projectMcpData(data),
-      },
-    };
   }
 
   const projectedData: Record<string, unknown> = {};

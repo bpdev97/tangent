@@ -1897,9 +1897,8 @@ function workEntryIconName(workEntry: TimelineWorkEntry): WorkEntryIconName {
     case "mcp_tool_call":
       return "wrench";
     case "dynamic_tool_call":
-      return "hammer";
     case "collab_agent_tool_call":
-      return "bot";
+      return "hammer";
   }
 
   return workToneIcon(workEntry.tone).iconName;

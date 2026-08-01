@@ -17,17 +17,12 @@ const emitToolCalls = process.env.T3_ACP_EMIT_TOOL_CALLS === "1";
 const emitInterleavedAssistantToolCalls =
   process.env.T3_ACP_EMIT_INTERLEAVED_ASSISTANT_TOOL_CALLS === "1";
 const emitGenericToolPlaceholders = process.env.T3_ACP_EMIT_GENERIC_TOOL_PLACEHOLDERS === "1";
-const emitAgentThought = process.env.T3_ACP_EMIT_AGENT_THOUGHT === "1";
-const emitMessageIds = process.env.T3_ACP_EMIT_MESSAGE_IDS === "1";
 const emitAskQuestion = process.env.T3_ACP_EMIT_ASK_QUESTION === "1";
-const emitCreatePlan = process.env.T3_ACP_EMIT_CREATE_PLAN === "1";
-const emitCursorNotifications = process.env.T3_ACP_EMIT_CURSOR_NOTIFICATIONS === "1";
 const emitXAiAskUserQuestion = process.env.T3_ACP_EMIT_XAI_ASK_USER_QUESTION === "1";
 const emitXAiPromptCompleteThenHang = process.env.T3_ACP_EMIT_XAI_PROMPT_COMPLETE_THEN_HANG === "1";
 const emitForeignSessionUpdates = process.env.T3_ACP_EMIT_FOREIGN_SESSION_UPDATES === "1";
 const hangPromptForever = process.env.T3_ACP_HANG_PROMPT_FOREVER === "1";
 const hangFirstPromptForever = process.env.T3_ACP_HANG_FIRST_PROMPT_FOREVER === "1";
-const emitMessageThenHangUntilSteer = process.env.T3_ACP_EMIT_MESSAGE_THEN_HANG_UNTIL_STEER === "1";
 const emitLateUpdateAfterCancel = process.env.T3_ACP_EMIT_LATE_UPDATE_AFTER_CANCEL === "1";
 const omitXAiPromptCompleteStopReason =
   process.env.T3_ACP_OMIT_XAI_PROMPT_COMPLETE_STOP_REASON === "1";
@@ -47,7 +42,6 @@ const promptResponseText = process.env.T3_ACP_PROMPT_RESPONSE_TEXT;
 const promptDelayMs = Number(process.env.T3_ACP_PROMPT_DELAY_MS ?? "0");
 const permissionOptionIds = {
   allowOnce: process.env.T3_ACP_ALLOW_ONCE_OPTION_ID ?? "allow-once",
-  allowSession: process.env.T3_ACP_ALLOW_SESSION_OPTION_ID,
   allowAlways: process.env.T3_ACP_ALLOW_ALWAYS_OPTION_ID ?? "allow-always",
   rejectOnce: process.env.T3_ACP_REJECT_ONCE_OPTION_ID ?? "reject-once",
 };
@@ -72,13 +66,6 @@ function promptIdFromRequestMeta(
   }
   const promptId = meta.promptId ?? meta.requestId;
   return typeof promptId === "string" && promptId.length > 0 ? promptId : undefined;
-}
-
-function textFromPrompt(request: Pick<AcpSchema.PromptRequest, "prompt">): string {
-  return request.prompt
-    .flatMap((block) => (block.type === "text" ? [block.text] : []))
-    .join("\n")
-    .trim();
 }
 
 function logExit(reason: string): void {
@@ -531,28 +518,6 @@ const program = Effect.gen(function* () {
         return yield* Effect.never;
       }
 
-      if (emitMessageThenHangUntilSteer && promptCount === 1) {
-        yield* agent.client.sessionUpdate({
-          sessionId: requestedSessionId,
-          update: {
-            sessionUpdate: "agent_message_chunk",
-            content: { type: "text", text: "waiting for steer" },
-          },
-        });
-        return yield* Effect.never;
-      }
-
-      if (emitMessageThenHangUntilSteer && textFromPrompt(request).startsWith("/steer ")) {
-        yield* agent.client.sessionUpdate({
-          sessionId: requestedSessionId,
-          update: {
-            sessionUpdate: "agent_message_chunk",
-            content: { type: "text", text: "steer accepted" },
-          },
-        });
-        return { stopReason: "end_turn" };
-      }
-
       if (hangPromptForever || (hangFirstPromptForever && promptCount === 1)) {
         return yield* Effect.never;
       }
@@ -710,15 +675,6 @@ const program = Effect.gen(function* () {
           },
           options: [
             { optionId: permissionOptionIds.allowOnce, name: "Allow once", kind: "allow_once" },
-            ...(permissionOptionIds.allowSession
-              ? [
-                  {
-                    optionId: permissionOptionIds.allowSession,
-                    name: "Allow for session",
-                    kind: "allow_always" as const,
-                  },
-                ]
-              : []),
             {
               optionId: permissionOptionIds.allowAlways,
               name: "Allow always",
@@ -799,7 +755,7 @@ const program = Effect.gen(function* () {
       }
 
       if (emitAskQuestion) {
-        const result = yield* agent.client.extRequest("cursor/ask_question", {
+        yield* agent.client.extRequest("cursor/ask_question", {
           toolCallId: "ask-question-tool-call-1",
           title: "Question",
           questions: [
@@ -813,92 +769,7 @@ const program = Effect.gen(function* () {
             },
           ],
         });
-        if (
-          typeof result !== "object" ||
-          result === null ||
-          !("outcome" in result) ||
-          typeof result.outcome !== "object" ||
-          result.outcome === null ||
-          !("outcome" in result.outcome)
-        ) {
-          throw new Error("Expected cursor/ask_question response outcome.");
-        }
 
-        return { stopReason: "end_turn" };
-      }
-
-      if (emitCreatePlan) {
-        const result = yield* agent.client.extRequest("cursor/create_plan", {
-          toolCallId: "create-plan-tool-call-1",
-          name: "Mock implementation plan",
-          overview: "Verify explicit plan approval.",
-          plan: "# Mock implementation plan\n\n1. Inspect state\n2. Apply fix",
-          todos: [
-            { id: "inspect", content: "Inspect state", status: "completed" },
-            { id: "fix", content: "Apply fix", status: "pending" },
-          ],
-          isProject: false,
-        });
-        if (
-          typeof result !== "object" ||
-          result === null ||
-          !("outcome" in result) ||
-          typeof result.outcome !== "object" ||
-          result.outcome === null ||
-          !("outcome" in result.outcome) ||
-          result.outcome.outcome !== "accepted"
-        ) {
-          throw new Error("Expected accepted cursor/create_plan response outcome.");
-        }
-        return { stopReason: "end_turn" };
-      }
-
-      if (emitCursorNotifications) {
-        yield* agent.client.extNotification("cursor/task", {
-          toolCallId: "cursor-task-1",
-          description: "Explore the provider adapter",
-          prompt: "Inspect Cursor ACP handling",
-          subagentType: "explore",
-          model: "fast",
-          agentId: "agent-1",
-          durationMs: 250,
-        });
-        yield* agent.client.extNotification("cursor/generate_image", {
-          toolCallId: "cursor-image-1",
-          description: "Generate a provider diagram",
-          filePath: "/tmp/provider-diagram.png",
-          referenceImagePaths: [],
-        });
-        return { stopReason: "end_turn" };
-      }
-
-      if (emitMessageIds) {
-        const firstMessageId = "cf9cc699-e589-44d6-93cd-1f28fd288af4";
-        const secondMessageId = "22b80b51-ae14-473b-91cd-f7e29f602d31";
-        yield* agent.client.sessionUpdate({
-          sessionId: requestedSessionId,
-          update: {
-            sessionUpdate: "agent_message_chunk",
-            messageId: firstMessageId,
-            content: { type: "text", text: "first " },
-          },
-        });
-        yield* agent.client.sessionUpdate({
-          sessionId: requestedSessionId,
-          update: {
-            sessionUpdate: "agent_message_chunk",
-            messageId: firstMessageId,
-            content: { type: "text", text: "message" },
-          },
-        });
-        yield* agent.client.sessionUpdate({
-          sessionId: requestedSessionId,
-          update: {
-            sessionUpdate: "agent_message_chunk",
-            messageId: secondMessageId,
-            content: { type: "text", text: "second message" },
-          },
-        });
         return { stopReason: "end_turn" };
       }
 
@@ -994,16 +865,6 @@ const program = Effect.gen(function* () {
         },
       });
 
-      if (emitAgentThought) {
-        yield* agent.client.sessionUpdate({
-          sessionId: requestedSessionId,
-          update: {
-            sessionUpdate: "agent_thought_chunk",
-            content: { type: "text", text: "mock reasoning" },
-          },
-        });
-      }
-
       yield* agent.client.sessionUpdate({
         sessionId: requestedSessionId,
         update: {
@@ -1023,7 +884,7 @@ const program = Effect.gen(function* () {
       });
     }
 
-    if (method !== "session/mode/set" && method !== "session/set_mode") {
+    if (method !== "session/mode/set") {
       return Effect.fail(AcpError.AcpRequestError.methodNotFound(method));
     }
 

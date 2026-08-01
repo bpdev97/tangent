@@ -16,7 +16,6 @@ import {
   type ProviderUserInputAnswers,
   ProviderDriverKind,
   ProviderInstanceId,
-  RuntimeAgentId,
   RuntimeRequestId,
   type RuntimeMode,
   type ThreadId,
@@ -50,7 +49,7 @@ import {
   ProviderAdapterSessionNotFoundError,
   ProviderAdapterValidationError,
 } from "../Errors.ts";
-import { acpPermissionOptionId, mapAcpToAdapterError } from "../acp/AcpAdapterSupport.ts";
+import { acpPermissionOutcome, mapAcpToAdapterError } from "../acp/AcpAdapterSupport.ts";
 import type * as AcpSessionRuntime from "../acp/AcpSessionRuntime.ts";
 import {
   makeAcpAssistantItemEvent,
@@ -70,18 +69,10 @@ import { applyCursorAcpModelSelection, makeCursorAcpRuntime } from "../acp/Curso
 import {
   CursorAskQuestionRequest,
   CursorCreatePlanRequest,
-  CursorGenerateImageRequest,
-  CursorTaskRequest,
   CursorUpdateTodosRequest,
   extractAskQuestions,
-  extractPlanApprovalQuestion,
   extractPlanMarkdown,
-  makeCursorAskQuestionCancelledResponse,
-  makeCursorAskQuestionResponse,
-  makeCursorCreatePlanResponse,
-  makeCursorCreatePlanResponseFromAnswers,
-  type CursorTodo,
-  updateCursorTodoState,
+  extractTodosAsPlan,
 } from "../acp/CursorAcpExtension.ts";
 import { type CursorAdapterShape } from "../Services/CursorAdapter.ts";
 import { resolveCursorAcpBaseModelId } from "./CursorProvider.ts";
@@ -124,10 +115,11 @@ export interface CursorAdapterLiveOptions {
 
 interface PendingApproval {
   readonly decision: Deferred.Deferred<ProviderApprovalDecision>;
+  readonly kind: string | "unknown";
 }
 
 interface PendingUserInput {
-  readonly answers: Deferred.Deferred<ProviderUserInputAnswers | null>;
+  readonly answers: Deferred.Deferred<ProviderUserInputAnswers>;
 }
 
 interface CursorSessionContext {
@@ -139,7 +131,6 @@ interface CursorSessionContext {
   readonly pendingApprovals: Map<ApprovalRequestId, PendingApproval>;
   readonly pendingUserInputs: Map<ApprovalRequestId, PendingUserInput>;
   readonly turns: Array<{ id: TurnId; items: Array<unknown> }>;
-  cursorTodos: ReadonlyMap<string, CursorTodo>;
   lastPlanFingerprint: string | undefined;
   activeTurnId: TurnId | undefined;
   /** Number of sendTurn prompts currently in flight or being prepared.
@@ -162,13 +153,13 @@ function settlePendingApprovalsAsCancelled(
   );
 }
 
-function settlePendingUserInputsAsCancelled(
+function settlePendingUserInputsAsEmptyAnswers(
   pendingUserInputs: ReadonlyMap<ApprovalRequestId, PendingUserInput>,
 ): Effect.Effect<void> {
   const pendingEntries = Array.from(pendingUserInputs.values());
   return Effect.forEach(
     pendingEntries,
-    (pending) => Deferred.succeed(pending.answers, null).pipe(Effect.ignore),
+    (pending) => Deferred.succeed(pending.answers, {}).pipe(Effect.ignore),
     {
       discard: true,
     },
@@ -470,7 +461,7 @@ export function makeCursorAdapter(
         if (ctx.stopped) return;
         ctx.stopped = true;
         yield* settlePendingApprovalsAsCancelled(ctx.pendingApprovals);
-        yield* settlePendingUserInputsAsCancelled(ctx.pendingUserInputs);
+        yield* settlePendingUserInputsAsEmptyAnswers(ctx.pendingUserInputs);
         if (ctx.notificationFiber) {
           yield* Fiber.interrupt(ctx.notificationFiber);
         }
@@ -591,7 +582,7 @@ export function makeCursorAdapter(
                   );
                   const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
                   const runtimeRequestId = RuntimeRequestId.make(requestId);
-                  const answers = yield* Deferred.make<ProviderUserInputAnswers | null>();
+                  const answers = yield* Deferred.make<ProviderUserInputAnswers>();
                   pendingUserInputs.set(requestId, { answers });
                   yield* offerRuntimeEvent({
                     type: "user-input.requested",
@@ -616,11 +607,9 @@ export function makeCursorAdapter(
                     threadId: input.threadId,
                     turnId: ctx?.activeTurnId,
                     requestId: runtimeRequestId,
-                    payload: { answers: resolved ?? {} },
+                    payload: { answers: resolved },
                   });
-                  return resolved === null
-                    ? makeCursorAskQuestionCancelledResponse()
-                    : makeCursorAskQuestionResponse(params, resolved);
+                  return { answers: resolved };
                 }),
               ),
             );
@@ -646,46 +635,7 @@ export function makeCursorAdapter(
                       payload: params,
                     },
                   });
-                  if (ctx) {
-                    ctx.cursorTodos = updateCursorTodoState(new Map(), {
-                      toolCallId: params.toolCallId,
-                      todos: params.todos,
-                      merge: false,
-                    }).todos;
-                  }
-
-                  const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
-                  const runtimeRequestId = RuntimeRequestId.make(requestId);
-                  const answers = yield* Deferred.make<ProviderUserInputAnswers | null>();
-                  pendingUserInputs.set(requestId, { answers });
-                  yield* offerRuntimeEvent({
-                    type: "user-input.requested",
-                    ...(yield* makeEventStamp()),
-                    provider: PROVIDER,
-                    threadId: input.threadId,
-                    turnId: ctx?.activeTurnId,
-                    requestId: runtimeRequestId,
-                    payload: { questions: [extractPlanApprovalQuestion(params)] },
-                    raw: {
-                      source: "acp.cursor.extension",
-                      method: "cursor/create_plan",
-                      payload: params,
-                    },
-                  });
-                  const resolved = yield* Deferred.await(answers);
-                  pendingUserInputs.delete(requestId);
-                  yield* offerRuntimeEvent({
-                    type: "user-input.resolved",
-                    ...(yield* makeEventStamp()),
-                    provider: PROVIDER,
-                    threadId: input.threadId,
-                    turnId: ctx?.activeTurnId,
-                    requestId: runtimeRequestId,
-                    payload: { answers: resolved ?? {} },
-                  });
-                  return resolved === null
-                    ? makeCursorCreatePlanResponse("cancelled")
-                    : makeCursorCreatePlanResponseFromAnswers(resolved);
+                  return { accepted: true } as const;
                 }),
               ),
             );
@@ -702,96 +652,14 @@ export function makeCursorAdapter(
                       "acp.cursor.extension",
                     );
                     if (ctx) {
-                      const updated = updateCursorTodoState(ctx.cursorTodos, params);
-                      ctx.cursorTodos = updated.todos;
                       yield* emitPlanUpdate(
                         ctx,
-                        { plan: updated.plan },
+                        extractTodosAsPlan(params),
                         params,
                         "acp.cursor.extension",
                         "cursor/update_todos",
                       );
                     }
-                  }),
-                ),
-            );
-            yield* acp.handleExtNotification("cursor/task", CursorTaskRequest, (params) =>
-              mapExtensionFailure(
-                Effect.gen(function* () {
-                  yield* logNative(input.threadId, "cursor/task", params, "acp.cursor.extension");
-                  if (!ctx) return;
-                  const stamp = yield* makeEventStamp();
-                  const rawAgentId = params.agentId?.trim() || params.toolCallId;
-                  const role =
-                    typeof params.subagentType === "string"
-                      ? params.subagentType === "unspecified"
-                        ? undefined
-                        : params.subagentType
-                      : params.subagentType.custom.trim() || undefined;
-                  yield* offerRuntimeEvent({
-                    ...stamp,
-                    provider: PROVIDER,
-                    threadId: input.threadId,
-                    ...(ctx.activeTurnId ? { turnId: ctx.activeTurnId } : {}),
-                    type: "agent.completed",
-                    payload: {
-                      agentId: RuntimeAgentId.make(rawAgentId),
-                      status: "completed",
-                      ...(role ? { role } : {}),
-                      ...(params.description.trim()
-                        ? {
-                            description: params.description.trim(),
-                            summary: params.description.trim(),
-                          }
-                        : {}),
-                      ...(params.prompt.trim() ? { prompt: params.prompt.trim() } : {}),
-                      ...(params.model?.trim() ? { model: params.model.trim() } : {}),
-                      ...(typeof params.durationMs === "number"
-                        ? { durationMs: params.durationMs }
-                        : {}),
-                      providerThreadId: rawAgentId,
-                    },
-                    raw: {
-                      source: "acp.cursor.extension",
-                      method: "cursor/task",
-                      payload: params,
-                    },
-                  });
-                }),
-              ),
-            );
-            yield* acp.handleExtNotification(
-              "cursor/generate_image",
-              CursorGenerateImageRequest,
-              (params) =>
-                mapExtensionFailure(
-                  Effect.gen(function* () {
-                    yield* logNative(
-                      input.threadId,
-                      "cursor/generate_image",
-                      params,
-                      "acp.cursor.extension",
-                    );
-                    if (!ctx) return;
-                    yield* offerRuntimeEvent(
-                      makeAcpToolCallEvent({
-                        stamp: yield* makeEventStamp(),
-                        provider: PROVIDER,
-                        threadId: input.threadId,
-                        turnId: ctx.activeTurnId,
-                        toolCall: {
-                          toolCallId: params.toolCallId,
-                          kind: "other",
-                          title: "Generated image",
-                          status: "completed",
-                          detail: params.filePath?.trim() || params.description.trim(),
-                          data: { ...params },
-                        },
-                        rawPayload: params,
-                        source: "acp.cursor.extension",
-                        method: "cursor/generate_image",
-                      }),
-                    );
                   }),
                 ),
             );
@@ -819,7 +687,10 @@ export function makeCursorAdapter(
                   const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
                   const runtimeRequestId = RuntimeRequestId.make(requestId);
                   const decision = yield* Deferred.make<ProviderApprovalDecision>();
-                  pendingApprovals.set(requestId, { decision });
+                  pendingApprovals.set(requestId, {
+                    decision,
+                    kind: permissionRequest.kind,
+                  });
                   yield* offerRuntimeEvent(
                     makeAcpRequestOpenedEvent({
                       stamp: yield* makeEventStamp(),
@@ -851,15 +722,15 @@ export function makeCursorAdapter(
                       decision: resolved,
                     }),
                   );
-                  const optionId = acpPermissionOptionId(resolved, params.options);
-                  return resolved === "cancel" || optionId === undefined
-                    ? { outcome: { outcome: "cancelled" as const } }
-                    : {
-                        outcome: {
-                          outcome: "selected" as const,
-                          optionId,
-                        },
-                      };
+                  return {
+                    outcome:
+                      resolved === "cancel"
+                        ? ({ outcome: "cancelled" } as const)
+                        : {
+                            outcome: "selected" as const,
+                            optionId: acpPermissionOutcome(resolved),
+                          },
+                  };
                 }),
               ),
             );
@@ -905,7 +776,6 @@ export function makeCursorAdapter(
             pendingApprovals,
             pendingUserInputs,
             turns: [],
-            cursorTodos: new Map(),
             lastPlanFingerprint: undefined,
             activeTurnId: undefined,
             promptsInFlight: 0,
@@ -992,7 +862,6 @@ export function makeCursorAdapter(
                         threadId: ctx.threadId,
                         turnId: ctx.activeTurnId,
                         ...(event.itemId ? { itemId: event.itemId } : {}),
-                        streamKind: event.streamKind,
                         text: event.text,
                         rawPayload: event.rawPayload,
                       }),
@@ -1193,7 +1062,7 @@ export function makeCursorAdapter(
       Effect.gen(function* () {
         const ctx = yield* requireSession(threadId);
         yield* settlePendingApprovalsAsCancelled(ctx.pendingApprovals);
-        yield* settlePendingUserInputsAsCancelled(ctx.pendingUserInputs);
+        yield* settlePendingUserInputsAsEmptyAnswers(ctx.pendingUserInputs);
         yield* Effect.ignore(
           ctx.acp.cancel.pipe(
             Effect.mapError((error) =>

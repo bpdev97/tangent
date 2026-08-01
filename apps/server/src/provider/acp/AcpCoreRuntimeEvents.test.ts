@@ -131,7 +131,6 @@ describe("AcpCoreRuntimeEvents", () => {
       itemId: "assistant:session-1:segment:0",
       payload: {
         delta: "hello",
-        streamKind: "assistant_text",
       },
     });
 

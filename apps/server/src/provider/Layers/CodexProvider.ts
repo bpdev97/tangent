@@ -169,6 +169,7 @@ export function mapCodexModelCapabilities(
       currentValue: defaultServiceTier,
     });
   }
+
   return createModelCapabilities({
     optionDescriptors,
   });

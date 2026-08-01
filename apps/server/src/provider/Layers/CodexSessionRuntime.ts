@@ -93,7 +93,6 @@ type CodexServiceTier = NonNullable<EffectCodexSchema.V2ThreadStartParams["servi
 type CodexThreadItem =
   | EffectCodexSchema.V2ThreadReadResponse["thread"]["turns"][number]["items"][number]
   | EffectCodexSchema.V2ThreadRollbackResponse["thread"]["turns"][number]["items"][number];
-type CodexLifecycleItemType = EffectCodexSchema.V2ItemStartedNotification["item"]["type"];
 
 export interface CodexSessionRuntimeOptions {
   readonly threadId: ThreadId;
@@ -208,6 +207,7 @@ export class CodexSessionRuntimeThreadIdMissingError extends Schema.TaggedErrorC
 
 interface PendingApproval {
   readonly requestId: ApprovalRequestId;
+  readonly jsonRpcId?: string;
   readonly requestKind: ProviderRequestKind;
   readonly turnId: TurnId | undefined;
   readonly itemId: ProviderItemId | undefined;
@@ -623,14 +623,23 @@ function rememberCollabReceiverTurns(
   }
 }
 
-export function shouldSuppressCodexChildNotification(
+function shouldSuppressChildConversationNotification(
   method: CodexRpc.ServerNotificationMethod,
-  itemType?: CodexLifecycleItemType,
 ): boolean {
-  if (method !== "item/started" && method !== "item/completed") {
-    return true;
-  }
-  return itemType !== "collabAgentToolCall" && itemType !== "subAgentActivity";
+  return (
+    method === "thread/started" ||
+    method === "thread/status/changed" ||
+    method === "thread/archived" ||
+    method === "thread/unarchived" ||
+    method === "thread/closed" ||
+    method === "thread/compacted" ||
+    method === "thread/name/updated" ||
+    method === "thread/tokenUsage/updated" ||
+    method === "turn/started" ||
+    method === "turn/completed" ||
+    method === "turn/plan/updated" ||
+    method === "item/plan/delta"
+  );
 }
 
 function toCodexUserInputAnswer(
@@ -843,19 +852,8 @@ export const makeCodexSessionRuntime = (
             : undefined;
         })();
 
-        rememberCollabReceiverTurns(
-          collabReceiverTurns,
-          notification,
-          childParentTurnId ?? route.turnId,
-        );
-        const lifecycleItemType =
-          notification.method === "item/started" || notification.method === "item/completed"
-            ? notification.params.item.type
-            : undefined;
-        if (
-          childParentTurnId &&
-          shouldSuppressCodexChildNotification(notification.method, lifecycleItemType)
-        ) {
+        rememberCollabReceiverTurns(collabReceiverTurns, notification, route.turnId);
+        if (childParentTurnId && shouldSuppressChildConversationNotification(notification.method)) {
           yield* Ref.set(collabReceiverTurnsRef, collabReceiverTurns);
           return;
         }
@@ -978,6 +976,7 @@ export const makeCodexSessionRuntime = (
           const next = new Map(current);
           next.set(requestId, {
             requestId,
+            jsonRpcId: payload.approvalId ?? payload.itemId,
             requestKind: "command",
             turnId,
             itemId,
@@ -1035,6 +1034,7 @@ export const makeCodexSessionRuntime = (
           const next = new Map(current);
           next.set(requestId, {
             requestId,
+            jsonRpcId: payload.itemId,
             requestKind: "file-change",
             turnId,
             itemId,

@@ -55,6 +55,7 @@ export interface ApnsDeliveryClient {
   readonly ready: () => Promise<void>;
   readonly sendNotification: (input: NotificationInput) => Promise<ApnsResult>;
   readonly sendLiveActivity: (input: LiveActivityInput) => Promise<ApnsResult>;
+  readonly close?: () => Promise<void> | void;
 }
 
 interface CachedProviderToken {
@@ -66,6 +67,7 @@ export class ApnsClient implements ApnsDeliveryClient {
   readonly #config: RelayConfig["apns"];
   #key: Promise<CryptoKey> | null = null;
   #token: CachedProviderToken | null = null;
+  readonly #sessions = new Map<ApnsEnvironment, NodeHttp2.ClientHttp2Session>();
 
   constructor(config: RelayConfig["apns"]) {
     this.#config = config;
@@ -91,52 +93,84 @@ export class ApnsClient implements ApnsDeliveryClient {
     return value;
   }
 
-  async #sendOnce(request: ApnsRequest): Promise<ApnsResult> {
+  #discardSession(environment: ApnsEnvironment, session: NodeHttp2.ClientHttp2Session): void {
+    if (this.#sessions.get(environment) === session) this.#sessions.delete(environment);
+  }
+
+  #session(environment: ApnsEnvironment): NodeHttp2.ClientHttp2Session {
+    const existing = this.#sessions.get(environment);
+    if (existing && !existing.closed && !existing.destroyed) return existing;
+
     const host =
-      request.environment === "production"
+      environment === "production"
         ? "https://api.push.apple.com"
         : "https://api.sandbox.push.apple.com";
+    const session = NodeHttp2.connect(host);
+    this.#sessions.set(environment, session);
+    session.once("close", () => this.#discardSession(environment, session));
+    session.once("goaway", () => {
+      this.#discardSession(environment, session);
+      session.close();
+    });
+    session.on("error", () => {
+      this.#discardSession(environment, session);
+      if (!session.destroyed) session.destroy();
+    });
+    return session;
+  }
+
+  async #sendOnce(request: ApnsRequest): Promise<ApnsResult> {
     const authorization = `bearer ${await this.#providerToken()}`;
     const body = JSON.stringify(request.payload);
 
     return await new Promise<ApnsResult>((resolve, reject) => {
-      const session = NodeHttp2.connect(host);
+      const session = this.#session(request.environment);
       let settled = false;
+      let stream: NodeHttp2.ClientHttp2Stream | undefined;
       const finish = (result: ApnsResult) => {
         if (settled) return;
         settled = true;
-        session.close();
         resolve(result);
       };
       const fail = (error: Error) => {
         if (settled) return;
         settled = true;
-        session.destroy();
+        stream?.close(NodeHttp2.constants.NGHTTP2_CANCEL);
         reject(error);
       };
-      session.once("error", fail);
-      session.setTimeout(10_000, () => fail(new Error("APNs request timed out")));
-      const stream = session.request({
-        ":method": "POST",
-        ":path": `/3/device/${request.token}`,
-        authorization,
-        "apns-topic": request.topic,
-        "apns-push-type": request.pushType,
-        "apns-priority": request.priority,
-        "apns-id": request.apnsId,
-        "content-type": "application/json",
-        ...(request.collapseId ? { "apns-collapse-id": request.collapseId } : {}),
-      });
+      try {
+        stream = session.request({
+          ":method": "POST",
+          ":path": `/3/device/${request.token}`,
+          authorization,
+          "apns-topic": request.topic,
+          "apns-push-type": request.pushType,
+          "apns-priority": request.priority,
+          "apns-id": request.apnsId,
+          "content-type": "application/json",
+          ...(request.collapseId ? { "apns-collapse-id": request.collapseId } : {}),
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error : new Error(String(error)));
+        return;
+      }
       let status = 0;
       let apnsId: string | null = null;
       let responseBody = "";
+      stream.setTimeout(10_000, () => {
+        this.#discardSession(request.environment, session);
+        session.destroy();
+        fail(new Error("APNs request timed out"));
+      });
       stream.setEncoding("utf8");
       stream.on("response", (headers) => {
         status = Number(headers[":status"] ?? 0);
         apnsId = typeof headers["apns-id"] === "string" ? headers["apns-id"] : null;
       });
       stream.on("data", (chunk: string) => {
-        responseBody += chunk;
+        if (responseBody.length < 16_384) {
+          responseBody += chunk.slice(0, 16_384 - responseBody.length);
+        }
       });
       stream.once("end", () => {
         let reason: string | null = null;
@@ -183,6 +217,11 @@ export class ApnsClient implements ApnsDeliveryClient {
 
   sendLiveActivity(input: LiveActivityInput): Promise<ApnsResult> {
     return this.#send(makeLiveActivityRequest(this.#config, input));
+  }
+
+  close(): void {
+    for (const session of this.#sessions.values()) session.close();
+    this.#sessions.clear();
   }
 }
 

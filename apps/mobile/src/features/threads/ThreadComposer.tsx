@@ -71,7 +71,6 @@ import {
 } from "../../lib/providerOptions";
 import { useComposerPathSearch } from "../../state/use-composer-path-search";
 import { ComposerCommandPopover, type ComposerCommandItem } from "./ComposerCommandPopover";
-import { projectThreadComposerStatus, type ComposerStatusPillState } from "./threadComposerStatus";
 
 /**
  * Height of the collapsed composer (pill + vertical padding, excluding safe-area inset).
@@ -184,6 +183,57 @@ export function ComposerSurface(props: {
   );
 }
 
+type ComposerStatusPillState = {
+  readonly kind: "unavailable" | "reconnecting" | "syncing";
+  readonly label: string;
+};
+
+function composerConnectionStatus(input: {
+  readonly connectionError: string | null;
+  readonly connectionState: RemoteClientConnectionState;
+  readonly environmentLabel: string | null;
+  readonly threadSyncPhase?: "loading" | "syncing" | null;
+}): ComposerStatusPillState | null {
+  const environmentLabel = input.environmentLabel ?? "Environment";
+
+  switch (input.connectionState) {
+    case "connecting":
+    case "reconnecting":
+      return {
+        kind: "reconnecting",
+        label:
+          input.connectionError === null
+            ? `Reconnecting to ${environmentLabel}...`
+            : `Failed to connect. Retrying ${environmentLabel}...`,
+      };
+    case "offline":
+      return { kind: "unavailable", label: "You are offline" };
+    case "error":
+      return {
+        kind: "unavailable",
+        label: input.connectionError
+          ? `Failed to connect to ${environmentLabel}: ${input.connectionError}`
+          : `Failed to connect to ${environmentLabel}`,
+      };
+    case "available":
+      return { kind: "unavailable", label: `${environmentLabel} is not connected` };
+    case "connected":
+      break;
+  }
+
+  // Connected: the pill is the single loading/sync indicator. One stable
+  // label per open — "Loading" when starting from scratch, "Syncing" when
+  // cached messages are already visible.
+  switch (input.threadSyncPhase) {
+    case "loading":
+      return { kind: "syncing", label: "Loading messages..." };
+    case "syncing":
+      return { kind: "syncing", label: "Syncing messages..." };
+    default:
+      return null;
+  }
+}
+
 const ComposerConnectionStatusPill = memo(function ComposerConnectionStatusPill(props: {
   readonly onPress: () => void;
   readonly status: ComposerStatusPillState;
@@ -269,7 +319,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
   const currentModelSelection = props.selectedThread.modelSelection;
   const currentRuntimeMode = props.selectedThread.runtimeMode;
   const currentInteractionMode = props.selectedThread.interactionMode ?? "default";
-  const connectionStatus = projectThreadComposerStatus({
+  const connectionStatus = composerConnectionStatus({
     connectionError: props.connectionError,
     connectionState: props.connectionState,
     environmentLabel: props.environmentLabel,

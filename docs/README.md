@@ -33,6 +33,17 @@ policy in [CONTRIBUTING.md](../CONTRIBUTING.md); agent rules in [AGENTS.md](../A
 - [T3 Connect](./internals/t3-connect.md)
 - [CI gates](./internals/ci.md)
 
+### Fork maintenance
+
+- [Authoritative fork registry](../FORK.md)
+- [2026-08-01 fork audit and reduction](./fork/audit-2026-08-01.md)
+- [Tangent distribution](./personal-distribution.md)
+- [Hermes provider](./fork/hermes.md)
+- [Generic chat](./fork/generic-chat.md)
+- [Personal push relay](./fork/personal-push-relay.md)
+- [HEIC/HEIF image normalization](./fork/image-normalization.md)
+- [Codex MCP tool approvals](./fork/codex-mcp-tool-approvals.md)
+
 ### Runbooks
 
 - [Release](./operations/release.md)

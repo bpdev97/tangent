@@ -14,44 +14,6 @@ function asTrimmedString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function firstTrimmedString(...values: ReadonlyArray<unknown>): string | null {
-  for (const value of values) {
-    const normalized = asTrimmedString(value);
-    if (normalized) {
-      return normalized;
-    }
-  }
-  return null;
-}
-
-export function extractToolCallIdentity(payloadValue: unknown): string | null {
-  const payload = asRecord(payloadValue);
-  const data = asRecord(payload?.data);
-  const item = asRecord(data?.item);
-  return firstTrimmedString(
-    payload?.itemId,
-    payload?.agentId,
-    payload?.toolCallId,
-    payload?.toolUseId,
-    data?.toolCallId,
-    data?.toolUseId,
-    data?.agentId,
-    item?.id,
-  );
-}
-
-export function isToolLifecycleActivityKind(kind: string): boolean {
-  return (
-    kind === "tool.started" ||
-    kind === "tool.progress" ||
-    kind === "tool.updated" ||
-    kind === "tool.completed" ||
-    kind === "agent.started" ||
-    kind === "agent.updated" ||
-    kind === "agent.completed"
-  );
-}
-
 function normalizeCommandValue(value: unknown): string | undefined {
   const direct = asTrimmedString(value);
   if (direct) {

@@ -4,6 +4,7 @@ import * as NodePath from "node:path";
 import * as NodeSqlite from "node:sqlite";
 import type {
   RelayAgentActivityAggregateState,
+  RelayAgentActivityState,
   RelayAgentAwarenessPreferences,
 } from "@t3tools/contracts/relay";
 import { afterEach, describe, expect, it } from "vite-plus/test";
@@ -80,5 +81,35 @@ describe("RelayStore migrations", () => {
       lastLiveActivityAggregate: aggregate,
     });
     store.close();
+  });
+
+  it("removes expired activity rows from persistent storage", () => {
+    const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "push-relay-store-"));
+    temporaryDirectories.push(directory);
+    const databasePath = NodePath.join(directory, "relay.sqlite");
+    const store = new RelayStore(databasePath);
+    store.publish({
+      environmentId: "environment-1",
+      threadId: "thread-1",
+      state: {
+        environmentId: "environment-1" as RelayAgentActivityState["environmentId"],
+        threadId: "thread-1" as RelayAgentActivityState["threadId"],
+        projectTitle: "Expired project",
+        threadTitle: "Expired thread",
+        phase: "running",
+        headline: "Expired activity",
+        modelTitle: "Codex",
+        updatedAt: "2020-01-01T00:00:00.000Z",
+        deepLink: "/",
+      },
+    });
+    store.close();
+
+    const database = new NodeSqlite.DatabaseSync(databasePath);
+    const row = database.prepare("SELECT COUNT(*) AS count FROM activities").get() as {
+      count: number;
+    };
+    database.close();
+    expect(row.count).toBe(0);
   });
 });

@@ -1,7 +1,8 @@
-# T3 Code Mobile
+# Tangent Mobile
 
 > [!WARNING]
-> T3 Code Mobile is currently in development and is not distributed yet. If you want to try it out, you can build it from source.
+> Tangent Mobile is a personal distribution. Production iOS builds are delivered through
+> TestFlight; local development still requires building from source.
 
 ## Quickstart
 
@@ -10,9 +11,13 @@
 
 This app has three variants:
 
-- `development`: Expo dev client, installable side-by-side as `T3 Code Dev`
-- `preview`: persistent internal preview build, installable side-by-side as `T3 Code Preview`
-- `production`: store/release build as `T3 Code`
+- `development`: Expo dev client, installable side-by-side as `Tangent Dev`
+- `preview`: persistent internal preview build, installable side-by-side as `Tangent Preview`
+- `production`: TestFlight/release build as `Tangent`
+
+The personal distribution changes iOS names, bundle IDs, URL schemes, and Expo ownership. Android
+package IDs remain upstream-compatible because Tangent's personal release workflow does not publish
+Android builds.
 
 Run commands from `apps/mobile`.
 

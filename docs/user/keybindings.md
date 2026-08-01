@@ -3,8 +3,8 @@
 Edit keybindings from **Settings** → **Keybindings**. That page lists every command, its current
 shortcut, whether it is a default or your own, and warns about conflicts.
 
-The same configuration lives in `~/.t3/userdata/keybindings.json` on the machine running the
-server, if you prefer editing it directly. T3 Code writes the built-in defaults into that file on
+The same configuration lives in `~/.bpdev-code/userdata/keybindings.json` on the machine running
+the server, if you prefer editing it directly. Tangent writes the built-in defaults into that file on
 first run, and adds any new defaults on later startups unless a rule of yours already claims the
 command or the shortcut.
 
@@ -45,6 +45,10 @@ The command palette searches active thread titles, projects, branches, user mess
 agent responses across connected environments. Message matches show one labeled excerpt while
 keeping the thread's project, branch, and machine context visible. Message search begins after two
 characters and uses SQLite's ASCII case-insensitive matching.
+
+While the command palette is open, unmodified **Control-N** and **Control-P** move to the next and
+previous result. They follow the same highlighting, wraparound, and scrolling behavior as the arrow
+keys and do not install a global shortcut outside the palette.
 
 The full command list and the current defaults are shown in **Settings** → **Keybindings**, which
 always matches the build you are running. Use that rather than a copied list.

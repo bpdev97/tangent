@@ -920,10 +920,12 @@ export function syncAgentAwarenessConnections(
 
   const observedEnvironmentIds = new Set(connections.map(({ environmentId }) => environmentId));
   let pushEndpointAddedOrChanged = false;
+  let pushEndpointRemoved = false;
 
   for (const environmentId of environmentConnections.keys()) {
     if (!observedEnvironmentIds.has(environmentId)) {
       environmentConnections.delete(environmentId);
+      pushEndpointRemoved = true;
     }
   }
 
@@ -948,14 +950,32 @@ export function syncAgentAwarenessConnections(
 
     if (previous !== undefined) {
       environmentConnections.delete(connection.environmentId);
+      pushEndpointRemoved = true;
     }
   }
 
-  if (!pushEndpointAddedOrChanged) {
+  if (!hasAgentAwarenessBackend()) {
+    if (!pushEndpointRemoved) {
+      return;
+    }
+    deviceRegistrationGeneration++;
+    activeDeviceRegistration = null;
+    pendingDeviceRegistration = null;
+    registeredActivityPushTokens.clear();
+    pushTokenSubscription?.remove();
+    pushTokenSubscription = null;
+    appStateSubscription?.remove();
+    appStateSubscription = null;
+    if (activeLiveActivityRegistrationRetry) {
+      clearTimeout(activeLiveActivityRegistrationRetry);
+      activeLiveActivityRegistrationRetry = null;
+    }
+    endLocalLiveActivities("live activity cleanup after final environment removal failed");
+    setRegistrationStatus("unknown");
     return;
   }
 
-  if (!hasAgentAwarenessBackend()) {
+  if (!pushEndpointAddedOrChanged) {
     return;
   }
 

@@ -946,100 +946,6 @@ describe("ProviderRuntimeIngestion", () => {
     expect(message?.streaming).toBe(false);
   });
 
-  it("coalesces canonical reasoning deltas into a visible thinking activity", async () => {
-    const harness = await createHarness();
-    const threadId = asThreadId("thread-1");
-    const turnId = asTurnId("turn-reasoning");
-
-    harness.emit({
-      type: "content.delta",
-      eventId: asEventId("evt-reasoning-delta-1"),
-      provider: ProviderDriverKind.make("hermes"),
-      createdAt: "2026-01-01T00:00:01.000Z",
-      threadId,
-      turnId,
-      payload: {
-        streamKind: "reasoning_text",
-        delta: "Inspecting the provider ",
-      },
-    });
-    harness.emit({
-      type: "content.delta",
-      eventId: asEventId("evt-reasoning-delta-2"),
-      provider: ProviderDriverKind.make("hermes"),
-      createdAt: "2026-01-01T00:00:02.000Z",
-      threadId,
-      turnId,
-      payload: {
-        streamKind: "reasoning_text",
-        delta: "event stream.",
-      },
-    });
-
-    const activityId = "reasoning:thread-1:turn-reasoning:reasoning_text";
-    const thread = await waitForThread(harness.readModel, (entry) =>
-      entry.activities.some(
-        (activity: ProviderRuntimeTestActivity) =>
-          activity.id === activityId &&
-          typeof activity.payload === "object" &&
-          activity.payload !== null &&
-          "detail" in activity.payload &&
-          activity.payload.detail === "Inspecting the provider event stream.",
-      ),
-    );
-    const reasoningActivities = thread.activities.filter(
-      (activity: ProviderRuntimeTestActivity) => activity.id === activityId,
-    );
-
-    expect(reasoningActivities).toHaveLength(1);
-    expect(reasoningActivities[0]).toMatchObject({
-      kind: "task.progress",
-      summary: "Thinking",
-      tone: "info",
-      turnId,
-      createdAt: "2026-01-01T00:00:02.000Z",
-      payload: {
-        taskId: "turn-reasoning",
-        summary: "Thinking",
-        detail: "Inspecting the provider event stream.",
-        streamKind: "reasoning_text",
-      },
-    });
-
-    harness.emit({
-      type: "turn.aborted",
-      eventId: asEventId("evt-reasoning-aborted"),
-      provider: ProviderDriverKind.make("hermes"),
-      createdAt: "2026-01-01T00:00:03.000Z",
-      threadId,
-      turnId,
-      payload: { reason: "cancelled" },
-    });
-    harness.emit({
-      type: "content.delta",
-      eventId: asEventId("evt-reasoning-after-abort"),
-      provider: ProviderDriverKind.make("hermes"),
-      createdAt: "2026-01-01T00:00:04.000Z",
-      threadId,
-      turnId,
-      payload: {
-        streamKind: "reasoning_text",
-        delta: "Fresh reasoning.",
-      },
-    });
-
-    await waitForThread(harness.readModel, (entry) =>
-      entry.activities.some(
-        (activity: ProviderRuntimeTestActivity) =>
-          activity.id === activityId &&
-          typeof activity.payload === "object" &&
-          activity.payload !== null &&
-          "detail" in activity.payload &&
-          activity.payload.detail === "Fresh reasoning.",
-      ),
-    );
-  });
-
   it("uses assistant item completion detail when no assistant deltas were streamed", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
@@ -2698,7 +2604,7 @@ describe("ProviderRuntimeIngestion", () => {
     expect(resolvedPayload?.requestType).toBe("command_execution_approval");
   });
 
-  it("maps MCP tool approval requests into computer-use approval activities", async () => {
+  it("maps MCP tool approval requests into MCP approval activities", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
 
@@ -2732,7 +2638,7 @@ describe("ProviderRuntimeIngestion", () => {
         ? (activity.payload as Record<string, unknown>)
         : undefined;
 
-    expect(activity?.summary).toBe("Computer-use approval requested");
+    expect(activity?.summary).toBe("MCP tool approval requested");
     expect(payload).toMatchObject({
       requestKind: "mcp-tool-call",
       requestType: "mcp_tool_call_approval",
@@ -2868,13 +2774,11 @@ describe("ProviderRuntimeIngestion", () => {
       createdAt: now,
       threadId: asThreadId("thread-1"),
       turnId: asTurnId("turn-9"),
-      itemId: asItemId("command-9"),
       payload: {
         itemType: "command_execution",
-        status: "inProgress",
+        status: "in_progress",
         title: "Read file",
         detail: "/tmp/file.ts",
-        data: { item: { command: ["sed", "-n", "1,20p", "/tmp/file.ts"] } },
       },
     });
 
@@ -2889,66 +2793,11 @@ describe("ProviderRuntimeIngestion", () => {
     );
 
     expect(thread.session?.status).toBe("ready");
-    const activity = thread.activities.find(
-      (entry: ProviderRuntimeTestActivity) => entry.kind === "tool.started",
-    );
-    const payload =
-      activity?.payload && typeof activity.payload === "object"
-        ? (activity.payload as Record<string, unknown>)
-        : undefined;
-    expect(payload).toMatchObject({
-      itemId: "command-9",
-      itemType: "command_execution",
-      status: "inProgress",
-      title: "Read file",
-      data: { item: { command: ["sed", "-n", "1,20p", "/tmp/file.ts"] } },
-    });
-  });
-
-  it("projects tool progress with a stable call id and elapsed time", async () => {
-    const harness = await createHarness();
-    const now = "2026-01-01T00:00:00.000Z";
-
-    harness.emit({
-      type: "tool.progress",
-      eventId: asEventId("evt-tool-progress"),
-      provider: ProviderDriverKind.make("claudeAgent"),
-      createdAt: now,
-      threadId: asThreadId("thread-1"),
-      turnId: asTurnId("turn-progress"),
-      payload: {
-        toolUseId: "tool-use-1",
-        toolName: "Bash",
-        summary: "Running tests",
-        elapsedSeconds: 2.5,
-      },
-    });
-
-    const thread = await waitForThread(harness.readModel, (entry) =>
-      entry.activities.some((activity) => activity.id === "evt-tool-progress"),
-    );
-    const activity = thread.activities.find(
-      (entry: ProviderRuntimeTestActivity) => entry.id === "evt-tool-progress",
-    );
-    const payload =
-      activity?.payload && typeof activity.payload === "object"
-        ? (activity.payload as Record<string, unknown>)
-        : undefined;
-
-    expect(activity).toMatchObject({
-      kind: "tool.progress",
-      tone: "tool",
-      summary: "Running tests",
-    });
-    expect(payload).toMatchObject({
-      itemId: "tool-use-1",
-      toolUseId: "tool-use-1",
-      toolName: "Bash",
-      title: "Bash",
-      status: "inProgress",
-      detail: "Running tests",
-      elapsedSeconds: 2.5,
-    });
+    expect(
+      thread.activities.some(
+        (activity: ProviderRuntimeTestActivity) => activity.kind === "tool.started",
+      ),
+    ).toBe(true);
   });
 
   it("consumes P1 runtime events into thread metadata, diff checkpoints, and activities", async () => {
@@ -3367,76 +3216,6 @@ describe("ProviderRuntimeIngestion", () => {
     ).toBe("# Plan title");
   });
 
-  it("projects provider-neutral subagent lifecycle into stable agent activities", async () => {
-    const harness = await createHarness();
-    const now = "2026-01-01T00:00:00.000Z";
-
-    harness.emit({
-      type: "agent.started",
-      eventId: asEventId("evt-agent-started"),
-      provider: ProviderDriverKind.make("codex"),
-      createdAt: now,
-      threadId: asThreadId("thread-1"),
-      turnId: asTurnId("turn-agent-1"),
-      payload: {
-        agentId: "agent-1",
-        parentAgentId: "root-agent",
-        role: "reviewer",
-        description: "Review the provider adapters",
-        prompt: "Find lifecycle bugs",
-        model: "gpt-5.3-codex",
-        providerThreadId: "provider-agent-1",
-        status: "running",
-      },
-    });
-    harness.emit({
-      type: "agent.completed",
-      eventId: asEventId("evt-agent-completed"),
-      provider: ProviderDriverKind.make("codex"),
-      createdAt: "2026-01-01T00:00:01.000Z",
-      threadId: asThreadId("thread-1"),
-      turnId: asTurnId("turn-agent-1"),
-      payload: {
-        agentId: "agent-1",
-        parentAgentId: "root-agent",
-        role: "reviewer",
-        description: "Review the provider adapters",
-        prompt: "Find lifecycle bugs",
-        model: "gpt-5.3-codex",
-        providerThreadId: "provider-agent-1",
-        status: "completed",
-        summary: "No lifecycle bugs found",
-        durationMs: 1_000,
-      },
-    });
-
-    const thread = await waitForThread(harness.readModel, (entry) =>
-      entry.activities.some(
-        (activity: ProviderRuntimeTestActivity) => activity.kind === "agent.completed",
-      ),
-    );
-    const started = thread.activities.find(
-      (activity: ProviderRuntimeTestActivity) => activity.kind === "agent.started",
-    );
-    const completed = thread.activities.find(
-      (activity: ProviderRuntimeTestActivity) => activity.kind === "agent.completed",
-    );
-    expect(started?.summary).toBe("reviewer subagent started");
-    expect(started?.payload).toMatchObject({
-      itemType: "collab_agent_tool_call",
-      itemId: "agent-1",
-      status: "inProgress",
-      title: "reviewer subagent",
-    });
-    expect(completed?.summary).toBe("reviewer subagent completed");
-    expect(completed?.payload).toMatchObject({
-      itemType: "collab_agent_tool_call",
-      itemId: "agent-1",
-      status: "completed",
-      detail: "No lifecycle bugs found",
-    });
-  });
-
   it("titles task activities with the task description, including on completion", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
@@ -3488,12 +3267,14 @@ describe("ProviderRuntimeIngestion", () => {
         (activity: ProviderRuntimeTestActivity) => activity.id === "evt-named-task-completed",
       ),
     );
+
     const progress = thread.activities.find(
       (activity: ProviderRuntimeTestActivity) => activity.id === "evt-named-task-progress",
     );
     const completed = thread.activities.find(
       (activity: ProviderRuntimeTestActivity) => activity.id === "evt-named-task-completed",
     );
+
     const progressPayload =
       progress?.payload && typeof progress.payload === "object"
         ? (progress.payload as Record<string, unknown>)
@@ -3528,6 +3309,7 @@ describe("ProviderRuntimeIngestion", () => {
         taskType: "local_bash",
       },
     });
+
     harness.emit({
       type: "task.completed",
       eventId: asEventId("evt-fast-task-completed"),
@@ -3535,7 +3317,10 @@ describe("ProviderRuntimeIngestion", () => {
       createdAt: now,
       threadId: asThreadId("thread-1"),
       turnId: asTurnId("turn-fast-task"),
-      payload: { taskId: "fast-task-1", status: "completed" },
+      payload: {
+        taskId: "fast-task-1",
+        status: "completed",
+      },
     });
 
     const thread = await waitForThread(harness.readModel, (entry) =>
@@ -3543,6 +3328,7 @@ describe("ProviderRuntimeIngestion", () => {
         (activity: ProviderRuntimeTestActivity) => activity.id === "evt-fast-task-completed",
       ),
     );
+
     const completed = thread.activities.find(
       (activity: ProviderRuntimeTestActivity) => activity.id === "evt-fast-task-completed",
     );
@@ -3550,6 +3336,7 @@ describe("ProviderRuntimeIngestion", () => {
       completed?.payload && typeof completed.payload === "object"
         ? (completed.payload as Record<string, unknown>)
         : undefined;
+
     expect(completedPayload?.title).toBe("wait for codex review to finish");
   });
 
@@ -3570,12 +3357,15 @@ describe("ProviderRuntimeIngestion", () => {
         summary: "Polling CI checks.",
       },
     });
+
     await waitForThread(harness.readModel, (entry) =>
       entry.activities.some(
         (activity: ProviderRuntimeTestActivity) => activity.id === "evt-swept-task-progress",
       ),
     );
 
+    // session.exited sweeps the in-memory description cache; the completion
+    // that follows must recover the name from persisted activities.
     harness.emit({
       type: "session.exited",
       eventId: asEventId("evt-swept-task-session-exited"),
@@ -3584,6 +3374,7 @@ describe("ProviderRuntimeIngestion", () => {
       threadId: asThreadId("thread-1"),
       payload: {},
     });
+
     harness.emit({
       type: "task.completed",
       eventId: asEventId("evt-swept-task-completed"),
@@ -3603,6 +3394,7 @@ describe("ProviderRuntimeIngestion", () => {
         (activity: ProviderRuntimeTestActivity) => activity.id === "evt-swept-task-completed",
       ),
     );
+
     const completed = thread.activities.find(
       (activity: ProviderRuntimeTestActivity) => activity.id === "evt-swept-task-completed",
     );
@@ -3610,6 +3402,7 @@ describe("ProviderRuntimeIngestion", () => {
       completed?.payload && typeof completed.payload === "object"
         ? (completed.payload as Record<string, unknown>)
         : undefined;
+
     expect(completedPayload?.title).toBe("Watch round-3 CI and bots");
   });
 

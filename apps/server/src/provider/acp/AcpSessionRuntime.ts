@@ -68,9 +68,7 @@ export interface AcpSessionRuntimeOptions {
     readonly name: string;
     readonly version: string;
   };
-  readonly authMethodId:
-    | string
-    | ((initializeResult: EffectAcpSchema.InitializeResponse) => string | undefined);
+  readonly authMethodId: string;
   readonly mcpServers?: ReadonlyArray<EffectAcpSchema.McpServer>;
   readonly requestLogger?: (event: AcpSessionRequestLogEvent) => Effect.Effect<void, never>;
   readonly protocolLogging?: {
@@ -197,15 +195,6 @@ export class AcpSessionRuntime extends Context.Service<
       payload: Omit<EffectAcpSchema.PromptRequest, "sessionId">,
     ) => Effect.Effect<EffectAcpSchema.PromptResponse, EffectAcpErrors.AcpError>;
     /**
-     * Sends a prompt without waiting for the active prompt RPC to settle.
-     *
-     * This is only for agents that explicitly support in-flight steering through
-     * a concurrent `session/prompt` request. Normal turns must use `prompt`.
-     */
-    readonly promptWhileActive: (
-      payload: Omit<EffectAcpSchema.PromptRequest, "sessionId">,
-    ) => Effect.Effect<EffectAcpSchema.PromptResponse, EffectAcpErrors.AcpError>;
-    /**
      * Sends a real ACP `session/cancel` notification for the active session.
      * @see https://agentclientprotocol.com/protocol/schema#session/cancel
      */
@@ -270,7 +259,6 @@ type AcpStartState =
 interface AcpAssistantSegmentState {
   readonly nextSegmentIndex: number;
   readonly activeItemId?: string;
-  readonly activeMessageId?: string;
 }
 
 interface EnsureActiveAssistantSegmentResult {
@@ -553,20 +541,8 @@ export const make = (
         acp.agent.initialize(initializePayload),
       );
 
-      const authMethodId =
-        typeof options.authMethodId === "function"
-          ? options.authMethodId(initializeResult)
-          : options.authMethodId;
-      if (!authMethodId?.trim()) {
-        return yield* new EffectAcpErrors.AcpTransportError({
-          operation: "call-rpc",
-          method: "authenticate",
-          detail: "ACP agent did not advertise a non-interactive authentication method",
-          cause: undefined,
-        });
-      }
       const authenticatePayload = {
-        methodId: authMethodId.trim(),
+        methodId: options.authMethodId,
       } satisfies EffectAcpSchema.AuthenticateRequest;
 
       yield* runLoggedRequest(
@@ -782,30 +758,6 @@ export const make = (
             );
           }),
         ),
-      promptWhileActive: (payload) =>
-        Effect.gen(function* () {
-          const started = yield* getStartedState;
-          yield* closeActiveAssistantSegment({
-            queue: eventQueue,
-            assistantSegmentRef,
-          });
-          const requestPayload = {
-            sessionId: started.sessionId,
-            ...payload,
-          } satisfies EffectAcpSchema.PromptRequest;
-          return yield* runLoggedRequest(
-            "session/prompt",
-            requestPayload,
-            acp.agent.prompt(requestPayload),
-          ).pipe(
-            Effect.ensuring(
-              closeActiveAssistantSegment({
-                queue: eventQueue,
-                assistantSegmentRef,
-              }),
-            ),
-          );
-        }),
       cancel: getStartedState.pipe(
         Effect.flatMap((started) =>
           Effect.gen(function* () {
@@ -939,33 +891,16 @@ const handleSessionUpdate = ({
         continue;
       }
       if (event._tag === "ContentDelta") {
-        if (event.streamKind !== "assistant_text") {
-          yield* Queue.offer(queue, event);
-          continue;
-        }
         if (event.text.trim().length === 0) {
           const assistantSegmentState = yield* Ref.get(assistantSegmentRef);
           if (!assistantSegmentState.activeItemId) {
             continue;
           }
         }
-        const assistantSegmentState = yield* Ref.get(assistantSegmentRef);
-        if (
-          assistantSegmentState.activeItemId &&
-          assistantSegmentState.activeMessageId !== undefined &&
-          event.messageId !== undefined &&
-          assistantSegmentState.activeMessageId !== event.messageId
-        ) {
-          yield* closeActiveAssistantSegment({
-            queue,
-            assistantSegmentRef,
-          });
-        }
         const itemId = yield* ensureActiveAssistantSegment({
           queue,
           assistantSegmentRef,
           sessionId: params.sessionId,
-          ...(event.messageId !== undefined ? { messageId: event.messageId } : {}),
           assistantItemRuntimeId,
         });
         yield* Queue.offer(queue, {
@@ -1011,25 +946,18 @@ const ensureActiveAssistantSegment = ({
   queue,
   assistantSegmentRef,
   sessionId,
-  messageId,
   assistantItemRuntimeId,
 }: {
   readonly queue: Queue.Queue<AcpSessionRuntimeEvent>;
   readonly assistantSegmentRef: Ref.Ref<AcpAssistantSegmentState>;
   readonly sessionId: string;
-  readonly messageId?: string;
   readonly assistantItemRuntimeId: string;
 }) =>
   Ref.modify<AcpAssistantSegmentState, EnsureActiveAssistantSegmentResult>(
     assistantSegmentRef,
     (current) => {
       if (current.activeItemId) {
-        return [
-          { itemId: current.activeItemId },
-          current.activeMessageId === undefined && messageId !== undefined
-            ? { ...current, activeMessageId: messageId }
-            : current,
-        ] as const;
+        return [{ itemId: current.activeItemId }, current] as const;
       }
       const itemId = assistantItemId(sessionId, assistantItemRuntimeId, current.nextSegmentIndex);
       return [
@@ -1043,7 +971,6 @@ const ensureActiveAssistantSegment = ({
         {
           nextSegmentIndex: current.nextSegmentIndex + 1,
           activeItemId: itemId,
-          ...(messageId !== undefined ? { activeMessageId: messageId } : {}),
         } satisfies AcpAssistantSegmentState,
       ] as const;
     },

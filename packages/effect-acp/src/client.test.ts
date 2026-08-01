@@ -31,15 +31,7 @@ const ExtRequest = jsonRpcRequest("x/test", Schema.Struct({ hello: Schema.String
 const ExtResponse = jsonRpcResponse(Schema.Struct({ ok: Schema.Boolean }));
 const PromptRequest = jsonRpcRequest("session/prompt", AcpSchema.PromptRequest);
 const PromptResponse = jsonRpcResponse(AcpSchema.PromptResponse);
-const SetSessionModelRequest = jsonRpcRequest(
-  "session/set_model",
-  AcpSchema.SetSessionModelRequest,
-);
 const decodePromptRequestLine = Schema.decodeEffect(Schema.fromJsonString(PromptRequest));
-const decodeSetSessionModelRequestLine = Schema.decodeEffect(
-  Schema.fromJsonString(SetSessionModelRequest),
-);
-const encodeUnknownJsonString = Schema.encodeUnknownSync(Schema.UnknownFromJsonString);
 const XAiPromptCompleteNotification = jsonRpcNotification(
   "_x.ai/session/prompt_complete",
   Schema.Struct({
@@ -492,52 +484,6 @@ it.layer(NodeServices.layer)("effect-acp client", (it) => {
 
       yield* Fiber.join(initializeFiber);
       assert.deepEqual(yield* Fiber.join(extFiber), { ok: true });
-      yield* Scope.close(scope, Exit.void);
-    }),
-  );
-
-  it.effect("preserves data from standard JSON-RPC errors as typed ACP request errors", () =>
-    Effect.gen(function* () {
-      const { stdio, input, output } = yield* makeInMemoryStdio();
-      const scope = yield* Scope.make();
-      const acp = yield* AcpClient.make(stdio).pipe(Effect.provideService(Scope.Scope, scope));
-
-      const request = yield* acp.agent
-        .setSessionModel({
-          sessionId: "session-1",
-          modelId: "openai-codex:gpt-5.6-terra",
-        })
-        .pipe(Effect.forkScoped);
-      const outbound = yield* Queue.take(output);
-      const decoded = yield* decodeSetSessionModelRequestLine(outbound);
-
-      yield* Queue.offer(
-        input,
-        new TextEncoder().encode(
-          `${encodeUnknownJsonString({
-            jsonrpc: "2.0",
-            id: decoded.id,
-            error: {
-              code: -32603,
-              message: "Internal error",
-              data: {
-                details: "No LLM provider configured.",
-              },
-            },
-          })}\n`,
-        ),
-      );
-
-      const error = yield* Fiber.join(request).pipe(Effect.flip);
-      assert.instanceOf(error, AcpError.AcpRequestError);
-      assert.deepInclude(error, {
-        code: -32603,
-        errorMessage: "Internal error",
-        data: {
-          details: "No LLM provider configured.",
-        },
-        method: "session/set_model",
-      });
       yield* Scope.close(scope, Exit.void);
     }),
   );

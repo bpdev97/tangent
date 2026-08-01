@@ -11,7 +11,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
-import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { Atom } from "effect/unstable/reactivity";
@@ -82,7 +81,6 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
   );
   const awaitingCompletion = yield* Ref.make(false);
   const persistence = yield* Queue.sliding<OrchestrationThreadDetailSnapshot>(1);
-  const itemLock = yield* Semaphore.make(1);
 
   const persist = Effect.fn("EnvironmentThreadState.persist")(function* (
     snapshot: OrchestrationThreadDetailSnapshot,
@@ -181,7 +179,7 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
     );
   });
 
-  const applyItemLocked = Effect.fn("EnvironmentThreadState.applyItemLocked")(function* (
+  const applyItem = Effect.fn("EnvironmentThreadState.applyItem")(function* (
     item: OrchestrationThreadStreamItem,
   ) {
     if (item.kind === "synchronized") {
@@ -195,14 +193,6 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
     }
 
     if (item.kind === "snapshot") {
-      const current = yield* SubscriptionRef.get(state);
-      if (current.status === "deleted") {
-        return;
-      }
-      const sequence = yield* SubscriptionRef.get(lastSequence);
-      if (Option.isSome(current.data) && item.snapshot.snapshotSequence <= sequence) {
-        return;
-      }
       yield* SubscriptionRef.set(lastSequence, item.snapshot.snapshotSequence);
       yield* setThread(item.snapshot.thread);
       return;
@@ -228,11 +218,6 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
       yield* setDeleted();
     }
   });
-  const applyItem = Effect.fn("EnvironmentThreadState.applyItem")(function* (
-    item: OrchestrationThreadStreamItem,
-  ) {
-    yield* itemLock.withPermit(applyItemLocked(item));
-  });
 
   yield* SubscriptionRef.changes(supervisor.state).pipe(
     Stream.runForEach((connectionState) => {
@@ -254,40 +239,7 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
       service.changes.pipe(Stream.filter(ConnectionWakeups.shouldResubscribeAfterWakeup)),
   });
 
-  const loadInitialHttpSnapshot = Effect.gen(function* () {
-    const initial = yield* SubscriptionRef.get(state);
-    if (Option.isSome(initial.data) || initial.status === "deleted") {
-      return;
-    }
-    const prepared = yield* SubscriptionRef.get(supervisor.prepared).pipe(
-      Effect.flatMap(
-        Option.match({
-          onSome: Effect.succeed,
-          onNone: () =>
-            SubscriptionRef.changes(supervisor.prepared).pipe(
-              Stream.filter(Option.isSome),
-              Stream.map((value) => value.value),
-              Stream.runHead,
-              Effect.map(Option.getOrThrow),
-            ),
-        }),
-      ),
-    );
-    const beforeLoad = yield* SubscriptionRef.get(state);
-    if (Option.isSome(beforeLoad.data) || beforeLoad.status === "deleted") {
-      return;
-    }
-    const httpSnapshot = yield* snapshotLoader.load(prepared, threadId);
-    if (Option.isSome(httpSnapshot)) {
-      yield* applyItem({ kind: "snapshot", snapshot: httpSnapshot.value });
-    }
-  });
-
   yield* setSynchronizing;
-  // HTTP is a compression-friendly fast path, not a prerequisite for the live
-  // stream. Start both transports independently so a slow snapshot endpoint
-  // cannot leave a cold thread blank or delay the socket fallback.
-  yield* Effect.forkScoped(loadInitialHttpSnapshot);
   yield* Effect.forkScoped(
     subscribeDynamic(
       ORCHESTRATION_WS_METHODS.subscribeThread,
@@ -299,7 +251,29 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
         yield* Ref.set(awaitingCompletion, supportsCompletionMarker);
         yield* setSynchronizing;
 
-        const current = yield* SubscriptionRef.get(state);
+        let current = yield* SubscriptionRef.get(state);
+        if (Option.isNone(current.data) && current.status !== "deleted") {
+          const prepared = yield* SubscriptionRef.get(supervisor.prepared).pipe(
+            Effect.flatMap(
+              Option.match({
+                onSome: Effect.succeed,
+                onNone: () =>
+                  SubscriptionRef.changes(supervisor.prepared).pipe(
+                    Stream.filter(Option.isSome),
+                    Stream.map((value) => value.value),
+                    Stream.runHead,
+                    Effect.map(Option.getOrThrow),
+                  ),
+              }),
+            ),
+          );
+          const httpSnapshot = yield* snapshotLoader.load(prepared, threadId);
+          if (Option.isSome(httpSnapshot)) {
+            yield* applyItem({ kind: "snapshot", snapshot: httpSnapshot.value });
+            current = yield* SubscriptionRef.get(state);
+          }
+        }
+
         const sequence = yield* SubscriptionRef.get(lastSequence);
         const canResume = Option.isSome(current.data);
         if (!supportsCompletionMarker && canResume) {

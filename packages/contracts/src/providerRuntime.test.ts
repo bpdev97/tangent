@@ -130,38 +130,6 @@ describe("ProviderRuntimeEvent", () => {
     expect(parsed.payload.answers.sandbox_mode).toBe("workspace-write");
   });
 
-  it("decodes provider-neutral subagent lifecycle events", () => {
-    const parsed = decodeRuntimeEvent({
-      type: "agent.completed",
-      eventId: "event-agent-completed",
-      provider: "opencode",
-      createdAt: "2026-02-28T00:00:02.000Z",
-      threadId: "thread-2",
-      turnId: "turn-2",
-      payload: {
-        agentId: "agent-1",
-        parentAgentId: "agent-root",
-        role: "explore",
-        description: "Inspect the provider",
-        prompt: "Find lifecycle gaps",
-        model: "fast",
-        agentPath: "root/explore",
-        providerThreadId: "provider-agent-1",
-        status: "completed",
-        summary: "Inspection complete",
-        durationMs: 250,
-      },
-    });
-
-    expect(parsed.type).toBe("agent.completed");
-    if (parsed.type !== "agent.completed") {
-      throw new Error("expected agent.completed");
-    }
-    expect(parsed.payload.agentId).toBe("agent-1");
-    expect(parsed.payload.parentAgentId).toBe("agent-root");
-    expect(parsed.payload.status).toBe("completed");
-  });
-
   it("rejects legacy message.delta type", () => {
     expect(() =>
       decodeRuntimeEvent({

@@ -21,9 +21,17 @@ still receive the host context.
 
 Generic sessions are always started in `approval-required` mode regardless of thread metadata.
 For Codex this maps to a read-only sandbox. Providers still require a real process cwd, so the
-managed workspace is the containment boundary if a provider disregards the behavioral instruction.
-The server pins generic sessions to that root even if stale or malformed thread metadata contains a
-worktree path. This feature does not pretend that the provider protocol supports a null cwd.
+server pins generic sessions to the managed root even if stale or malformed thread metadata
+contains a worktree path. The root is a compatibility cwd, not a filesystem containment boundary:
+the host context is a behavioral instruction, and a provider may still be able to read paths
+outside it. This feature does not pretend that the provider protocol supports a null cwd or provide
+an operating-system sandbox shared by every provider.
+
+New managed chat project records are seeded with the built-in `codex` instance and `DEFAULT_MODEL`
+for schema compatibility. Web and mobile treat that value as a preference, validate it against the
+environment's enabled providers, and fall back to an available provider before dispatch. A client
+that bypasses those selection helpers must perform the same validation rather than blindly sending
+the stored seed.
 
 ## Client behavior
 
@@ -56,7 +64,9 @@ review, terminal, and their nested routes cannot be opened through deep links or
 - Compare an active provider session against the effective forced runtime mode, not mutable thread
   metadata, when deciding whether to restart it.
 - Resolve a generic provider session cwd from the managed project only; never honor its thread
-  branch or worktree metadata.
+  branch or worktree metadata. Do not describe that cwd as a security boundary.
+- Treat the no-files rule as best-effort until every provider has an enforceable filesystem-denial
+  mode. UI capability guards prevent accidental entry points but do not constrain provider tools.
 - Never expose the managed scratch directory as a user workspace in web or mobile UI.
 - Derive existing-thread capability from `thread.projectId`; project catalog objects may arrive a
   render later and must not temporarily enable project tools.

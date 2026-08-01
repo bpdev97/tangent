@@ -14,7 +14,6 @@ generation through one JSON-RPC protocol.
 Primary external references:
 
 - [Programmatic integration](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/developer-guide/programmatic-integration.md)
-- [Gateway internals](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/developer-guide/gateway-internals.md)
 - [Gateway TypeScript client](https://github.com/NousResearch/hermes-agent/blob/main/apps/shared/src/json-rpc-gateway.ts)
 - [Gateway protocol types](https://github.com/NousResearch/hermes-agent/blob/main/ui-tui/src/gatewayTypes.ts)
 - [Gateway server implementation](https://github.com/NousResearch/hermes-agent/blob/main/tui_gateway/server.py)
@@ -56,11 +55,14 @@ chat transcript.
 ## Protocol mappings
 
 - `session.create` / `session.resume` map T3 threads to Hermes-owned durable sessions.
-- `prompt.submit` starts a turn but remains pending for the full Hermes agent loop. T3 supervises
-  that RPC in the provider scope and returns from `sendTurn` immediately so steering and interrupt
-  controls remain available; `session.steer` handles text sent during the active turn.
+- `prompt.submit` claims the turn and returns `{ "status": "streaming" }` after starting Hermes's
+  background run thread. T3 still forks the request effect from `sendTurn`; streaming events own the
+  actual turn lifecycle, and `session.steer` handles text sent during the active turn.
 - `message.*`, `reasoning.*`, `tool.*`, `subagent.*`, and `background.complete` become canonical T3
-  runtime events. Per-session queues preserve Hermes event order before ingestion.
+  runtime events. Hermes subagents use upstream `task.started`, `task.progress`, and
+  `task.completed`, keyed by a required `subagent_id`; Tangent does not maintain a separate
+  provider-neutral `agent.*` contract. Per-session queues preserve Hermes event order before
+  ingestion.
 - `image.attach` stages T3 image attachments before the next prompt. Shared server ingestion
   normalizes HEIC/HEIF uploads to JPEG first because Hermes 0.19 rejects those container
   extensions at the gateway boundary.
@@ -120,6 +122,11 @@ interrupting the turn cleared Hermes's callback without resolving T3's projected
 clients now retain open-ended prompts, terminal Hermes lifecycles publish matching resolution
 events, and migration 036 closes orphaned projected prompts from older builds when their Hermes
 turn is already terminal.
+
+On 2026-08-01, the external-reference check confirmed that Hermes's current "Gateway Internals"
+page documents the separate multi-platform messaging gateway rather than the TUI JSON-RPC gateway,
+so it is no longer listed as a protocol reference here. The current programmatic guide, TUI gateway
+server, WebSocket transport, TypeScript client, and protocol types remain the relevant sources.
 
 ## Automations
 

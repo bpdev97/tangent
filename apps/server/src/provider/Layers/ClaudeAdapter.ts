@@ -40,7 +40,6 @@ import {
   type ProviderUserInputAnswers,
   type RuntimeContentStreamKind,
   RuntimeItemId,
-  RuntimeAgentId,
   RuntimeRequestId,
   RuntimeTaskId,
   ThreadId,
@@ -138,18 +137,6 @@ interface ClaudeTurnState {
   readonly assistantTextBlockOrder: Array<AssistantTextBlockState>;
   readonly capturedProposedPlanKeys: Set<string>;
   nextSyntheticAssistantBlockIndex: number;
-  /**
-   * Claude emits `session_state_changed: idle` only after task-backed work
-   * (including subagents) has actually settled. Once a task lifecycle starts,
-   * hold the SDK result until that authoritative idle signal arrives.
-   */
-  awaitsTaskIdle: boolean;
-  /** Every SDK task observed during this turn, retained for recovery diagnostics. */
-  readonly observedTaskIds: Set<string>;
-  /** Tasks that have started but have not emitted their terminal notification. */
-  readonly activeTaskIds: Set<string>;
-  pendingResult?: SDKResultMessage;
-  pendingResultRecoveryFiber?: Fiber.Fiber<void, never>;
 }
 
 interface AssistantTextBlockState {
@@ -208,10 +195,6 @@ interface ClaudeSessionContext {
   }>;
   readonly inFlightTools: Map<number, ToolInFlight>;
   readonly claudeTasks: Map<string, ClaudeTaskState>;
-  readonly subagentTasks: Map<
-    string,
-    { readonly role?: string; readonly description?: string; readonly prompt?: string }
-  >;
   turnState: ClaudeTurnState | undefined;
   lastKnownContextWindow: number | undefined;
   lastKnownTokenUsage: ThreadTokenUsageSnapshot | undefined;
@@ -239,20 +222,6 @@ export interface ClaudeAdapterLiveOptions {
   }) => ClaudeQueryRuntime;
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
-  /** Testable timing controls for recovering from a missing SDK idle event. */
-  readonly taskLifecycleRecovery?: {
-    /** Grace period after all observed tasks are terminal. Defaults to 5 seconds. */
-    readonly settledTaskIdleGraceMs?: number;
-    /** Maximum wait while an observed task remains active. Defaults to 30 minutes. */
-    readonly activeTaskResultTimeoutMs?: number;
-  };
-}
-
-const DEFAULT_SETTLED_TASK_IDLE_GRACE_MS = 5_000;
-const DEFAULT_ACTIVE_TASK_RESULT_TIMEOUT_MS = 30 * 60_000;
-
-function normalizeRecoveryDelay(value: number | undefined, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
 function isUuid(value: string): boolean {
@@ -1290,13 +1259,6 @@ function sdkNativeMethod(message: SDKMessage): string {
   return `claude/${message.type}`;
 }
 
-function isNestedClaudeConversationMessage(message: SDKMessage): boolean {
-  if (message.type !== "assistant" && message.type !== "user" && message.type !== "stream_event") {
-    return false;
-  }
-  return message.parent_tool_use_id !== null && message.parent_tool_use_id !== undefined;
-}
-
 // Discriminator/identity keys carry no human-readable content; everything else
 // on an unmodeled SDK message is potentially worth surfacing in the work log.
 const SDK_MESSAGE_NOISE_KEYS = new Set([
@@ -1392,14 +1354,6 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           stream: "native",
         })
       : undefined);
-  const settledTaskIdleGraceMs = normalizeRecoveryDelay(
-    options?.taskLifecycleRecovery?.settledTaskIdleGraceMs,
-    DEFAULT_SETTLED_TASK_IDLE_GRACE_MS,
-  );
-  const activeTaskResultTimeoutMs = normalizeRecoveryDelay(
-    options?.taskLifecycleRecovery?.activeTaskResultTimeoutMs,
-    DEFAULT_ACTIVE_TASK_RESULT_TIMEOUT_MS,
-  );
   const managedNativeEventLogger =
     options?.nativeEventLogger === undefined ? nativeEventLogger : undefined;
 
@@ -1930,13 +1884,6 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     errorMessage?: string,
     result?: SDKResultMessage,
   ) {
-    const activeTurnState = context.turnState;
-    const pendingResultRecoveryFiber = activeTurnState?.pendingResultRecoveryFiber;
-    if (activeTurnState && pendingResultRecoveryFiber) {
-      delete activeTurnState.pendingResultRecoveryFiber;
-      yield* Fiber.interrupt(pendingResultRecoveryFiber);
-    }
-
     const resultContextWindow = maxClaudeContextWindowFromModelUsage(result?.modelUsage);
     if (resultContextWindow !== undefined) {
       context.lastKnownContextWindow = resultContextWindow;
@@ -2532,9 +2479,6 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         assistantTextBlockOrder: [],
         capturedProposedPlanKeys: new Set(),
         nextSyntheticAssistantBlockIndex: -1,
-        awaitsTaskIdle: false,
-        observedTaskIds: new Set(),
-        activeTaskIds: new Set(),
       };
       context.session = {
         ...context.session,
@@ -2601,92 +2545,6 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     yield* updateResumeCursor(context);
   });
 
-  const completeResultMessage = Effect.fn("completeResultMessage")(function* (
-    context: ClaudeSessionContext,
-    message: SDKResultMessage,
-  ) {
-    const status = turnStatusFromResult(message);
-    const errorMessage = message.subtype === "success" ? undefined : message.errors[0];
-
-    if (status === "failed") {
-      yield* emitRuntimeError(context, errorMessage ?? "Claude turn failed.");
-    }
-
-    yield* completeTurn(context, status, errorMessage, message);
-  });
-
-  const schedulePendingResultRecovery = Effect.fn("schedulePendingResultRecovery")(function* (
-    context: ClaudeSessionContext,
-  ) {
-    const turnState = context.turnState;
-    const pendingResult = turnState?.pendingResult;
-    if (!turnState || !pendingResult) {
-      return;
-    }
-
-    const previousFiber = turnState.pendingResultRecoveryFiber;
-    delete turnState.pendingResultRecoveryFiber;
-    if (previousFiber) {
-      yield* Fiber.interrupt(previousFiber);
-    }
-
-    const hasActiveTasks = turnState.activeTaskIds.size > 0;
-    const delayMs = hasActiveTasks ? activeTaskResultTimeoutMs : settledTaskIdleGraceMs;
-    const turnId = turnState.turnId;
-    const recoveryFiber = yield* Effect.sleep(delayMs).pipe(
-      Effect.andThen(
-        Effect.gen(function* () {
-          const currentTurn = context.turnState;
-          if (
-            !currentTurn ||
-            currentTurn.turnId !== turnId ||
-            currentTurn.pendingResult !== pendingResult
-          ) {
-            return;
-          }
-
-          delete currentTurn.pendingResultRecoveryFiber;
-          delete currentTurn.pendingResult;
-          const activeTaskIds = Array.from(currentTurn.activeTaskIds);
-          const observedTaskIds = Array.from(currentTurn.observedTaskIds);
-
-          if (activeTaskIds.length > 0) {
-            const message =
-              "Claude returned a result, but its task lifecycle did not settle before the recovery timeout.";
-            yield* emitRuntimeError(context, message, {
-              reason: "claude_task_result_timeout",
-              timeoutMs: delayMs,
-              activeTaskIds,
-              observedTaskIds,
-            });
-            yield* completeTurn(context, "failed", message, pendingResult);
-            return;
-          }
-
-          yield* emitRuntimeWarning(
-            context,
-            "Claude omitted the idle event after all tasks completed; recovered the pending result.",
-            {
-              reason: "claude_missing_task_idle",
-              graceMs: delayMs,
-              observedTaskIds,
-            },
-          );
-          yield* completeResultMessage(context, pendingResult);
-        }),
-      ),
-      Effect.catch((cause) =>
-        Effect.logError("Claude task result recovery failed.", {
-          cause,
-          threadId: context.session.threadId,
-          turnId,
-        }),
-      ),
-      Effect.forkChild,
-    );
-    turnState.pendingResultRecoveryFiber = recoveryFiber;
-  });
-
   const handleResultMessage = Effect.fn("handleResultMessage")(function* (
     context: ClaudeSessionContext,
     message: SDKMessage,
@@ -2695,13 +2553,14 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       return;
     }
 
-    if (context.turnState?.awaitsTaskIdle) {
-      context.turnState.pendingResult = message;
-      yield* schedulePendingResultRecovery(context);
-      return;
+    const status = turnStatusFromResult(message);
+    const errorMessage = message.subtype === "success" ? undefined : message.errors[0];
+
+    if (status === "failed") {
+      yield* emitRuntimeError(context, errorMessage ?? "Claude turn failed.");
     }
 
-    yield* completeResultMessage(context, message);
+    yield* completeTurn(context, status, errorMessage, message);
   });
 
   const handleSystemMessage = Effect.fn("handleSystemMessage")(function* (
@@ -2820,45 +2679,15 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         });
         return;
       case "task_started":
-        if (context.turnState) {
-          context.turnState.awaitsTaskIdle = true;
-          context.turnState.observedTaskIds.add(message.task_id);
-          context.turnState.activeTaskIds.add(message.task_id);
-          if (context.turnState.pendingResult) {
-            yield* schedulePendingResultRecovery(context);
-          }
-        }
-        if (message.task_type === "agent") {
-          const subagent = {
-            ...(message.workflow_name ? { role: message.workflow_name } : {}),
-            ...(message.description ? { description: message.description } : {}),
-            ...(message.prompt ? { prompt: message.prompt } : {}),
-          };
-          context.subagentTasks.set(message.task_id, subagent);
-          yield* offerRuntimeEvent({
-            ...base,
-            type: "agent.started",
-            payload: {
-              agentId: RuntimeAgentId.make(message.task_id),
-              status: "running",
-              ...subagent,
-            },
-          });
-        } else {
-          yield* offerRuntimeEvent({
-            ...base,
-            type: "task.started",
-            payload: {
-              taskId: RuntimeTaskId.make(message.task_id),
-              description: message.description,
-              ...(message.task_type ? { taskType: message.task_type } : {}),
-            },
-          });
-        }
-        return;
-      case "task_updated":
-        // `task_progress` and `task_notification` carry the displayable and
-        // terminal task state. The patch event is bookkeeping for SDK hosts.
+        yield* offerRuntimeEvent({
+          ...base,
+          type: "task.started",
+          payload: {
+            taskId: RuntimeTaskId.make(message.task_id),
+            description: message.description,
+            ...(message.task_type ? { taskType: message.task_type } : {}),
+          },
+        });
         return;
       case "task_progress":
         yield* emitThreadTokenUsage(
@@ -2869,53 +2698,24 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
             rawPayload: message,
           },
         );
-        if (context.subagentTasks.has(message.task_id) || message.subagent_type) {
-          const existing = context.subagentTasks.get(message.task_id);
-          const subagent = {
-            ...(message.subagent_type
-              ? { role: message.subagent_type }
-              : existing?.role
-                ? { role: existing.role }
-                : {}),
-            ...(message.description
-              ? { description: message.description }
-              : existing?.description
-                ? { description: existing.description }
-                : {}),
-            ...(existing?.prompt ? { prompt: existing.prompt } : {}),
-          };
-          context.subagentTasks.set(message.task_id, subagent);
-          yield* offerRuntimeEvent({
-            ...base,
-            type: "agent.updated",
-            payload: {
-              agentId: RuntimeAgentId.make(message.task_id),
-              status: "running",
-              ...subagent,
-              ...(message.summary ? { summary: message.summary } : {}),
-              ...(message.usage ? { usage: message.usage } : {}),
-              ...(message.last_tool_name ? { lastToolName: message.last_tool_name } : {}),
-            },
-          });
-        } else {
-          yield* offerRuntimeEvent({
-            ...base,
-            type: "task.progress",
-            payload: {
-              taskId: RuntimeTaskId.make(message.task_id),
-              description: message.description,
-              ...(message.summary ? { summary: message.summary } : {}),
-              ...(message.usage ? { usage: message.usage } : {}),
-              ...(message.last_tool_name ? { lastToolName: message.last_tool_name } : {}),
-            },
-          });
-        }
+        yield* offerRuntimeEvent({
+          ...base,
+          type: "task.progress",
+          payload: {
+            taskId: RuntimeTaskId.make(message.task_id),
+            description: message.description,
+            ...(message.summary ? { summary: message.summary } : {}),
+            ...(message.usage ? { usage: message.usage } : {}),
+            ...(message.last_tool_name ? { lastToolName: message.last_tool_name } : {}),
+          },
+        });
+        return;
+      // Task state patch (status/backgrounded/end_time). No runtime mapping
+      // yet — the terminal task_notification reports the outcome — but it
+      // must not surface as an unknown-subtype warning row.
+      case "task_updated":
         return;
       case "task_notification":
-        if (context.turnState) {
-          context.turnState.observedTaskIds.add(message.task_id);
-          context.turnState.activeTaskIds.delete(message.task_id);
-        }
         yield* emitThreadTokenUsage(
           context,
           normalizeClaudeTaskProgressTokenUsage(message.usage, context),
@@ -2924,69 +2724,17 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
             rawPayload: message,
           },
         );
-        const subagent = context.subagentTasks.get(message.task_id);
-        if (subagent) {
-          yield* offerRuntimeEvent({
-            ...base,
-            type: "agent.completed",
-            payload: {
-              agentId: RuntimeAgentId.make(message.task_id),
-              status: message.status,
-              ...subagent,
-              ...(message.summary ? { summary: message.summary } : {}),
-              ...(message.usage ? { usage: message.usage } : {}),
-              ...(typeof message.usage?.duration_ms === "number"
-                ? { durationMs: message.usage.duration_ms }
-                : {}),
-            },
-          });
-        } else {
-          yield* offerRuntimeEvent({
-            ...base,
-            type: "task.completed",
-            payload: {
-              taskId: RuntimeTaskId.make(message.task_id),
-              status: message.status,
-              ...(message.summary ? { summary: message.summary } : {}),
-              ...(message.usage ? { usage: message.usage } : {}),
-            },
-          });
-        }
-        if (context.turnState?.pendingResult) {
-          yield* schedulePendingResultRecovery(context);
-        }
-        return;
-      case "session_state_changed": {
-        if (message.state === "idle") {
-          const turnState = context.turnState;
-          const pendingResult = turnState?.pendingResult;
-          if (pendingResult) {
-            const recoveryFiber = turnState.pendingResultRecoveryFiber;
-            delete turnState.pendingResultRecoveryFiber;
-            if (recoveryFiber) {
-              yield* Fiber.interrupt(recoveryFiber);
-            }
-            delete turnState.pendingResult;
-            yield* completeResultMessage(context, pendingResult);
-          }
-        }
-
         yield* offerRuntimeEvent({
           ...base,
-          type: "session.state.changed",
+          type: "task.completed",
           payload: {
-            state:
-              message.state === "running"
-                ? "running"
-                : message.state === "requires_action"
-                  ? "waiting"
-                  : "ready",
-            reason: `session_state:${message.state}`,
-            detail: message,
+            taskId: RuntimeTaskId.make(message.task_id),
+            status: message.status,
+            ...(message.summary ? { summary: message.summary } : {}),
+            ...(message.usage ? { usage: message.usage } : {}),
           },
         });
         return;
-      }
       case "files_persisted":
         yield* offerRuntimeEvent({
           ...base,
@@ -3022,6 +2770,22 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           payload: {
             state: "running",
             reason: `api_retry:${message.attempt}/${message.max_retries}`,
+          },
+        });
+        return;
+      case "session_state_changed":
+        // Authoritative turn-over signal from the CLI.
+        yield* offerRuntimeEvent({
+          ...base,
+          type: "session.state.changed",
+          payload: {
+            state:
+              message.state === "running"
+                ? "running"
+                : message.state === "requires_action"
+                  ? "waiting"
+                  : "ready",
+            reason: `session_state:${message.state}`,
           },
         });
         return;
@@ -3159,14 +2923,6 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   ) {
     yield* logNativeSdkMessage(context, message);
     yield* ensureThreadId(context, message);
-
-    // Subagent messages have an independent content-block index namespace.
-    // Folding them into the top-level turn lets a child block at index 0
-    // overwrite the parent Task tool at index 0. Task lifecycle messages above
-    // provide the flattened progress UI until nested transcripts are modeled.
-    if (isNestedClaudeConversationMessage(message)) {
-      return;
-    }
 
     switch (message.type) {
       case "stream_event":
@@ -3436,10 +3192,6 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       const pendingUserInputs = new Map<ApprovalRequestId, PendingUserInput>();
       const inFlightTools = new Map<number, ToolInFlight>();
       const claudeTasks = new Map<string, ClaudeTaskState>();
-      const subagentTasks = new Map<
-        string,
-        { readonly role?: string; readonly description?: string; readonly prompt?: string }
-      >();
 
       const contextRef = yield* Ref.make<ClaudeSessionContext | undefined>(undefined);
 
@@ -3882,7 +3634,6 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         turns: [],
         inFlightTools,
         claudeTasks,
-        subagentTasks,
         turnState: undefined,
         lastKnownContextWindow: initialContextWindow,
         lastKnownTokenUsage: undefined,
@@ -4027,9 +3778,6 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         assistantTextBlockOrder: [],
         capturedProposedPlanKeys: new Set(),
         nextSyntheticAssistantBlockIndex: -1,
-        awaitsTaskIdle: false,
-        observedTaskIds: new Set(),
-        activeTaskIds: new Set(),
       };
 
       const updatedAt = yield* nowIso;
