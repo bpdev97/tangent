@@ -25,8 +25,8 @@ import { useThemeColor } from "./lib/useThemeColor";
 import { PERSONAL_DISTRIBUTION } from "../../../downstream/config";
 import { useSavedRemoteConnections } from "./state/use-remote-environment-registry";
 import {
-  registerAgentAwarenessConnection,
-  unregisterAgentAwarenessConnection,
+  syncAgentAwarenessConnections,
+  unregisterAllAgentAwarenessConnections,
 } from "./features/agent-awareness/remoteRegistration";
 
 import "../global.css";
@@ -62,16 +62,10 @@ function AgentAwarenessConnectionBridge() {
   const { savedConnectionsById } = useSavedRemoteConnections();
 
   useEffect(() => {
-    const connections = Object.values(savedConnectionsById);
-    for (const connection of connections) {
-      registerAgentAwarenessConnection(connection);
-    }
-    return () => {
-      for (const connection of connections) {
-        unregisterAgentAwarenessConnection(connection.environmentId);
-      }
-    };
+    syncAgentAwarenessConnections(Object.values(savedConnectionsById));
   }, [savedConnectionsById]);
+
+  useEffect(() => unregisterAllAgentAwarenessConnections, []);
   return null;
 }
 
