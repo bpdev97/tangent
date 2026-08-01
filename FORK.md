@@ -74,9 +74,9 @@ feature.
 
 - On 2026-07-30, `FORK-TOOLS-001` was retired in favor of upstream's
   `ActivityPayloadProjection`. Network snapshots now keep upstream's compact non-MCP fields, pass
-  MCP tool data through unchanged, and leave the full payload only in persistence. Tangent's
-  provider-specific detail model, custom web/mobile detail renderers, and pre-persistence payload
-  bounds were removed.
+  only a 32 KiB bounded MCP item projection, and leave the full payload only in persistence.
+  Tangent's provider-specific detail model, custom web/mobile detail renderers, and
+  pre-persistence payload bounds were removed.
 - On 2026-07-30, the user-message response grouping that had been maintained with generic chat was
   retired. Web and mobile now use upstream provider-turn folding. A provider that splits one user
   response across multiple turns can therefore produce multiple work groups, and a rapid follow-up
@@ -294,8 +294,10 @@ accepts that channel so transient failures remain retryable without duplicating 
 During upstream syncs, preserve the
 canonical awareness projection and its confirmation/deduplication worker, then reapply personal
 publishing as a second sink. Review mobile registration changes for new token APIs or authentication
-methods before adapting the connection bridge. The APNs key and relay bearer token must never enter
-git, logs, issues, or PR text.
+methods before adapting the connection bridge. The bridge reconciles the durable environment
+catalog and retains the last usable personal bearer endpoint while a prepared socket connection is
+being replaced; prepared-connection churn must not trigger APNs or Live Activity re-registration.
+The APNs key and relay bearer token must never enter git, logs, issues, or PR text.
 
 ### FORK-CHAT-001 ownership map
 

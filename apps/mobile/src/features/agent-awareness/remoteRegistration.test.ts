@@ -31,12 +31,11 @@ import {
   refreshActiveLiveActivityRemoteRegistration,
   refreshAgentAwarenessRegistration,
   normalizeAgentAwarenessRelayBaseUrl,
-  registerAgentAwarenessConnection,
   registerLiveActivityPushToken,
   releaseAgentAwarenessRelayTokenProvider,
   setAgentAwarenessRelayTokenProvider,
   shouldRegisterAgentAwarenessDeviceForProvider,
-  unregisterAgentAwarenessConnection,
+  syncAgentAwarenessConnections,
 } from "./remoteRegistration";
 import * as Notifications from "expo-notifications";
 
@@ -357,7 +356,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
   });
 
   it.effect("registers at most one listener while a Live Activity push token is pending", () => {
-    registerAgentAwarenessConnection(savedConnection());
+    syncAgentAwarenessConnections([savedConnection()]);
     const addPushTokenListener = vi.fn();
     const activity = {
       getPushToken: vi.fn(() => Promise.resolve(null)),
@@ -398,7 +397,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
   it.effect(
     "reports Live Activity token registration as skipped when relay auth is unavailable",
     () => {
-      registerAgentAwarenessConnection(savedConnection());
+      syncAgentAwarenessConnections([savedConnection()]);
       const activity = {
         getPushToken: vi.fn(() => Promise.resolve("activity-token")),
         addPushTokenListener: vi.fn(),
@@ -482,7 +481,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
   });
 
   it.effect("refreshes APNs registration for connected environments after settings changes", () => {
-    registerAgentAwarenessConnection(savedConnection());
+    syncAgentAwarenessConnections([savedConnection()]);
     return Effect.gen(function* () {
       yield* runBackgroundOperations();
       vi.mocked(Notifications.getDevicePushTokenAsync).mockClear();
@@ -744,7 +743,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
 
     vi.mocked(Notifications.getPermissionsAsync).mockClear();
     setAgentAwarenessRelayTokenProvider(() => Promise.resolve("clerk-token-user-a"));
-    registerAgentAwarenessConnection(savedConnection());
+    syncAgentAwarenessConnections([savedConnection()]);
 
     return Effect.gen(function* () {
       yield* runBackgroundOperations();
@@ -757,7 +756,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
       Promise.resolve(Response.json({ ok: true })),
     );
     vi.stubGlobal("fetch", fetchMock);
-    registerAgentAwarenessConnection(savedConnection());
+    syncAgentAwarenessConnections([savedConnection()]);
 
     return Effect.gen(function* () {
       yield* runBackgroundOperations();
@@ -778,6 +777,68 @@ describe("makeRelayDeviceRegistrationRequest", () => {
     }).pipe(Effect.provide(relayTestLayer));
   });
 
+  it.effect("keeps push registration stable while a prepared connection is replaced", () => {
+    const fetchMock = vi.fn((_request: RequestInfo | URL, _init?: RequestInit) =>
+      Promise.resolve(Response.json({ ok: true })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(Notifications.getPermissionsAsync).mockClear();
+
+    syncAgentAwarenessConnections([savedConnection()]);
+
+    return Effect.gen(function* () {
+      yield* runBackgroundOperations();
+      expect(Notifications.getPermissionsAsync).toHaveBeenCalledTimes(1);
+
+      fetchMock.mockClear();
+      vi.mocked(Notifications.getPermissionsAsync).mockClear();
+      syncAgentAwarenessConnections([
+        {
+          ...savedConnection(),
+          bearerToken: null,
+        },
+      ]);
+      syncAgentAwarenessConnections([
+        {
+          ...savedConnection(),
+          environmentLabel: "Renamed desktop",
+        },
+      ]);
+      yield* runBackgroundOperations();
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(Notifications.getPermissionsAsync).not.toHaveBeenCalled();
+    }).pipe(Effect.provide(relayTestLayer));
+  });
+
+  it.effect("registers again when a personal push credential rotates", () => {
+    const fetchMock = vi.fn((_request: RequestInfo | URL, _init?: RequestInit) =>
+      Promise.resolve(Response.json({ ok: true })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    syncAgentAwarenessConnections([savedConnection()]);
+
+    return Effect.gen(function* () {
+      yield* runBackgroundOperations();
+      fetchMock.mockClear();
+
+      syncAgentAwarenessConnections([
+        {
+          ...savedConnection(),
+          bearerToken: "rotated-bearer-token",
+        },
+      ]);
+      yield* runBackgroundOperations();
+
+      const call = fetchMock.mock.calls.find(([request]) =>
+        String(request).endsWith("/api/personal-push/v1/devices"),
+      );
+      expect(call).toBeDefined();
+      const [, init] = call as unknown as [string, RequestInit];
+      expect(new Headers(init.headers).get("authorization")).toBe("Bearer rotated-bearer-token");
+    }).pipe(Effect.provide(relayTestLayer));
+  });
+
   it.effect(
     "registers Live Activity update tokens through a direct personal server connection",
     () => {
@@ -785,7 +846,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
         Promise.resolve(Response.json({ ok: true })),
       );
       vi.stubGlobal("fetch", fetchMock);
-      registerAgentAwarenessConnection(savedConnection());
+      syncAgentAwarenessConnections([savedConnection()]);
       const activity = {
         getPushToken: vi.fn(() => Promise.resolve("activity-token")),
         addPushTokenListener: vi.fn(),
@@ -903,13 +964,13 @@ describe("makeRelayDeviceRegistrationRequest", () => {
         },
       };
 
-      registerAgentAwarenessConnection(savedConnection());
+      syncAgentAwarenessConnections([savedConnection()]);
       setAgentAwarenessRelayTokenProvider(() => Promise.resolve("clerk-token-user-a"));
       return Effect.gen(function* () {
         yield* runBackgroundOperations();
         fetchMock.mockClear();
 
-        unregisterAgentAwarenessConnection(savedConnection().environmentId);
+        syncAgentAwarenessConnections([]);
 
         expect(fetchMock).not.toHaveBeenCalled();
       }).pipe(Effect.provide(relayTestLayer));

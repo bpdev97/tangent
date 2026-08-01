@@ -87,7 +87,10 @@ key in the Apple Developer portal if the `.p8` is exposed.
 The protocol is versioned under `/v1`. Upstream maintenance should preserve the personal-push
 contract schemas, the additive server route layer, and the mobile connection bridge. Re-run the
 focused tests plus the repository checks after changes to agent-awareness projection or relay
-contracts.
+contracts. The bridge reconciles environment membership separately from prepared WebSocket state:
+when a reconnect temporarily removes a bearer token, it retains the last usable personal push
+endpoint and does not re-register the device or its Live Activities. Removing the environment or
+changing its endpoint, credential, or authentication mode still reconciles the registration.
 
 Standard notifications and Live Activity updates are separate deliveries. When agent work reaches
 a terminal state, the relay sends the configured notification and keeps the completed Live Activity

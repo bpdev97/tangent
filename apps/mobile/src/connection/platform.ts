@@ -87,21 +87,15 @@ const connectivityLayer = Connectivity.layer({
 
 const wakeupsLayer = Wakeups.layer({
   changes: Stream.merge(
-    Stream.callback<"application-active-probe" | "application-active-reconnect">((queue) =>
+    Stream.callback<"application-active-probe">((queue) =>
       Effect.acquireRelease(
-        Effect.sync(() => {
-          let backgroundedAtMs = AppState.currentState === "background" ? Date.now() : null;
-          return AppState.addEventListener("change", (state) => {
-            if (state === "background") {
-              backgroundedAtMs = Date.now();
-              return;
-            }
+        Effect.sync(() =>
+          AppState.addEventListener("change", (state) => {
             if (state === "active") {
-              Queue.offerUnsafe(queue, mobileApplicationActiveWakeup(backgroundedAtMs, Date.now()));
-              backgroundedAtMs = null;
+              Queue.offerUnsafe(queue, mobileApplicationActiveWakeup());
             }
-          });
-        }),
+          }),
+        ),
         (subscription) => Effect.sync(() => subscription.remove()),
       ).pipe(Effect.asVoid),
     ),

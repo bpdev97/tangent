@@ -171,13 +171,23 @@ function canRegisterRemoteLiveActivities(): boolean {
 }
 
 function personalPushConnections(): ReadonlyArray<SavedRemoteConnection> {
-  return [...environmentConnections.values()].filter(
-    (connection) =>
-      connection.relayManaged !== true &&
-      connection.authenticationMethod !== "dpop" &&
-      typeof connection.bearerToken === "string" &&
-      connection.bearerToken.length > 0,
+  return [...environmentConnections.values()].filter(isPersonalPushConnection);
+}
+
+function isPersonalPushConnection(connection: SavedRemoteConnection): boolean {
+  return (
+    connection.relayManaged !== true &&
+    connection.authenticationMethod !== "dpop" &&
+    typeof connection.bearerToken === "string" &&
+    connection.bearerToken.length > 0
   );
+}
+
+function hasSamePersonalPushEndpoint(
+  previous: SavedRemoteConnection,
+  next: SavedRemoteConnection,
+): boolean {
+  return previous.httpBaseUrl === next.httpBaseUrl && previous.bearerToken === next.bearerToken;
 }
 
 function hasAgentAwarenessBackend(): boolean {
@@ -895,27 +905,67 @@ function endLocalLiveActivities(context: string): void {
   }
 }
 
-export function registerAgentAwarenessConnection(connection: SavedRemoteConnection): void {
+/**
+ * Reconciles the durable environment catalog with push backends. Prepared
+ * connections briefly lose their bearer token during socket replacement, so
+ * retain the last usable endpoint until the environment is actually removed
+ * or its authentication mode changes.
+ */
+export function syncAgentAwarenessConnections(
+  connections: ReadonlyArray<SavedRemoteConnection>,
+): void {
   if (!canRegisterRemoteLiveActivities()) {
     return;
   }
 
-  environmentConnections.set(connection.environmentId, connection);
+  const observedEnvironmentIds = new Set(connections.map(({ environmentId }) => environmentId));
+  let pushEndpointAddedOrChanged = false;
+
+  for (const environmentId of environmentConnections.keys()) {
+    if (!observedEnvironmentIds.has(environmentId)) {
+      environmentConnections.delete(environmentId);
+    }
+  }
+
+  for (const connection of connections) {
+    const previous = environmentConnections.get(connection.environmentId);
+    if (isPersonalPushConnection(connection)) {
+      environmentConnections.set(connection.environmentId, connection);
+      pushEndpointAddedOrChanged ||=
+        previous === undefined || !hasSamePersonalPushEndpoint(previous, connection);
+      continue;
+    }
+
+    const isTransientlyUnprepared =
+      connection.relayManaged !== true &&
+      connection.authenticationMethod !== "dpop" &&
+      connection.bearerToken === null &&
+      previous !== undefined &&
+      isPersonalPushConnection(previous);
+    if (isTransientlyUnprepared) {
+      continue;
+    }
+
+    if (previous !== undefined) {
+      environmentConnections.delete(connection.environmentId);
+    }
+  }
+
+  if (!pushEndpointAddedOrChanged) {
+    return;
+  }
+
+  if (!hasAgentAwarenessBackend()) {
+    return;
+  }
+
   ensurePushTokenListener();
   ensureAppStateListener();
-  enqueueDeviceRegistration({}, "device registration failed");
+  enqueueDeviceRegistration({}, "device registration after environment catalog change failed");
   runRegistrationInBackground(
     refreshActiveLiveActivityRemoteRegistration(),
-    "active live activity registration after environment connection failed",
+    "active live activity registration after environment catalog change failed",
   );
-}
-
-function removeAgentAwarenessConnection(environmentId: EnvironmentId): void {
-  environmentConnections.delete(environmentId);
-}
-
-export function unregisterAgentAwarenessConnection(environmentId: EnvironmentId): void {
-  removeAgentAwarenessConnection(environmentId);
 }
 
 export function unregisterAllAgentAwarenessConnections(): void {
