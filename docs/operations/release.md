@@ -188,9 +188,12 @@ self-update, manual relaunch, desktop SSH launch, and background-service documen
 `bpdev97/tangent` GitHub Release assets.
 
 For a personal release smoke test, download both server assets, verify the recorded SHA-256, inspect
-the archive for `package/dist/bin.mjs`, and run its `t3 --version`. Then connect the new client to a
-server on the previous version and verify one automatic update plus the manual and
-desktop-managed guidance.
+the archive for `package/dist/bin.mjs` and `package/dist/service-launcher.mjs`, and run its
+`t3 --version`. Then connect the new client to a server on the previous version and verify that the
+update action reconnects to the matching server. Use releases with identical migration manifests
+for the automatic path. When the manifest changed, verify that the remote action stops before
+restart and shows the exact local Tangent GitHub Release service-update command. Also test the
+manual and desktop-managed guidance.
 
 ## Desktop auto-update notes
 

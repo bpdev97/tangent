@@ -43,7 +43,8 @@ import {
   restoreComposerDraftSnapshot,
   type ComposerDraft,
 } from "../../state/use-composer-drafts";
-import { useProjects } from "../../state/entities";
+import { useEnvironmentServerConfig, useProjects } from "../../state/entities";
+import { resolveSelectableModelSelection } from "../../lib/modelOptions";
 import { deriveThreadTitleFromPrompt } from "../../lib/projectThreadStartTurn";
 import { armAgentAwarenessLiveActivityForLocalWork } from "../agent-awareness/remoteRegistration";
 import { enqueueThreadOutboxMessage, removeThreadOutboxMessage } from "../../state/thread-outbox";
@@ -93,6 +94,9 @@ export function NewTaskDraftScreen(props: {
   const { logicalProjects, selectedProject, setProject } = flow;
   const isGenericChat = isGenericChatProject(selectedProject);
   const { connectedEnvironments } = useRemoteConnectionStatus();
+  const selectedEnvironmentServerConfig = useEnvironmentServerConfig(
+    selectedProject?.environmentId ?? null,
+  );
   const environmentConnected =
     selectedProject !== null &&
     connectedEnvironments.find(
@@ -805,7 +809,12 @@ export function NewTaskDraftScreen(props: {
       return;
     }
     const draft = getComposerDraftSnapshot(draftKey);
-    const modelSelection = draft.modelSelection ?? flow.selectedModel;
+    // Keep server/provider availability filtering for ordinary and generic drafts.
+    const modelSelection =
+      resolveSelectableModelSelection(
+        selectedEnvironmentServerConfig,
+        draft.modelSelection ?? null,
+      ) ?? flow.selectedModel;
     const workspaceMode = isGenericChat
       ? "local"
       : (draft.workspaceSelection?.mode ?? flow.workspaceMode);
@@ -866,7 +875,10 @@ export function NewTaskDraftScreen(props: {
       if (editingPendingTask) {
         flow.finishEditingPendingTask();
       } else {
-        clearComposerDraftContent(draftKey);
+        // Drop the workspace selection with the content: the next task should
+        // re-resolve mode/branch/origin from the server's configured defaults
+        // instead of resurrecting this task's picks.
+        clearComposerDraftContent(draftKey, { clearWorkspaceSelection: true });
       }
       navigation.getParent()?.goBack();
       return;
@@ -924,7 +936,7 @@ export function NewTaskDraftScreen(props: {
       }
       flow.finishEditingPendingTask();
     } else {
-      clearComposerDraftContent(draftKey);
+      clearComposerDraftContent(draftKey, { clearWorkspaceSelection: true });
     }
     navigation.dispatch(
       StackActions.replace("Thread", {

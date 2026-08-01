@@ -22,29 +22,42 @@ The update does not remove saved threads, settings, or project files.
 
 ## Choose the Action You See
 
-| Action                     | What to do                                                                                                                                                                           |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Update server**          | Select the button and leave Tangent open. It downloads and verifies the matching personal release, restarts the server, and reconnects automatically. This can take several minutes. |
-| **Update the desktop app** | Open the Tangent desktop app on the machine that runs the server and install the app update there. Reopen it if needed.                                                              |
-| **Copy update command**    | Copy the exact Tangent GitHub Release command, open a terminal on the server machine, stop the current server, and relaunch it with any startup options you normally use.            |
+| Action                     | What to do                                                                                                                                                                  |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Update server**          | Available for the Tangent Linux background service. Select the button and leave Tangent open while it prepares, tests, restarts, and reconnects.                            |
+| **Update the desktop app** | Open the Tangent desktop app on the machine that runs the server and install the app update there. Reopen it if needed.                                                     |
+| **Copy update command**    | Copy the command, open a terminal on the server machine, stop the current Tangent server, and relaunch it with the copied command and any startup options you normally use. |
 
 The available action depends on how that server was started. Tangent does not update connected
 servers silently in the background.
+
+If the requested version includes a database update, remote installation stops before restart and
+asks you to run the exact personal GitHub Release command on the server machine. It has this form:
+
+```sh
+npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v<version>/tangent-server-<version>.tgz service update
+```
+
+This is an intentional rollback-safety boundary.
 
 After selecting **Update server**, the warning becomes a three-step progress rail:
 **Download**, **Install**, and **Resume**. The same progress appears in the conversation and in
 Connections, so navigating between them does not lose the update. A failed step remains visible
 with its error and an option to retry.
 
-**Copy update command** gives you an exact command for the matching
-`tangent-server-<client-version>.tgz` GitHub Release asset. Tangent never substitutes the upstream
-`t3` npm package for this operation. Add whatever startup options you normally use.
+**Copy update command** gives you an `npx --yes https://github.com/bpdev97/tangent/...tgz`
+command, which relaunches the server directly at the matching version. Add whatever startup
+options you normally use.
 
-If the server instead runs as the Tangent background service, update the service on the host:
+If the server instead runs as the Tangent background service, update the service on the host and
+pin the same version:
 
 ```sh
-t3 service update
+npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v<client-version>/tangent-server-<client-version>.tgz service update
 ```
+
+`service update` installs the version of the CLI that invoked it. Use the exact release URL from
+the warning; Tangent does not fall back to the upstream npm package or an npm dist-tag.
 
 See [Running Tangent in the Background](./background-service.md) for install, status, and removal
 commands.
@@ -52,13 +65,13 @@ commands.
 ## After the Update
 
 Keep the web or desktop app open while the server restarts. The update completes only after the
-replacement server reports the requested version and is ready to accept commands. The warning and
-progress rail then disappear.
+service launcher reports that exact update committed and the replacement server is ready to accept
+commands. A rollback is reported immediately instead of waiting for a generic reconnect timeout.
 
 If a step fails:
 
 1. Retry the offered action once.
 2. Make sure you updated the machine named in the warning, not only the device you are using.
-3. For a command-line server, use the exact GitHub Release command copied from the warning.
+3. For a command-line server, use the exact personal GitHub Release command shown in the warning.
 
 For remote connection setup and access troubleshooting, see [Remote Access](./remote-access.md).

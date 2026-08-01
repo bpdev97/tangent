@@ -167,7 +167,6 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarSeparator,
   useSidebar,
 } from "./ui/sidebar";
 import { useThreadSelectionStore } from "../threadSelectionStore";
@@ -3701,8 +3700,6 @@ export default function Sidebar() {
             attachProjectListAutoAnimateRef={attachProjectListAutoAnimateRef}
             projectsLength={regularProjects.length}
           />
-
-          <SidebarSeparator />
           <SidebarChromeFooter />
         </>
       )}

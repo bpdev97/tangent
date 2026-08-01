@@ -47,6 +47,7 @@ import * as OrchestrationEngine from "../orchestration/Services/OrchestrationEng
 import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import * as PersonalPushRelay from "../personalPush/PersonalPushRelayClient.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import { forkParked } from "../serverActivation.ts";
 
 export class AgentAwarenessRelay extends Context.Service<
   AgentAwarenessRelay,
@@ -615,12 +616,12 @@ export const make = Effect.gen(function* () {
           relayUrl: personalPushRelay.relayUrl,
         });
       }
-      yield* Effect.forkScoped(
+      yield* forkParked(
         Effect.sleep("1 second").pipe(
           Effect.andThen(publishActiveThreadsOnceWhenConfigured(startupState !== "enabled")),
         ),
       );
-      yield* Effect.forkScoped(
+      yield* forkParked(
         Stream.runForEach(orchestrationEngine.streamDomainEvents, (event) => {
           const threadId = eventThreadId(event);
           if (threadId === null) {

@@ -1,5 +1,10 @@
-import * as Context from "effect/Context";
+import {
+  HostProcessArguments,
+  HostProcessExecutablePath,
+  HostProcessPlatform,
+} from "@t3tools/shared/hostProcess";
 import * as Config from "effect/Config";
+import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -9,67 +14,41 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
-import {
-  HostProcessArguments,
-  HostProcessExecutablePath,
-  HostProcessPlatform,
-} from "@t3tools/shared/hostProcess";
-
 import * as ProcessRunner from "../processRunner.ts";
-import { ensurePinnedRuntimeInstalled, pinnedRuntimePaths } from "./pinnedRuntime.ts";
-
-/**
- * Installs the server as a per-user boot service. Linux-only for now: systemd
- * user unit + loginctl enable-linger. The service runs a stable or pinned
- * runtime — never an ephemeral package-manager cache whose eviction could break
- * startup.
- */
-
-const BOOT_SERVICE_NAME = "t3code";
-
-export const BOOT_SERVICE_UNIT_FILE = `${BOOT_SERVICE_NAME}.service`;
-export const BOOT_SERVICE_UNIT_ENV = "T3_BOOT_SERVICE_UNIT";
+import {
+  ensurePinnedRuntimeInstalled,
+  pinnedRuntimePaths,
+  PinnedRuntimeInstallError,
+} from "./pinnedRuntime.ts";
+import {
+  SERVICE_LAUNCHER_FILE,
+  SERVICE_LAUNCHER_PROTOCOL,
+  SERVICE_STATE_FILE,
+  encodeRuntimeInstallSentinel,
+  parseServiceState,
+  type ServiceState,
+} from "./serviceProtocol.ts";
 
 const DEFAULT_BOOT_SERVICE_IDENTITY = {
   bootServiceName: "t3code",
   displayName: "T3 Code",
 } as const;
+export const BOOT_SERVICE_UNIT_FILE = `${DEFAULT_BOOT_SERVICE_IDENTITY.bootServiceName}.service`;
+export const BOOT_SERVICE_UNIT_ENV = "T3_BOOT_SERVICE_UNIT";
 
-const EPHEMERAL_CACHE_SEGMENTS = [
-  "/_npx/", // npx
-  "\\_npx\\",
-  "/pnpm/dlx/", // pnpm dlx (~/.cache/pnpm/dlx and $PNPM_HOME/.pnpm/dlx)
-  "/.pnpm/dlx/",
-  "/.bun/install/cache/", // bunx
-];
-
-/**
- * `npx t3` (and pnpm dlx / bunx) run out of ephemeral package-manager
- * caches that can be evicted at any time — a boot service must never point
- * there. Global installs, repo checkouts, and the pinned runtime below are
- * all stable.
- */
-export function isEphemeralCacheEntry(entryPath: string): boolean {
-  return EPHEMERAL_CACHE_SEGMENTS.some((segment) => entryPath.includes(segment));
+export interface BootServiceIdentity {
+  readonly bootServiceName: string;
+  readonly displayName: string;
 }
 
-export function bootServiceUnitFile(identity: BootServiceIdentity): string {
-  return `${identity.bootServiceName}.service`;
-}
+export const bootServiceUnitFile = (identity: BootServiceIdentity): string =>
+  `${identity.bootServiceName}.service`;
 
-/**
- * systemd expands `%` specifiers in most directive values, including the
- * `append:` file paths, which take the rest of the line literally and must
- * NOT be quoted.
- */
+/** systemd expands `%` specifiers, including in unquoted append-log paths. */
 export function escapeSystemdSpecifiers(value: string): string {
   return value.replaceAll("%", "%%");
 }
 
-/**
- * systemd word-splits ExecStart and Environment values and expands `%`
- * specifiers, so paths with spaces or percents must be quoted and escaped.
- */
 export function quoteSystemdValue(value: string): string {
   const escaped = escapeSystemdSpecifiers(value);
   return /[\s"'\\]/.test(escaped)
@@ -78,10 +57,8 @@ export function quoteSystemdValue(value: string): string {
 }
 
 export interface BootServicePlan {
-  /** Absolute path of the node binary running this CLI. */
   readonly nodePath: string;
-  /** Absolute path of the pinned t3 entry point the unit will run. */
-  readonly t3EntryPath: string;
+  readonly launcherPath: string;
   readonly baseDir: string;
   readonly logPath: string;
   readonly unitPath: string;
@@ -89,22 +66,12 @@ export interface BootServicePlan {
   readonly unitFile?: string;
 }
 
-/**
- * Pure so it is testable byte-for-byte. systemd user units run with a
- * minimal environment: every path must be absolute, and the service must
- * not rely on PATH, nvm shims, or shell profiles. Failures land in
- * `logPath` because `systemctl --user` failures are otherwise invisible.
- */
+/** Pure renderer: service units cannot rely on the user's shell or PATH. */
 export function renderBootServiceUnit(plan: BootServicePlan): string {
-  // No After=network-online.target: it does not exist in the systemd *user*
-  // manager, so ordering on it is silently ignored. The server retries its
-  // relay connection, and Restart=always covers early-boot failures.
+  // The user manager has no reliable network-online target; server networking retries itself.
   return [
     "[Unit]",
-    `Description=${plan.displayName ?? DEFAULT_BOOT_SERVICE_IDENTITY.displayName} server (T3 Connect)`,
-    // Give up after 5 crashes in 5 minutes so a persistently broken install
-    // (deleted runtime, broken workspace) stops instead of restarting every
-    // 5s forever and growing the unrotated append log without bound.
+    `Description=${plan.displayName ?? DEFAULT_BOOT_SERVICE_IDENTITY.displayName} server`,
     "StartLimitIntervalSec=300",
     "StartLimitBurst=5",
     "",
@@ -113,7 +80,8 @@ export function renderBootServiceUnit(plan: BootServicePlan): string {
     "WorkingDirectory=%h",
     `Environment=T3CODE_HOME=${quoteSystemdValue(plan.baseDir)}`,
     `Environment=${BOOT_SERVICE_UNIT_ENV}=${plan.unitFile ?? BOOT_SERVICE_UNIT_FILE}`,
-    `ExecStart=${quoteSystemdValue(plan.nodePath)} ${quoteSystemdValue(plan.t3EntryPath)} serve`,
+    `ExecStart=${quoteSystemdValue(plan.nodePath)} ${quoteSystemdValue(plan.launcherPath)}`,
+    "KillMode=control-group",
     "Restart=always",
     "RestartSec=5",
     `StandardOutput=append:${escapeSystemdSpecifiers(plan.logPath)}`,
@@ -168,7 +136,6 @@ export type BootServiceError =
 export interface BootServiceStatus {
   readonly supported: boolean;
   readonly installed: boolean;
-  /** False when the installed unit no longer matches what install would write. */
   readonly current: boolean;
   readonly unitPath: string;
   readonly logPath: string;
@@ -177,12 +144,7 @@ export interface BootServiceStatus {
 export class BootService extends Context.Service<
   BootService,
   {
-    /** Installs the pinned runtime + unit, enables linger, starts the service. */
     readonly install: Effect.Effect<BootServicePlan, BootServiceError>;
-    /**
-     * Stops and removes the unit; leaves the pinned runtime for reuse.
-     * Returns whether a unit was actually removed.
-     */
     readonly uninstall: Effect.Effect<boolean, BootServiceError>;
     readonly status: Effect.Effect<BootServiceStatus, BootServiceError>;
   }
@@ -191,11 +153,7 @@ export class BootService extends Context.Service<
 export interface BootServiceHost {
   readonly execPath: string;
   readonly cliEntryPath: string;
-}
-
-export interface BootServiceIdentity {
-  readonly bootServiceName: string;
-  readonly displayName: string;
+  readonly launcherSourcePath?: string;
 }
 
 export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
@@ -205,26 +163,52 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
   readonly host?: BootServiceHost;
   readonly identity?: BootServiceIdentity;
 }) {
-  const hostExecPath = yield* HostProcessExecutablePath;
   const hostArguments = yield* HostProcessArguments;
-  const host = input.host ?? {
-    execPath: hostExecPath,
-    // When running the packed CLI this is dist/bin.mjs; when stable (global
-    // install, repo checkout) the boot service runs this same artifact.
-    cliEntryPath: hostArguments[1] ?? "",
-  };
+  const hostExecPath = yield* HostProcessExecutablePath;
   const platform = yield* HostProcessPlatform;
   const homeDir = yield* Config.string("HOME").pipe(Config.withDefault(""));
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const runner = yield* ProcessRunner.ProcessRunner;
+  const host = input.host ?? {
+    execPath: hostExecPath,
+    cliEntryPath: hostArguments[1] ?? "",
+  };
 
   const identity = input.identity ?? DEFAULT_BOOT_SERVICE_IDENTITY;
   const unitFile = bootServiceUnitFile(identity);
+
   const unitDir = path.join(homeDir, ".config", "systemd", "user");
   const unitPath = path.join(unitDir, unitFile);
   const logPath = path.join(input.logsDir, "boot-service.log");
+  const launcherPath = path.join(input.baseDir, "runtime", SERVICE_LAUNCHER_FILE);
+  const statePath = path.join(input.baseDir, "runtime", SERVICE_STATE_FILE);
+  const launcherSourcePath =
+    host.launcherSourcePath ?? path.join(path.dirname(host.cliEntryPath), SERVICE_LAUNCHER_FILE);
   const runtimePaths = pinnedRuntimePaths(path, input.baseDir, input.cliVersion);
+  const installIdentity = `current-cli:${identity.bootServiceName}:${input.cliVersion}`;
+  const expectedRuntimeSentinel = encodeRuntimeInstallSentinel(input.cliVersion, installIdentity);
+  const writeDurably = (filePath: string, contents: string) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const directory = path.dirname(filePath);
+        yield* fs.makeDirectory(directory, { recursive: true });
+        const tempPath = yield* fs.makeTempFileScoped({ directory, prefix: ".service-write-" });
+        yield* fs.writeFileString(tempPath, contents, { mode: 0o600 });
+        yield* (yield* fs.open(tempPath, { flag: "r" })).sync;
+        yield* fs.rename(tempPath, filePath);
+        yield* (yield* fs.open(directory, { flag: "r" })).sync;
+      }),
+    ).pipe(Effect.mapError((cause) => new BootServiceInstallError({ cause })));
+  const plan: BootServicePlan = {
+    nodePath: host.execPath,
+    launcherPath,
+    baseDir: input.baseDir,
+    logPath,
+    unitPath,
+    displayName: identity.displayName,
+    unitFile,
+  };
 
   const requireSystemdLinux = Effect.gen(function* () {
     if (platform !== "linux" || homeDir === "") {
@@ -263,146 +247,120 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
     );
   });
 
-  /**
-   * Ensures plannedEntryPath exists before the unit points at it. A stable
-   * install (global bin, repo checkout) is used as-is; an ephemeral cache
-   * entry is installed from the exact running package directory into
-   * <baseDir>/runtime/versions/<v>. This preserves the Tangent artifact
-   * identity and still lets npm rebuild native dependencies like node-pty.
-   */
-  const ensurePinnedRuntime = Effect.gen(function* () {
-    if (!isEphemeralCacheEntry(host.cliEntryPath)) {
-      return;
-    }
-    yield* ensurePinnedRuntimeInstalled({
-      baseDir: input.baseDir,
-      version: input.cliVersion,
-      packageSpecifier: path.dirname(path.dirname(host.cliEntryPath)),
-      installIdentity: `current-cli:${identity.bootServiceName}:${input.cliVersion}`,
-      fs,
-      path,
-      runner,
-    }).pipe(
-      Effect.mapError((error) =>
-        error.step.startsWith("installing")
-          ? new BootServiceCommandError({
-              step: error.step,
-              exitCode: error.exitCode,
-              stdoutLength: error.stdoutLength,
-              stderrLength: error.stderrLength,
-              cause: error.cause,
-            })
-          : new BootServiceInstallError({ cause: error }),
-      ),
-      Effect.tapError((error) =>
-        DateTime.now.pipe(
-          Effect.flatMap((now) =>
-            fs.writeFileString(logPath, `${DateTime.formatIso(now)} ${error.message}\n`, {
-              flag: "a",
-            }),
-          ),
-          Effect.ignore,
-        ),
-      ),
-    );
-  });
-
-  // Where the unit will point: derivable without touching the network, so
-  // status can compare units purely; install materializes it first.
-  const plannedEntryPath = isEphemeralCacheEntry(host.cliEntryPath)
-    ? runtimePaths.entryPath
-    : host.cliEntryPath;
-  const plan: BootServicePlan = {
-    nodePath: host.execPath,
-    t3EntryPath: plannedEntryPath,
-    baseDir: input.baseDir,
-    logPath,
-    unitPath,
-    displayName: identity.displayName,
-    unitFile,
-  };
-
   const install: BootService["Service"]["install"] = Effect.gen(function* () {
     yield* requireSystemdLinux;
     yield* fs
       .makeDirectory(input.logsDir, { recursive: true })
       .pipe(Effect.mapError((cause) => new BootServiceInstallError({ cause })));
 
-    yield* ensurePinnedRuntime;
-
-    const previousUnit = yield* fs.exists(unitPath).pipe(
-      Effect.flatMap((exists) =>
-        exists
-          ? fs.readFileString(unitPath).pipe(Effect.map(Option.some))
-          : Effect.succeed(Option.none<string>()),
+    // Prepare every immutable artifact before stopping the installed unit.
+    yield* ensurePinnedRuntimeInstalled({
+      baseDir: input.baseDir,
+      version: input.cliVersion,
+      packageSpecifier: path.dirname(path.dirname(host.cliEntryPath)),
+      installIdentity,
+      fs,
+      path,
+      runner,
+      validate: (runtime) =>
+        runner
+          .run({
+            command: host.execPath,
+            args: [runtime.entryPath, "--version"],
+            timeout: Duration.seconds(30),
+          })
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new PinnedRuntimeInstallError({
+                  step: "verifying the pinned server runtime",
+                  cause,
+                }),
+            ),
+            Effect.flatMap((result) => {
+              const reportedVersion = /\bv(\S+)\s*$/.exec(result.stdout)?.[1];
+              return result.code === 0 && reportedVersion === input.cliVersion
+                ? Effect.void
+                : Effect.fail(
+                    new PinnedRuntimeInstallError({
+                      step: "verifying the pinned server runtime",
+                      exitCode: Number(result.code),
+                      stdoutLength: result.stdout.length,
+                      stderrLength: result.stderr.length,
+                    }),
+                  );
+            }),
+          ),
+    }).pipe(
+      Effect.mapError((error) =>
+        error._tag === "PinnedRuntimeInstallError"
+          ? new BootServiceCommandError({
+              step: error.step,
+              exitCode: error.exitCode,
+              stdoutLength: error.stdoutLength,
+              stderrLength: error.stderrLength,
+              cause: error,
+            })
+          : new BootServiceInstallError({ cause: error }),
       ),
-      Effect.mapError((cause) => new BootServiceInstallError({ cause })),
     );
+    const launcherSource = yield* fs
+      .readFileString(launcherSourcePath)
+      .pipe(Effect.mapError((cause) => new BootServiceInstallError({ cause })));
 
-    yield* fs.makeDirectory(unitDir, { recursive: true }).pipe(
-      Effect.andThen(fs.writeFileString(unitPath, renderBootServiceUnit(plan))),
-      Effect.mapError((cause) => new BootServiceInstallError({ cause })),
-    );
+    const installed = yield* fs
+      .exists(unitPath)
+      .pipe(Effect.mapError((cause) => new BootServiceInstallError({ cause })));
+    if (installed) {
+      yield* runStep("stopping the installed service", "systemctl", ["--user", "stop", unitFile]);
+    }
 
-    // If any activation step fails, remove the unit again: a leftover file
-    // would make service status report it as installed even though it was
-    // never enabled or lingered.
     yield* Effect.gen(function* () {
+      yield* fs
+        .makeDirectory(unitDir, { recursive: true })
+        .pipe(Effect.mapError((cause) => new BootServiceInstallError({ cause })));
+      yield* writeDurably(launcherPath, launcherSource);
+      yield* writeDurably(
+        statePath,
+        // @effect-diagnostics-next-line preferSchemaOverJson:off - fixed launcher-owned document.
+        `${JSON.stringify(
+          {
+            protocol: SERVICE_LAUNCHER_PROTOCOL,
+            activeVersion: input.cliVersion,
+          } satisfies ServiceState,
+          null,
+          2,
+        )}\n`,
+      );
+      yield* writeDurably(unitPath, renderBootServiceUnit(plan));
+
       yield* runStep("reloading systemd user units", "systemctl", ["--user", "daemon-reload"]);
       yield* runStep("enabling the service", "systemctl", ["--user", "enable", unitFile]);
-      // restart rather than enable --now: --now does not replace an already
-      // running process, so repairing a stale unit would leave the old
-      // server running until reboot. restart also starts a stopped service.
-      yield* runStep("starting the service", "systemctl", ["--user", "restart", unitFile]);
-      // Linger keeps the user manager (and this service) running without an
-      // open session — the whole point on a box reached over SSH. No
-      // username argument: loginctl defaults to the calling user, which is
-      // always right, while $USER can be stale (su without -l) or unset.
       yield* runStep("enabling lingering for this user", "loginctl", ["enable-linger"]);
-    }).pipe(Effect.tapError(() => rollbackFailedInstall(previousUnit)));
-
+      // Start last. No administrative state write occurs after this succeeds.
+      yield* runStep("starting the service", "systemctl", ["--user", "restart", unitFile]);
+    }).pipe(
+      Effect.tapError(() =>
+        installed
+          ? runStep("restarting the service after a failed update", "systemctl", [
+              "--user",
+              "restart",
+              unitFile,
+            ]).pipe(Effect.ignore)
+          : Effect.void,
+      ),
+    );
     return plan;
   }).pipe(Effect.withSpan("cloud.boot_service.install"));
 
-  // If activation fails partway (e.g. enable succeeds but restart/linger
-  // fails), leave nothing behind: disable removes the enable symlink, remove
-  // deletes the file, daemon-reload clears the stale definition — otherwise a
-  // dangling wants/ symlink logs "Failed to load unit" at every boot and the
-  // next lifecycle command misreports the state.
-  const rollbackFailedInstall = Effect.fn("cloud.boot_service.rollback_failed_install")(function* (
-    previousUnit: Option.Option<string>,
-  ) {
-    if (Option.isSome(previousUnit)) {
-      yield* fs.writeFileString(unitPath, previousUnit.value).pipe(Effect.ignore);
-    } else {
-      yield* runStep("cleaning up the service", "systemctl", [
-        "--user",
-        "disable",
-        "--now",
-        unitFile,
-      ]).pipe(Effect.ignore);
-      yield* fs.remove(unitPath).pipe(Effect.ignore);
-    }
-    yield* runStep("reloading systemd user units", "systemctl", ["--user", "daemon-reload"]).pipe(
-      Effect.ignore,
-    );
-    if (Option.isSome(previousUnit)) {
-      yield* runStep("restoring the previous service", "systemctl", [
-        "--user",
-        "restart",
-        unitFile,
-      ]).pipe(Effect.ignore);
-    }
-  });
-
   const uninstall: BootService["Service"]["uninstall"] = Effect.gen(function* () {
     yield* requireSystemdLinux;
-    const exists = yield* fs
-      .exists(unitPath)
-      .pipe(Effect.mapError((cause) => new BootServiceInstallError({ cause })));
-    if (!exists) {
+    if (
+      !(yield* fs
+        .exists(unitPath)
+        .pipe(Effect.mapError((cause) => new BootServiceInstallError({ cause }))))
+    )
       return false;
-    }
     yield* runStep("stopping the service", "systemctl", ["--user", "disable", "--now", unitFile]);
     yield* fs
       .remove(unitPath)
@@ -415,18 +373,32 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
     if (platform !== "linux" || homeDir === "") {
       return { supported: false, installed: false, current: false, unitPath, logPath };
     }
-    const unitExists = yield* fs.exists(unitPath);
-    if (!unitExists) {
+    if (!(yield* fs.exists(unitPath))) {
       return { supported: true, installed: false, current: false, unitPath, logPath };
     }
-    const unit = yield* fs.readFileString(unitPath);
-    // A unit is current only if it matches what install would write now (an
-    // older CLI wrote a different runtime/node path) AND the entry point it
-    // references still exists (a pinned runtime under ~/.t3 can be deleted to
-    // reclaim space). Either mismatch makes connect offer a repair.
-    const entryExists = yield* fs.exists(plannedEntryPath);
-    const current = unit === renderBootServiceUnit(plan) && entryExists;
-    return { supported: true, installed: true, current, unitPath, logPath };
+    const [unit, launcherExists, runtimeEntryExists, runtimeSentinel, stateText] =
+      yield* Effect.all([
+        fs.readFileString(unitPath),
+        fs.exists(launcherPath),
+        fs.exists(runtimePaths.entryPath),
+        fs.readFileString(runtimePaths.sentinelPath).pipe(Effect.option),
+        fs.readFileString(statePath).pipe(Effect.option),
+      ]);
+    const state = Option.isSome(stateText) ? parseServiceState(stateText.value) : undefined;
+    return {
+      supported: true,
+      installed: true,
+      current:
+        unit === renderBootServiceUnit(plan) &&
+        launcherExists &&
+        runtimeEntryExists &&
+        Option.isSome(runtimeSentinel) &&
+        runtimeSentinel.value === expectedRuntimeSentinel &&
+        state?.activeVersion === input.cliVersion &&
+        state?.update?.status !== "pending",
+      unitPath,
+      logPath,
+    };
   }).pipe(
     Effect.mapError((cause) => new BootServiceInstallError({ cause })),
     Effect.withSpan("cloud.boot_service.status"),

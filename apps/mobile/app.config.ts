@@ -183,6 +183,9 @@ const config: ExpoConfig = {
   ios: {
     icon: variant.assets.iosIcon,
     supportsTablet: true,
+    // Multitasking-capable iPad apps cannot rotate programmatically, so the
+    // showcase capture build requires full screen (see infoPlist below).
+    requireFullScreen: process.env.T3_SHOWCASE_CAPTURE_BUILD === "1",
     bundleIdentifier: iosBundleIdentifier,
     appleTeamId: personalMobile.appleTeamId,
     associatedDomains: [
@@ -195,6 +198,21 @@ const config: ExpoConfig = {
       },
       NSLocalNetworkUsageDescription: `Allow ${personalMobile.appName} to connect to coding-agent servers on your local network or tailnet.`,
       ITSAppUsesNonExemptEncryption: false,
+      // The App Store screenshot harness rotates the iPad interface from
+      // inside the app (CI denies osascript the Accessibility access that
+      // Simulator menu scripting needs), and iPadOS ignores programmatic
+      // orientation requests for multitasking-capable apps — so the capture
+      // build opts out of multitasking and declares landscape support.
+      ...(process.env.T3_SHOWCASE_CAPTURE_BUILD === "1"
+        ? {
+            "UISupportedInterfaceOrientations~ipad": [
+              "UIInterfaceOrientationPortrait",
+              "UIInterfaceOrientationPortraitUpsideDown",
+              "UIInterfaceOrientationLandscapeLeft",
+              "UIInterfaceOrientationLandscapeRight",
+            ],
+          }
+        : {}),
     },
   },
   android: {

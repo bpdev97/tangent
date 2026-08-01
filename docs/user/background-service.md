@@ -30,6 +30,10 @@ a newer release manually, install that release asset first and then run `t3 serv
 
 Updating restarts Tangent briefly. Let active agent work and terminal commands finish first.
 
+The systemd unit runs a small stable launcher. Exact Tangent versions are installed separately, so
+a failed remote candidate can return to the previous version without rewriting the unit. Releases
+that change the database must be installed with the local `service update` command above.
+
 ## Using It with T3 Connect
 
 T3 Connect may offer to install the service during setup so the host stays reachable after you log

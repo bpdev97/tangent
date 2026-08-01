@@ -2,6 +2,26 @@
 
 Use this when you want to connect to a Tangent server from another device such as a phone, tablet, or separate desktop app.
 
+## Quick Pairing for a Running Server
+
+If a server is already running on this machine, mint a fresh pairing token and QR code without restarting anything:
+
+```bash
+t3 pair
+```
+
+`t3 pair` finds the running server (the configured Tangent data directory, or the current worktree's dev server when run inside one), issues a one-time pairing token, and prints the pairing URL as a QR code you can scan from your phone.
+
+If the server is only bound to loopback, the printed URL is not reachable from another device. Pair over your tailnet instead:
+
+```bash
+t3 pair --tailscale
+```
+
+This publishes the server over Tailscale Serve HTTPS (configuring the mapping if needed — it persists until you run `tailscale serve --https=443 off`) and pairs through the `https://machine.tailnet.ts.net/` URL. Use `--tailscale-serve-port` for a different HTTPS port, `--ttl` to change the token lifetime, and `--base-dir` to target a specific data directory.
+
+If no server is running, `t3 pair` says so and points you at `t3 serve` or `t3 connect`.
+
 ## Recommended Setup
 
 Use a trusted private network that meshes your devices together, such as a tailnet.
@@ -110,9 +130,9 @@ Use this when you want the desktop app to start or reuse Tangent on another mach
 2. Under **Remote Environments**, choose **Add environment**.
 3. Select the SSH launch flow.
 4. Enter the SSH target, such as `user@example.com`.
-5. Confirm the launch. The desktop app probes the host, starts or reuses a remote T3 server, opens a local port forward, and saves the environment.
+5. Confirm the launch. The desktop app probes the host, starts or reuses a remote Tangent server, opens a local port forward, and saves the environment.
 
-After setup, the renderer connects to a local forwarded HTTP/WebSocket endpoint. The remote host still owns the actual T3 server, projects, files, git state, terminals, and provider sessions.
+After setup, the renderer connects to a local forwarded HTTP/WebSocket endpoint. The remote host still owns the actual Tangent server, projects, files, git state, terminals, and provider sessions.
 
 SSH launch is a desktop feature because it needs local process and SSH access. Once the environment is paired and saved, it uses the same environment list and connection model as direct LAN, Tailscale, HTTPS, or future tunnel-backed environments.
 
