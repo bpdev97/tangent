@@ -23,6 +23,11 @@ describe("ElectronProtocol", () => {
     unhandleMock.mockReset();
   });
 
+  it("uses the personal distribution URL schemes", () => {
+    assert.equal(ElectronProtocol.DESKTOP_PRODUCTION_SCHEME, "bpdev-code");
+    assert.equal(ElectronProtocol.DESKTOP_DEVELOPMENT_SCHEME, "bpdev-code-dev");
+  });
+
   it.effect("proxies the stable renderer origin to the current app server", () =>
     Effect.gen(function* () {
       let handler: ((request: Request) => Promise<Response>) | undefined;

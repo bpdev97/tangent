@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import mobilePackageJson from "../apps/mobile/package.json" with { type: "json" };
 
 import { PERSONAL_DISTRIBUTION } from "../downstream/config.ts";
 
@@ -20,8 +21,17 @@ describe("personal distribution identity", () => {
     ]);
     expect(mobile.iosBundleIdentifier).not.toBe("com.t3tools.t3code");
     expect(macos.productName).toBe("Tangent");
+    expect([macos.scheme, macos.developmentScheme]).toEqual(["bpdev-code", "bpdev-code-dev"]);
     expect(macos.appId).not.toBe("com.t3tools.t3code");
     expect(macos.stateHomeDirectoryName).toBe(".bpdev-code");
     expect(macos.userDataDirectoryName).toBe("bpdev-code");
+  });
+
+  it("starts mobile development clients through the personal URL schemes", () => {
+    expect(mobilePackageJson.scripts["dev:client"]).toContain("--scheme bpdev-code-dev");
+    expect(mobilePackageJson.scripts["dev:client:preview"]).toContain(
+      "--scheme bpdev-code-preview",
+    );
+    expect(mobilePackageJson.scripts.showcase).toContain("--scheme bpdev-code");
   });
 });

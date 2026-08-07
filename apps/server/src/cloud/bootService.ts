@@ -26,6 +26,7 @@ import {
   SERVICE_STATE_FILE,
   encodeRuntimeInstallSentinel,
   parseServiceState,
+  serviceStateHasPendingUpdate,
   type ServiceState,
 } from "./serviceProtocol.ts";
 
@@ -81,7 +82,9 @@ export function renderBootServiceUnit(plan: BootServicePlan): string {
     `Environment=T3CODE_HOME=${quoteSystemdValue(plan.baseDir)}`,
     `Environment=${BOOT_SERVICE_UNIT_ENV}=${plan.unitFile ?? BOOT_SERVICE_UNIT_FILE}`,
     `ExecStart=${quoteSystemdValue(plan.nodePath)} ${quoteSystemdValue(plan.launcherPath)}`,
-    "KillMode=control-group",
+    // Let the launcher mark an explicit stop before it signals the server.
+    // systemd still SIGKILLs the whole cgroup if graceful shutdown times out.
+    "KillMode=mixed",
     "Restart=always",
     "RestartSec=5",
     `StandardOutput=append:${escapeSystemdSpecifiers(plan.logPath)}`,
@@ -128,10 +131,20 @@ export class BootServiceInstallError extends Schema.TaggedErrorClass<BootService
   }
 }
 
+export class BootServiceUpdatePendingError extends Schema.TaggedErrorClass<BootServiceUpdatePendingError>()(
+  "BootServiceUpdatePendingError",
+  {},
+) {
+  override get message(): string {
+    return "A remote server update is still pending. Wait for it to finish, then retry.";
+  }
+}
+
 export type BootServiceError =
   | BootServiceUnsupportedError
   | BootServiceCommandError
-  | BootServiceInstallError;
+  | BootServiceInstallError
+  | BootServiceUpdatePendingError;
 
 export interface BootServiceStatus {
   readonly supported: boolean;
@@ -183,11 +196,12 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
   const logPath = path.join(input.logsDir, "boot-service.log");
   const launcherPath = path.join(input.baseDir, "runtime", SERVICE_LAUNCHER_FILE);
   const statePath = path.join(input.baseDir, "runtime", SERVICE_STATE_FILE);
-  const launcherSourcePath =
-    host.launcherSourcePath ?? path.join(path.dirname(host.cliEntryPath), SERVICE_LAUNCHER_FILE);
   const runtimePaths = pinnedRuntimePaths(path, input.baseDir, input.cliVersion);
   const installIdentity = `current-cli:${identity.bootServiceName}:${input.cliVersion}`;
   const expectedRuntimeSentinel = encodeRuntimeInstallSentinel(input.cliVersion, installIdentity);
+  const launcherSourcePath =
+    host.launcherSourcePath ??
+    path.join(path.dirname(runtimePaths.entryPath), SERVICE_LAUNCHER_FILE);
   const writeDurably = (filePath: string, contents: string) =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -316,6 +330,15 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
     }
 
     yield* Effect.gen(function* () {
+      if (installed) {
+        const previousStateText = yield* fs.readFileString(statePath).pipe(Effect.option);
+        if (
+          Option.isSome(previousStateText) &&
+          serviceStateHasPendingUpdate(previousStateText.value)
+        ) {
+          return yield* new BootServiceUpdatePendingError();
+        }
+      }
       yield* fs
         .makeDirectory(unitDir, { recursive: true })
         .pipe(Effect.mapError((cause) => new BootServiceInstallError({ cause })));

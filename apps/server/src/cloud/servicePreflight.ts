@@ -1,10 +1,5 @@
-import * as NodeSqlite from "node:sqlite";
-
-import { resolveServerReleaseArtifact } from "@t3tools/shared/serverRelease";
-
 import { PERSONAL_DISTRIBUTION } from "../../../../downstream/config.ts";
 import packageJson from "../../package.json" with { type: "json" };
-import { migrationManifest } from "../persistence/Migrations.ts";
 import { SERVICE_LAUNCHER_PROTOCOL } from "./serviceProtocol.ts";
 
 export type ServicePreflightResult =
@@ -19,28 +14,8 @@ export type ServicePreflightResult =
       readonly reason: string;
     };
 
-const localUpdateReason = (version: string) => {
-  const artifact = resolveServerReleaseArtifact(
-    {
-      repository: PERSONAL_DISTRIBUTION.repository,
-      ...PERSONAL_DISTRIBUTION.serverRelease,
-    },
-    version,
-  );
-  return `This version includes a database update and cannot be installed remotely. Run \`npx --yes ${artifact.artifactUrl} service update\` on the server machine.`;
-};
-
-const isMigrationRow = (
-  value: unknown,
-): value is { readonly migration_id: number; readonly name: string } =>
-  typeof value === "object" &&
-  value !== null &&
-  "migration_id" in value &&
-  typeof value.migration_id === "number" &&
-  "name" in value &&
-  typeof value.name === "string";
-
 export function runServicePreflight(input: {
+  /** Older servers always pass this flag when invoking a staged preflight. */
   readonly databasePath: string;
   readonly launcherProtocol: number;
   readonly version?: string;
@@ -52,28 +27,6 @@ export function runServicePreflight(input: {
       version,
       reason: `This release requires a newer ${PERSONAL_DISTRIBUTION.connect.displayName} service launcher. Update it on the server machine.`,
     };
-  }
-
-  try {
-    const database = new NodeSqlite.DatabaseSync(input.databasePath, { readOnly: true });
-    try {
-      const rows: ReadonlyArray<unknown> = database
-        .prepare("SELECT migration_id, name FROM effect_sql_migrations ORDER BY migration_id")
-        .all();
-      const exact =
-        rows.length === migrationManifest.length &&
-        rows.every((row, index) => {
-          const expected = migrationManifest[index];
-          return (
-            isMigrationRow(row) && row.migration_id === expected?.[0] && row.name === expected?.[1]
-          );
-        });
-      if (!exact) return { status: "blocked", version, reason: localUpdateReason(version) };
-    } finally {
-      database.close();
-    }
-  } catch {
-    return { status: "blocked", version, reason: localUpdateReason(version) };
   }
 
   return { status: "ready", version, launcherProtocol: SERVICE_LAUNCHER_PROTOCOL };

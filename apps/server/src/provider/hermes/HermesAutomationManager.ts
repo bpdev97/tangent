@@ -22,7 +22,7 @@ import { mergeProviderInstanceEnvironment } from "../ProviderInstanceEnvironment
 import { HERMES_DRIVER_KIND } from "./HermesGatewaySupport.ts";
 
 const decodeHermesSettings = Schema.decodeUnknownEffect(HermesSettings);
-const decodeUnknownJson = Schema.decodeUnknownEffect(Schema.UnknownFromJsonString);
+const decodeUnknownJson = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown));
 const COMMAND_TIMEOUT = "20 seconds";
 const MAX_JOBS_FILE_BYTES = 2 * 1024 * 1024;
 

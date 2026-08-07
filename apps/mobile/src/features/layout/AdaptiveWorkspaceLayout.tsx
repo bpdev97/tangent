@@ -45,10 +45,14 @@ import { scopedThreadKey } from "../../lib/scopedEntities";
 import { useThreadShell } from "../../state/entities";
 import { mobilePreferencesAtom } from "../../state/preferences";
 import {
+  DEFAULT_MOBILE_PROJECT_GROUPING_SETTINGS,
+  resolveMobileProjectGroupingSettings,
+} from "../../state/project-grouping";
+import {
   parseActiveThreadPath,
   useHardwareKeyboardCommand,
 } from "../keyboard/hardwareKeyboardCommands";
-import { HomeListOptionsProvider, resolveProjectGroupingMode } from "../home/home-list-options";
+import { HomeListOptionsProvider } from "../home/home-list-options";
 import { ThreadNavigationSidebar } from "../threads/ThreadNavigationSidebar";
 import { useStartGenericChat } from "../threads/use-start-generic-chat";
 import { WORKSPACE_PANE_TIMING } from "./workspace-pane-animation";
@@ -198,15 +202,17 @@ export function AdaptiveWorkspaceLayout(props: {
   const preferencesResult = useAtomValue(mobilePreferencesAtom);
   if (!AsyncResult.isSuccess(preferencesResult)) {
     return AsyncResult.isFailure(preferencesResult) ? (
-      <AdaptiveWorkspaceLayoutContent {...props} projectGroupingMode="repository" />
+      <AdaptiveWorkspaceLayoutContent
+        {...props}
+        projectGroupingMode={DEFAULT_MOBILE_PROJECT_GROUPING_SETTINGS.sidebarProjectGroupingMode}
+      />
     ) : null;
   }
+  const groupingSettings = resolveMobileProjectGroupingSettings(preferencesResult.value);
   return (
     <AdaptiveWorkspaceLayoutContent
       {...props}
-      projectGroupingMode={resolveProjectGroupingMode(
-        preferencesResult.value.projectGroupingEnabled,
-      )}
+      projectGroupingMode={groupingSettings.sidebarProjectGroupingMode}
     />
   );
 }
