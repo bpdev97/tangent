@@ -248,8 +248,8 @@ the open palette. Remove this delta when upstream provides equivalent control-ke
 
 ## Merged upstream baseline
 
-The most recently merged upstream comparison baseline is `a20923ce4`, merged into Tangent as
-`c6fe2e36b` on 2026-08-08. Update this line and the dated sync audit whenever Tangent merges a newer
+The most recently merged upstream comparison baseline is `89ee692bf`, merged into Tangent as
+`fe73e1687` on 2026-08-08. Update this line and the dated sync audit whenever Tangent merges a newer
 upstream baseline.
 
 ## Required verification
