@@ -39,7 +39,7 @@ upstream npm package.
 ## Active fork features
 
 The dated [2026-08-01 audit](docs/fork/audit-2026-08-01.md) records the complete downstream commit
-ledger and keep/restore review. The [2026-08-07 sync audit](docs/fork/audit-2026-08-07.md) records
+ledger and keep/restore review. The [2026-08-08 sync audit](docs/fork/audit-2026-08-08.md) records
 the latest upstream merge, compatibility decisions, and verification.
 
 | ID                 | Kept behavior                                                                   | Status               | Maintenance record                                           | Focused verification                                                                                                                                                                                                                                                                                                                                  |
@@ -248,8 +248,8 @@ the open palette. Remove this delta when upstream provides equivalent control-ke
 
 ## Merged upstream baseline
 
-The most recently merged upstream comparison baseline is `31891a1a0`, merged into Tangent as
-`36bb33ce1` on 2026-08-07. Update this line and the dated sync audit whenever Tangent merges a newer
+The most recently merged upstream comparison baseline is `a20923ce4`, merged into Tangent as
+`c6fe2e36b` on 2026-08-08. Update this line and the dated sync audit whenever Tangent merges a newer
 upstream baseline.
 
 ## Required verification
