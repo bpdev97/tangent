@@ -16,6 +16,7 @@ export * from "./keybindings.ts";
 export * from "./server.ts";
 export * from "./settings.ts";
 export * from "./git.ts";
+export * from "./linear.ts";
 export * from "./hermesAutomation.ts";
 export * from "./vcs.ts";
 export * from "./sourceControl.ts";

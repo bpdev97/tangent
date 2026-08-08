@@ -61,6 +61,7 @@ const decodeServerSettings = Schema.decodeUnknownEffect(ServerSettings);
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 const PERSONAL_PUSH_RELAY_PASSWORD_SECRET = "personal-push-relay-password";
+const LINEAR_API_KEY_SECRET = "linear-api-key";
 
 const normalizeServerSettings = (
   settings: ServerSettings,
@@ -113,6 +114,9 @@ export function redactServerSettingsForClient(settings: ServerSettings): ServerS
   const passwordConfigured =
     settings.personalPushRelay.password.length > 0 ||
     settings.personalPushRelay.passwordRedacted === true;
+  const linearApiKeyConfigured =
+    settings.linearIntegration.apiKey.length > 0 ||
+    settings.linearIntegration.apiKeyRedacted === true;
   return {
     ...settings,
     providerInstances,
@@ -120,6 +124,11 @@ export function redactServerSettingsForClient(settings: ServerSettings): ServerS
       ...settings.personalPushRelay,
       password: "",
       ...(passwordConfigured ? { passwordRedacted: true } : {}),
+    },
+    linearIntegration: {
+      ...settings.linearIntegration,
+      apiKey: "",
+      ...(linearApiKeyConfigured ? { apiKeyRedacted: true } : {}),
     },
   };
 }
@@ -394,9 +403,34 @@ const make = Effect.gen(function* () {
     );
   };
 
+  const materializeLinearApiKey = (
+    settings: ServerSettings,
+  ): Effect.Effect<ServerSettings, ServerSettingsError> => {
+    if (!settings.linearIntegration.apiKeyRedacted) return Effect.succeed(settings);
+    return secretStore.get(LINEAR_API_KEY_SECRET).pipe(
+      Effect.map((secret) => ({
+        ...settings,
+        linearIntegration: {
+          ...settings.linearIntegration,
+          apiKey: Option.isSome(secret) ? textDecoder.decode(secret.value) : "",
+        },
+      })),
+      Effect.mapError(
+        (cause) =>
+          new ServerSettingsError({
+            settingsPath,
+            operation: "read-secret",
+            environmentVariable: "linearIntegration.apiKey",
+            cause,
+          }),
+      ),
+    );
+  };
+
   const materializeSecrets = (settings: ServerSettings) =>
     materializeProviderEnvironmentSecrets(settings).pipe(
       Effect.flatMap(materializePersonalPushRelayPassword),
+      Effect.flatMap(materializeLinearApiKey),
     );
 
   const materializeChanges = (changes: Stream.Stream<ServerSettings>) =>
@@ -557,6 +591,43 @@ const make = Effect.gen(function* () {
       ),
     );
 
+  const persistLinearApiKey = (
+    settings: ServerSettings,
+  ): Effect.Effect<ServerSettings, ServerSettingsError> =>
+    Effect.gen(function* () {
+      const linear = settings.linearIntegration;
+      if (linear.apiKeyRedacted) {
+        return {
+          ...settings,
+          linearIntegration: { ...linear, apiKey: "", apiKeyRedacted: true },
+        };
+      }
+      if (linear.apiKey.length > 0) {
+        yield* secretStore.set(LINEAR_API_KEY_SECRET, textEncoder.encode(linear.apiKey));
+        return {
+          ...settings,
+          linearIntegration: { ...linear, apiKey: "", apiKeyRedacted: true },
+        };
+      }
+      yield* secretStore.remove(LINEAR_API_KEY_SECRET);
+      const { apiKeyRedacted: _omit, ...withoutRedaction } = linear;
+      return {
+        ...settings,
+        linearIntegration: { ...withoutRedaction, apiKey: "" },
+      };
+    }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new ServerSettingsError({
+            settingsPath,
+            operation:
+              settings.linearIntegration.apiKey.length > 0 ? "write-secret" : "remove-secret",
+            environmentVariable: "linearIntegration.apiKey",
+            cause,
+          }),
+      ),
+    );
+
   const writeSettingsAtomically = Effect.fnUntraced(
     function* (settings: ServerSettings) {
       const sparseSettingsJson = yield* encodeServerSettingsJson(
@@ -664,7 +735,9 @@ const make = Effect.gen(function* () {
             current,
             applyServerSettingsPatch(current, patch),
           );
-          const nextPersisted = yield* persistPersonalPushRelayPassword(nextWithProviderSecrets);
+          const nextWithPushSecret =
+            yield* persistPersonalPushRelayPassword(nextWithProviderSecrets);
+          const nextPersisted = yield* persistLinearApiKey(nextWithPushSecret);
           const next = yield* normalizeServerSettings(nextPersisted);
           yield* writeSettingsAtomically(next);
           yield* Cache.set(settingsCache, cacheKey, next);

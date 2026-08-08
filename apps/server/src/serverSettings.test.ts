@@ -742,4 +742,62 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       });
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
+
+  it.effect("stores the Linear API key outside settings.json", () =>
+    Effect.gen(function* () {
+      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
+      const serverConfig = yield* ServerConfig.ServerConfig;
+      const fileSystem = yield* FileSystem.FileSystem;
+
+      const saved = yield* serverSettings.updateSettings({
+        linearIntegration: {
+          apiKey: "lin_api_secret",
+          apiKeyRedacted: false,
+          prBadgeBehavior: "linear-review",
+          reviewRepositories: ["owner/repository"],
+        },
+      });
+
+      assert.deepEqual(saved.linearIntegration, {
+        apiKey: "lin_api_secret",
+        apiKeyRedacted: true,
+        prBadgeBehavior: "linear-review",
+        reviewRepositories: ["owner/repository"],
+      });
+      assert.deepEqual(
+        ServerSettingsModule.redactServerSettingsForClient(saved).linearIntegration,
+        {
+          apiKey: "",
+          apiKeyRedacted: true,
+          prBadgeBehavior: "linear-review",
+          reviewRepositories: ["owner/repository"],
+        },
+      );
+
+      const raw = yield* fileSystem.readFileString(serverConfig.settingsPath);
+      assert.notInclude(raw, "lin_api_secret");
+      // @effect-diagnostics-next-line preferSchemaOverJson:off
+      assert.deepEqual(JSON.parse(raw).linearIntegration, {
+        apiKeyRedacted: true,
+        prBadgeBehavior: "linear-review",
+        reviewRepositories: ["owner/repository"],
+      });
+
+      const behaviorUpdated = yield* serverSettings.updateSettings({
+        linearIntegration: {
+          apiKey: "",
+          apiKeyRedacted: true,
+          prBadgeBehavior: "choose",
+        },
+      });
+      assert.equal(behaviorUpdated.linearIntegration.apiKey, "lin_api_secret");
+      assert.equal(behaviorUpdated.linearIntegration.prBadgeBehavior, "choose");
+
+      const removed = yield* serverSettings.updateSettings({
+        linearIntegration: { apiKey: "", apiKeyRedacted: false },
+      });
+      assert.equal(removed.linearIntegration.apiKey, "");
+      assert.isUndefined(removed.linearIntegration.apiKeyRedacted);
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
 });
