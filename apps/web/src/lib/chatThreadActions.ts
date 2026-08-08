@@ -1,5 +1,6 @@
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
-import type { EnvironmentId, ProjectId, ScopedProjectRef } from "@t3tools/contracts";
+import type { EnvironmentId, ProjectId, RuntimeMode, ScopedProjectRef } from "@t3tools/contracts";
+import { GENERIC_CHAT_RUNTIME_MODE, isGenericChatProjectId } from "@t3tools/shared/genericChat";
 import type { DraftThreadEnvMode } from "../composerDraftStore";
 
 interface ThreadContextLike {
@@ -31,6 +32,13 @@ export function resolveNewDraftStartFromOrigin(input: {
   newWorktreesStartFromOrigin: boolean;
 }): boolean {
   return input.envMode === "worktree" && input.newWorktreesStartFromOrigin;
+}
+
+export function resolveNewThreadRuntimeMode(
+  projectId: ProjectId,
+  inheritedRuntimeMode: RuntimeMode | null,
+): RuntimeMode | null {
+  return isGenericChatProjectId(projectId) ? GENERIC_CHAT_RUNTIME_MODE : inheritedRuntimeMode;
 }
 
 export function resolveThreadActionProjectRef(

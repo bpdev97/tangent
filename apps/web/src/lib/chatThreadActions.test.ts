@@ -1,9 +1,11 @@
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { EnvironmentId, ProjectId } from "@t3tools/contracts";
+import { GENERIC_CHAT_PROJECT_ID, GENERIC_CHAT_RUNTIME_MODE } from "@t3tools/shared/genericChat";
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
   resolveThreadActionProjectRef,
   resolveNewDraftStartFromOrigin,
+  resolveNewThreadRuntimeMode,
   startNewThreadFromContext,
   type ChatThreadActionContext,
 } from "./chatThreadActions";
@@ -36,6 +38,13 @@ describe("chatThreadActions", () => {
         newWorktreesStartFromOrigin: true,
       }),
     ).toBe(false);
+  });
+
+  it("forces generic-chat drafts back to the managed runtime mode", () => {
+    expect(resolveNewThreadRuntimeMode(GENERIC_CHAT_PROJECT_ID, "full-access")).toBe(
+      GENERIC_CHAT_RUNTIME_MODE,
+    );
+    expect(resolveNewThreadRuntimeMode(PROJECT_ID, "full-access")).toBe("full-access");
   });
 
   it("prefers the active thread project when resolving thread actions", () => {
