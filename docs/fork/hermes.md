@@ -120,13 +120,18 @@ On 2026-07-30, a persisted open-ended `clarify.request` exposed that web and mob
 zero-option questions even though both clients support typed custom answers. It also exposed that
 interrupting the turn cleared Hermes's callback without resolving T3's projected activity. The
 clients now retain open-ended prompts, terminal Hermes lifecycles publish matching resolution
-events, and migration 036 closes orphaned projected prompts from older builds when their Hermes
+events, and compatibility migration 39 closes orphaned projected prompts from older builds when their Hermes
 turn is already terminal.
 
 On 2026-08-01, the external-reference check confirmed that Hermes's current "Gateway Internals"
 page documents the separate multi-platform messaging gateway rather than the TUI JSON-RPC gateway,
 so it is no longer listed as a protocol reference here. The current programmatic guide, TUI gateway
 server, WebSocket transport, TypeScript client, and protocol types remain the relevant sources.
+
+On 2026-08-07, Hermes main at `b3aa561faffd64f05436e429a6415d175e534ec9` reported Agent
+0.20.0 and desktop contract 5. Source review confirmed that the isolated `serve` launch, authenticated
+WebSocket, ready sentinel, durable session ID, mapped RPC methods, and mapped event families remain
+compatible. No 0.20.0 binary smoke ran, so the tested baseline remains Agent 0.19.0 and contract 2.
 
 ## Automations
 

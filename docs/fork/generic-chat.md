@@ -82,9 +82,7 @@ vp test packages/shared/src/genericChat.test.ts \
   packages/client-runtime/src/state/projectGrouping.genericChat.test.ts \
   apps/server/src/genericChat.test.ts \
   apps/server/src/orchestration/Layers/ProviderCommandReactor.genericChat.test.ts \
-  apps/web/src/components/chat/MessagesTimeline.logic.test.ts \
-  apps/mobile/src/lib/repositoryGroups.test.ts \
-  apps/mobile/src/lib/threadActivity.test.ts
+  apps/web/src/lib/chatThreadActions.test.ts
 ```
 
 Then run `vp check`, `vp run typecheck`, and `vp run lint:mobile`. Smoke-test New Chat on web and

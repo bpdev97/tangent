@@ -38,6 +38,7 @@ policy in [CONTRIBUTING.md](../CONTRIBUTING.md); agent rules in [AGENTS.md](../A
 
 - [Authoritative fork registry](../FORK.md)
 - [2026-08-01 fork audit and reduction](./fork/audit-2026-08-01.md)
+- [2026-08-07 upstream sync audit](./fork/audit-2026-08-07.md)
 - [Tangent distribution](./personal-distribution.md)
 - [Hermes provider](./fork/hermes.md)
 - [Generic chat](./fork/generic-chat.md)
