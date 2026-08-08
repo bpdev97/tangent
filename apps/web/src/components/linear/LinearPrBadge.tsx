@@ -61,6 +61,7 @@ export function LinearPrBadge(props: {
   readonly pr: NonNullable<ThreadPr>;
   readonly status: PrStatusIndicator;
   readonly threadRef: ScopedThreadRef;
+  readonly onThreadActivate: (threadRef: ScopedThreadRef) => void;
   readonly className?: string;
 }) {
   const linear = useEnvironmentSettings(
@@ -109,6 +110,7 @@ export function LinearPrBadge(props: {
   const openLinearUrl = useCallback(
     async (url: string) => {
       if (isPreviewSupportedInRuntime()) {
+        props.onThreadActivate(props.threadRef);
         const result = await openUrlInPreview({ threadRef: props.threadRef, url, openPreview });
         if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
           const error = squashAtomCommandFailure(result);
@@ -134,7 +136,7 @@ export function LinearPrBadge(props: {
         );
       }
     },
-    [openPreview, props.threadRef],
+    [openPreview, props.onThreadActivate, props.threadRef],
   );
 
   const handleMenuOpenChange = useCallback(

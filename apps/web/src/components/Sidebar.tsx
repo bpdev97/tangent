@@ -854,6 +854,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
         pr={pr}
         status={prStatus}
         threadRef={threadRef}
+        onThreadActivate={onThreadActivate}
         className={cn(
           // Sidebar chrome follows the interface font; tabular digits keep the
           // number from reflowing as PR states stream in.
