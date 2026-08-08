@@ -27,6 +27,10 @@
       "types": "./src/sourceControl.ts",
       "import": "./src/sourceControl.ts"
     },
+    "./linear": {
+      "types": "./src/linear.ts",
+      "import": "./src/linear.ts"
+    },
     "./logging": {
       "types": "./src/logging.ts",
       "import": "./src/logging.ts"

@@ -764,6 +764,22 @@ export function createServerEnvironmentAtoms<R, E>(
         key: ({ environmentId }) => environmentId,
       },
     }),
+    resolveLinearPrDestinations: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:linear:resolve-pr-destinations",
+      tag: WS_METHODS.linearResolvePrDestinations,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) => `${environmentId}\0${input.prUrl}`,
+      },
+    }),
+    testLinearConnection: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:linear:test-connection",
+      tag: WS_METHODS.linearTestConnection,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId }) => environmentId,
+      },
+    }),
     signalProcess: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:signal-process",
       tag: WS_METHODS.serverSignalProcess,

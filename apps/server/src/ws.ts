@@ -85,6 +85,7 @@ import * as ServerSelfUpdate from "./cloud/selfUpdate.ts";
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as ServerSettings from "./serverSettings.ts";
+import * as LinearIntegration from "./linear/LinearIntegration.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
 import * as PreviewManager from "./preview/Manager.ts";
@@ -352,6 +353,7 @@ function toAuthAccessStreamEvent(
 const makeWsRpcLayer = (
   currentSession: EnvironmentAuth.AuthenticatedSession,
   previewAutomationBroker: PreviewAutomationBroker.PreviewAutomationBroker["Service"],
+  linearIntegration: LinearIntegration.LinearIntegration["Service"],
 ) =>
   WsRpcGroup.toLayer(
     Effect.gen(function* () {
@@ -1536,6 +1538,16 @@ const makeWsRpcLayer = (
             }),
             { "rpc.aggregate": "server" },
           ),
+        [WS_METHODS.linearResolvePrDestinations]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.linearResolvePrDestinations,
+            linearIntegration.resolvePrDestinations(input),
+            { "rpc.aggregate": "linear" },
+          ),
+        [WS_METHODS.linearTestConnection]: (_input) =>
+          observeRpcEffect(WS_METHODS.linearTestConnection, linearIntegration.testConnection, {
+            "rpc.aggregate": "linear",
+          }),
         [WS_METHODS.serverDiscoverSourceControl]: (_input) =>
           observeRpcEffect(
             WS_METHODS.serverDiscoverSourceControl,
@@ -2189,6 +2201,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
   Effect.gen(function* () {
     const previewAutomationBroker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
     const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
+    const linearIntegration = yield* LinearIntegration.LinearIntegration;
     return HttpRouter.add(
       "GET",
       "/ws",
@@ -2208,7 +2221,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
           disableTracing: true,
         }).pipe(
           Effect.provide(
-            makeWsRpcLayer(session, previewAutomationBroker).pipe(
+            makeWsRpcLayer(session, previewAutomationBroker, linearIntegration).pipe(
               Layer.provideMerge(RpcSerialization.layerJson),
               Layer.provide(HermesAutomationManager.layer),
               Layer.provide(ProviderMaintenanceRunner.layer),
@@ -2250,4 +2263,4 @@ export const websocketRpcRouteLayer = Layer.unwrap(
       ),
     );
   }),
-);
+).pipe(Layer.provide(LinearIntegration.layer));

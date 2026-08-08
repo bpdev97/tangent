@@ -116,6 +116,26 @@ Control settings**.
    az login
    ```
 
+### Open GitHub PRs in Linear
+
+Tangent can add Linear destinations to the pull request number shown in the default desktop and web
+sidebar. Open **Settings → Source Control → Linear**, save a Linear personal API key, and choose what
+clicking a PR number should do:
+
+- **GitHub** opens GitHub directly and keeps a small menu for Linear destinations.
+- **Linear Review** opens an eligible PR in the side panel. If it is not eligible, the destination
+  menu opens instead.
+- **Choose each time** always opens the destination menu.
+
+Enter each GitHub repository where your workspace has Linear Review enabled as
+`owner/repository`, one per line. This list is required because a PR can be attached to a Linear
+ticket without being available in Linear Review. Linked tickets are found automatically from
+Linear's PR attachment and appear separately in the destination menu.
+
+Linear lookups happen only when you activate the badge or menu. Results are cached on the server,
+and **Refresh Linear destinations** bypasses that cache. The API key stays in the environment's
+protected server secret store and is not sent back to the browser.
+
 ---
 
 ## Requirements & Troubleshooting

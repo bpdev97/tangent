@@ -227,6 +227,36 @@ describe("ServerSettings personal push relay", () => {
   });
 });
 
+describe("ServerSettings Linear integration", () => {
+  it("defaults to GitHub behavior for existing settings files", () => {
+    expect(decodeServerSettings({}).linearIntegration).toEqual({
+      apiKey: "",
+      prBadgeBehavior: "github",
+      reviewRepositories: [],
+    });
+  });
+
+  it("normalizes Linear settings patches", () => {
+    expect(
+      decodeServerSettingsPatch({
+        linearIntegration: {
+          apiKey: "  lin_api_secret  ",
+          apiKeyRedacted: false,
+          prBadgeBehavior: "linear-review",
+          reviewRepositories: ["  owner/repository  "],
+        },
+      }),
+    ).toEqual({
+      linearIntegration: {
+        apiKey: "lin_api_secret",
+        apiKeyRedacted: false,
+        prBadgeBehavior: "linear-review",
+        reviewRepositories: ["owner/repository"],
+      },
+    });
+  });
+});
+
 describe("ServerSettings.sourceControlWritingStyle", () => {
   it("defaults all style settings for legacy configs", () => {
     const settings = decodeServerSettings({});

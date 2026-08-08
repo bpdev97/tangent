@@ -579,6 +579,21 @@ export const PersonalPushRelaySettings = Schema.Struct({
 });
 export type PersonalPushRelaySettings = typeof PersonalPushRelaySettings.Type;
 
+export const LinearPrBadgeBehavior = Schema.Literals(["github", "linear-review", "choose"]);
+export type LinearPrBadgeBehavior = typeof LinearPrBadgeBehavior.Type;
+
+export const LinearIntegrationSettings = Schema.Struct({
+  apiKey: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  apiKeyRedacted: Schema.optional(Schema.Boolean),
+  prBadgeBehavior: LinearPrBadgeBehavior.pipe(
+    Schema.withDecodingDefault(Effect.succeed("github" as const)),
+  ),
+  reviewRepositories: Schema.Array(TrimmedNonEmptyString).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+});
+export type LinearIntegrationSettings = typeof LinearIntegrationSettings.Type;
+
 export const ServerSettings = Schema.Struct({
   // Legacy token-by-token assistant output. Deliberately a fresh key (was
   // `enableAssistantStreaming`): decoding drops the old key, so everyone,
@@ -625,6 +640,7 @@ export const ServerSettings = Schema.Struct({
     ),
   ),
   personalPushRelay: PersonalPushRelaySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  linearIntegration: LinearIntegrationSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   sourceControlWritingStyle: SourceControlWritingStyleSettings.pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
@@ -771,6 +787,14 @@ export const ServerSettingsPatch = Schema.Struct({
       url: Schema.optionalKey(TrimmedString),
       password: Schema.optionalKey(TrimmedString),
       passwordRedacted: Schema.optionalKey(Schema.Boolean),
+    }),
+  ),
+  linearIntegration: Schema.optionalKey(
+    Schema.Struct({
+      apiKey: Schema.optionalKey(TrimmedString),
+      apiKeyRedacted: Schema.optionalKey(Schema.Boolean),
+      prBadgeBehavior: Schema.optionalKey(LinearPrBadgeBehavior),
+      reviewRepositories: Schema.optionalKey(Schema.Array(TrimmedNonEmptyString)),
     }),
   ),
   sourceControlWritingStyle: Schema.optionalKey(

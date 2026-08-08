@@ -54,6 +54,7 @@ import {
 } from "../Icons";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
 import { SourceControlWritingSettingsSection } from "./SourceControlWritingSettings";
+import { LinearIntegrationSettingsSection } from "./LinearIntegrationSettings";
 import { SettingResetButton, SettingsPageContainer, SettingsSection } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 
@@ -588,6 +589,7 @@ export function SourceControlSettingsPanel() {
       )}
 
       {environmentId !== null ? <SourceControlWritingSettingsSection /> : null}
+      {environmentId !== null ? <LinearIntegrationSettingsSection /> : null}
     </SettingsPageContainer>
   );
 }

@@ -167,6 +167,11 @@ import {
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
 import {
+  LinearConnectionTestResult,
+  LinearPrDestinationResolution,
+  LinearResolvePrDestinationsInput,
+} from "./linear.ts";
+import {
   HermesAutomationError,
   HermesAutomationListResult,
   HermesAutomationMutationInput,
@@ -242,6 +247,8 @@ export const WS_METHODS = {
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
   serverTestPersonalPushRelay: "server.testPersonalPushRelay",
+  linearResolvePrDestinations: "linear.resolvePrDestinations",
+  linearTestConnection: "linear.testConnection",
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverGetTraceDiagnostics: "server.getTraceDiagnostics",
   serverGetProcessDiagnostics: "server.getProcessDiagnostics",
@@ -356,6 +363,18 @@ export const WsServerTestPersonalPushRelayRpc = Rpc.make(WS_METHODS.serverTestPe
   payload: Schema.Struct({}),
   success: ServerPersonalPushRelayTestResult,
   error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
+});
+
+export const WsLinearResolvePrDestinationsRpc = Rpc.make(WS_METHODS.linearResolvePrDestinations, {
+  payload: LinearResolvePrDestinationsInput,
+  success: LinearPrDestinationResolution,
+  error: EnvironmentAuthorizationError,
+});
+
+export const WsLinearTestConnectionRpc = Rpc.make(WS_METHODS.linearTestConnection, {
+  payload: Schema.Struct({}),
+  success: LinearConnectionTestResult,
+  error: EnvironmentAuthorizationError,
 });
 
 export const WsServerDiscoverSourceControlRpc = Rpc.make(WS_METHODS.serverDiscoverSourceControl, {
@@ -851,6 +870,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
   WsServerTestPersonalPushRelayRpc,
+  WsLinearResolvePrDestinationsRpc,
+  WsLinearTestConnectionRpc,
   WsServerDiscoverSourceControlRpc,
   WsServerGetTraceDiagnosticsRpc,
   WsServerGetProcessDiagnosticsRpc,
