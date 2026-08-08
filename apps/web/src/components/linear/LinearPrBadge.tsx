@@ -22,7 +22,15 @@ import { serverEnvironment } from "../../state/server";
 import { previewEnvironment } from "../../state/preview";
 import { useAtomCommand } from "../../state/use-atom-command";
 import type { PrStatusIndicator, ThreadPr } from "../ThreadStatusIndicators";
-import { Menu, MenuGroupLabel, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "../ui/menu";
+import {
+  Menu,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuItem,
+  MenuPopup,
+  MenuSeparator,
+  MenuTrigger,
+} from "../ui/menu";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { cn } from "../../lib/utils";
 
@@ -169,26 +177,28 @@ export function LinearPrBadge(props: {
 
   const menu = (
     <MenuPopup align="end" className="w-72">
-      <MenuGroupLabel>Open pull request</MenuGroupLabel>
-      <MenuItem onClick={(event) => openPrLink(event, props.pr.url)}>
-        <ExternalLinkIcon />
-        GitHub
-      </MenuItem>
-      {reviewUrl ? (
-        <MenuItem onClick={() => void openLinearUrl(reviewUrl)}>
+      <MenuGroup>
+        <MenuGroupLabel>Open pull request</MenuGroupLabel>
+        <MenuItem onClick={(event) => openPrLink(event, props.pr.url)}>
           <ExternalLinkIcon />
-          Linear Review
+          GitHub
         </MenuItem>
-      ) : null}
-      {resolution?.tickets.map((ticket) => (
-        <MenuItem key={ticket.id} onClick={() => void openLinearUrl(ticket.url)}>
-          <TicketIcon />
-          <span className="min-w-0">
-            <span className="block font-medium">{ticket.identifier}</span>
-            <span className="block truncate text-xs text-muted-foreground">{ticket.title}</span>
-          </span>
-        </MenuItem>
-      ))}
+        {reviewUrl ? (
+          <MenuItem onClick={() => void openLinearUrl(reviewUrl)}>
+            <ExternalLinkIcon />
+            Linear Review
+          </MenuItem>
+        ) : null}
+        {resolution?.tickets.map((ticket) => (
+          <MenuItem key={ticket.id} onClick={() => void openLinearUrl(ticket.url)}>
+            <TicketIcon />
+            <span className="min-w-0">
+              <span className="block font-medium">{ticket.identifier}</span>
+              <span className="block truncate text-xs text-muted-foreground">{ticket.title}</span>
+            </span>
+          </MenuItem>
+        ))}
+      </MenuGroup>
       {loading ? <MenuItem disabled>Looking up Linear destinations…</MenuItem> : null}
       {!loading && (resolution !== null || transportFailed) ? (
         <>
