@@ -36,6 +36,15 @@ pages that encounter a completed Mermaid fence load it. Rendering is deliberatel
 keeps generated SVG identifiers scoped to one live component and avoids a second invalidation model
 for theme and source changes.
 
+## Expected presentation
+
+The same completed response renders as ordinary fenced source without this fork feature and as an
+interactive diagram with it. Invalid syntax remains visible as source instead of disappearing.
+
+| Before                                                               | After                                                                                                       |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| ![Mermaid fences rendered as source code](assets/mermaid-before.png) | ![A valid Mermaid flowchart rendered beside an invalid diagram's source fallback](assets/mermaid-after.png) |
+
 ## Upstream ownership
 
 Upstream pull request [pingdotgg/t3code#4989](https://github.com/pingdotgg/t3code/pull/4989)
