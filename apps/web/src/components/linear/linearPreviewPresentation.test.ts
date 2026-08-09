@@ -1,7 +1,7 @@
 import type { LinearPrDestinationResolution } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { buildLinearPreviewPresentation } from "./linearPreviewPresentation";
+import { buildLinearPreviewPresentation, linearPreviewTabTitle } from "./linearPreviewPresentation";
 
 const resolved: LinearPrDestinationResolution = {
   status: "resolved",
@@ -61,5 +61,26 @@ describe("buildLinearPreviewPresentation", () => {
       tickets: [],
       ticketLookup: "unavailable",
     });
+  });
+
+  it("labels separate Review and ticket browser tabs", () => {
+    const base = buildLinearPreviewPresentation({
+      reviewUrl: null,
+      resolution: resolved,
+      lookupComplete: true,
+    });
+
+    expect(
+      linearPreviewTabTitle({
+        ...base,
+        destinationUrl: "https://linear.review/bpdev97/tangent/pull/52",
+      }),
+    ).toBe("Linear Review");
+    expect(
+      linearPreviewTabTitle({
+        ...base,
+        destinationUrl: "https://linear.app/tangent/issue/TAN-42",
+      }),
+    ).toBe("TAN-42");
   });
 });

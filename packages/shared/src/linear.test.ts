@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  linearAppUrl,
   linearReviewUrlForGitHubPullRequest,
   normalizeLinearReviewRepository,
   parseGitHubPullRequestUrl,
@@ -34,5 +35,17 @@ describe("Linear pull request destinations", () => {
     expect(
       linearReviewUrlForGitHubPullRequest("https://github.com/Owner/Other/pull/42", ["owner/repo"]),
     ).toBeNull();
+  });
+
+  it("creates Linear desktop app deep links from Linear web URLs", () => {
+    expect(
+      linearAppUrl("https://linear.app/tangent/issue/TAN-42/native-ticket-opening?tab=activity"),
+    ).toBe("linear://linear.app/tangent/issue/TAN-42/native-ticket-opening?tab=activity");
+  });
+
+  it("does not create Linear app links from untrusted destinations", () => {
+    expect(linearAppUrl("https://example.com/tangent/issue/TAN-42")).toBeNull();
+    expect(linearAppUrl("linear://linear.app/tangent/issue/TAN-42")).toBeNull();
+    expect(linearAppUrl("not a URL")).toBeNull();
   });
 });

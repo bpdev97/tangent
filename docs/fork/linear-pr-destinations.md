@@ -53,6 +53,17 @@ toolbar keeps Review and resolved ticket destinations available while the embedd
 open; multiple tickets collapse into a destination menu. Human-control status stays hidden on this
 dedicated surface, while active agent control remains visible.
 
+The server-scoped `ticketOpenBehavior` setting lets ticket destinations use that side panel or a
+`linear://linear.app/...` desktop-app deep link. The shared opener owns this decision so PR menus and
+the Linear toolbar cannot drift. Review remains in the side panel. Electron accepts only Linear
+deep links whose host is exactly `linear.app`; other custom-protocol URLs stay blocked.
+
+The preview session's normal Chromium HTTP cache remains enabled. In Tangent mode, Review and every
+resolved ticket receive distinct right-panel browser tabs. Destination metadata lets subsequent
+clicks reactivate the existing live tab instead of navigating the current webview or creating
+duplicates. The tabs share the environment-scoped persistent browser partition for cookies and
+cache while retaining independent page state.
+
 Electron preview webviews use a persistent partition derived from the environment id, not the
 thread id. Linear authentication cookies therefore carry across threads and desktop restarts for
 that environment. The page/tab remains thread-scoped; only browser session storage is shared.
@@ -69,10 +80,13 @@ vp test packages/shared/src/linear.test.ts \
   packages/contracts/src/settings.test.ts \
   apps/server/src/linear/LinearIntegration.test.ts \
   apps/server/src/serverSettings.test.ts \
+  apps/desktop/src/electron/ElectronShell.test.ts \
   apps/desktop/src/preview/BrowserSession.test.ts \
   apps/web/src/browser/openFileInPreview.test.ts \
   apps/web/src/components/linear/linearPreviewPresentation.test.ts \
   apps/web/src/components/linear/LinearPreviewToolbar.test.tsx \
+  apps/web/src/components/linear/openLinearPreviewDestination.test.ts \
+  apps/web/src/components/linear/openLinearTicket.test.ts \
   apps/web/src/rightPanelStore.test.ts \
   apps/web/src/components/preview/PreviewView.test.tsx
 vp check

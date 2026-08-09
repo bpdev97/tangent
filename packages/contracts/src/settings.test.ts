@@ -232,6 +232,7 @@ describe("ServerSettings Linear integration", () => {
     expect(decodeServerSettings({}).linearIntegration).toEqual({
       apiKey: "",
       prBadgeBehavior: "github",
+      ticketOpenBehavior: "tangent",
       reviewRepositories: [],
     });
   });
@@ -243,6 +244,7 @@ describe("ServerSettings Linear integration", () => {
           apiKey: "  lin_api_secret  ",
           apiKeyRedacted: false,
           prBadgeBehavior: "linear-review",
+          ticketOpenBehavior: "linear-app",
           reviewRepositories: ["  owner/repository  "],
         },
       }),
@@ -251,6 +253,7 @@ describe("ServerSettings Linear integration", () => {
         apiKey: "lin_api_secret",
         apiKeyRedacted: false,
         prBadgeBehavior: "linear-review",
+        ticketOpenBehavior: "linear-app",
         reviewRepositories: ["owner/repository"],
       },
     });

@@ -21,6 +21,7 @@ import { ScrollArea } from "~/components/ui/scroll-area";
 import { faviconUrlForOrigin } from "~/lib/favicon";
 import { useTheme } from "~/hooks/useTheme";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
+import { linearPreviewTabTitle } from "~/components/linear/linearPreviewPresentation";
 
 import { PreviewPanelShell, type PreviewPanelMode } from "./preview/PreviewPanelShell";
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
@@ -219,7 +220,9 @@ function surfaceTitle(
     case "agents":
       return "Agents";
     case "preview": {
-      if (surface.presentation?._tag === "linear") return "Linear";
+      if (surface.presentation?._tag === "linear") {
+        return linearPreviewTabTitle(surface.presentation);
+      }
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
       if (snapshot.navStatus.title.trim().length > 0) return snapshot.navStatus.title;

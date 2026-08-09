@@ -36,10 +36,36 @@ describe("ElectronShell", () => {
     }).pipe(Effect.provide(ElectronShell.layer)),
   );
 
+  it.effect("opens Linear desktop app deep links", () =>
+    Effect.gen(function* () {
+      openExternalMock.mockResolvedValue(undefined);
+
+      const electronShell = yield* ElectronShell.ElectronShell;
+      const result = yield* electronShell.openExternal(
+        "linear://linear.app/tangent/issue/TAN-42/native-ticket-opening",
+      );
+
+      assert.equal(result, true);
+      assert.deepEqual(openExternalMock.mock.calls, [
+        ["linear://linear.app/tangent/issue/TAN-42/native-ticket-opening"],
+      ]);
+    }).pipe(Effect.provide(ElectronShell.layer)),
+  );
+
   it.effect("does not open unsafe external URLs", () =>
     Effect.gen(function* () {
       const electronShell = yield* ElectronShell.ElectronShell;
       const result = yield* electronShell.openExternal("file:///etc/passwd");
+
+      assert.equal(result, false);
+      assert.equal(openExternalMock.mock.calls.length, 0);
+    }).pipe(Effect.provide(ElectronShell.layer)),
+  );
+
+  it.effect("does not open untrusted Linear deep links", () =>
+    Effect.gen(function* () {
+      const electronShell = yield* ElectronShell.ElectronShell;
+      const result = yield* electronShell.openExternal("linear://example.com/issue/TAN-42");
 
       assert.equal(result, false);
       assert.equal(openExternalMock.mock.calls.length, 0);

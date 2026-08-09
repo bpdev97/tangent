@@ -22,6 +22,7 @@ describe("LinearPreviewToolbar", () => {
           ticketLookup: "ready",
         }}
         onNavigate={vi.fn()}
+        onOpenTicket={vi.fn()}
       />,
     );
 
@@ -42,6 +43,7 @@ describe("LinearPreviewToolbar", () => {
           ticketLookup: "ready",
         }}
         onNavigate={vi.fn()}
+        onOpenTicket={vi.fn()}
       />,
     );
 

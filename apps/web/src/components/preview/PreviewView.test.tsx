@@ -8,6 +8,19 @@ const mocks = vi.hoisted(() => ({
   readPreparedConnection: vi.fn(() => ({ httpBaseUrl: "http://172.25.85.75:3773" })),
   submittedUrl: null as ((url: string) => void) | null,
   linearSubmittedUrl: null as ((url: string) => void) | null,
+  linearTicketUrl: null as ((url: string) => void) | null,
+  linearTicketOpenBehavior: "tangent" as "tangent" | "linear-app",
+  openLinearPreviewDestination: vi.fn(async () => ({
+    _tag: "Success" as const,
+    value: {
+      threadId: "thread-1",
+      tabId: "tab-linear",
+      navStatus: { _tag: "Idle" as const },
+      canGoBack: false,
+      canGoForward: false,
+      updatedAt: "2026-08-08T00:00:00.000Z",
+    },
+  })),
   linearToolbarRendered: false,
   emptyStateUrl: null as ((url: string) => void) | null,
   togglePictureInPicture: null as (() => void) | null,
@@ -42,6 +55,18 @@ vi.mock("~/browserHistoryStore", () => ({
 
 vi.mock("~/state/session", () => ({
   readPreparedConnection: mocks.readPreparedConnection,
+}));
+
+vi.mock("~/hooks/useSettings", () => ({
+  useEnvironmentSettings: (
+    _environmentId: EnvironmentId,
+    select: (settings: {
+      linearIntegration: { ticketOpenBehavior: "tangent" | "linear-app" };
+    }) => unknown,
+  ) =>
+    select({
+      linearIntegration: { ticketOpenBehavior: mocks.linearTicketOpenBehavior },
+    }),
 }));
 
 vi.mock("~/composerDraftStore", () => ({
@@ -196,11 +221,19 @@ vi.mock("./PreviewChromeRow", () => ({
 }));
 
 vi.mock("../linear/LinearPreviewToolbar", () => ({
-  LinearPreviewToolbar: (props: { onNavigate: (url: string) => void }) => {
+  LinearPreviewToolbar: (props: {
+    onNavigate: (url: string) => void;
+    onOpenTicket: (url: string) => void;
+  }) => {
     mocks.linearSubmittedUrl = props.onNavigate;
+    mocks.linearTicketUrl = props.onOpenTicket;
     mocks.linearToolbarRendered = true;
     return null;
   },
+}));
+
+vi.mock("../linear/openLinearPreviewDestination", () => ({
+  openLinearPreviewDestination: mocks.openLinearPreviewDestination,
 }));
 
 vi.mock("./PreviewEmptyState", () => ({
@@ -238,6 +271,9 @@ describe("PreviewView navigation", () => {
     mocks.readPreparedConnection.mockClear();
     mocks.submittedUrl = null;
     mocks.linearSubmittedUrl = null;
+    mocks.linearTicketUrl = null;
+    mocks.linearTicketOpenBehavior = "tangent";
+    mocks.openLinearPreviewDestination.mockClear();
     mocks.linearToolbarRendered = false;
     mocks.emptyStateUrl = null;
     mocks.togglePictureInPicture = null;
@@ -314,7 +350,7 @@ describe("PreviewView navigation", () => {
     });
   });
 
-  it("uses destination navigation instead of the generic address bar for Linear", async () => {
+  it("opens Linear destinations as reusable browser tabs instead of navigating in place", async () => {
     renderToStaticMarkup(
       <PreviewView
         threadRef={TEST_THREAD_REF}
@@ -338,14 +374,17 @@ describe("PreviewView navigation", () => {
 
     expect(mocks.linearToolbarRendered).toBe(true);
     expect(mocks.submittedUrl).toBeNull();
-    mocks.linearSubmittedUrl?.("https://linear.app/tangent/issue/TAN-42");
+    mocks.linearTicketUrl?.("https://linear.app/tangent/issue/TAN-42");
 
-    await vi.waitFor(() =>
-      expect(mocks.navigate).toHaveBeenCalledWith(
-        TEST_RUNTIME_TAB_ID,
-        "https://linear.app/tangent/issue/TAN-42",
-      ),
-    );
+    await vi.waitFor(() => {
+      expect(mocks.openLinearPreviewDestination).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadRef: TEST_THREAD_REF,
+          destinationUrl: "https://linear.app/tangent/issue/TAN-42",
+        }),
+      );
+    });
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
   it("hides human-control chrome from Linear while preserving agent-control status", () => {

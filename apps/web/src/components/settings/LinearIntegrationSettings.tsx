@@ -1,5 +1,5 @@
 import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
-import type { LinearPrBadgeBehavior } from "@t3tools/contracts";
+import type { LinearPrBadgeBehavior, LinearTicketOpenBehavior } from "@t3tools/contracts";
 import { normalizeLinearReviewRepository } from "@t3tools/shared/linear";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -18,6 +18,11 @@ const BEHAVIOR_LABELS: Record<LinearPrBadgeBehavior, string> = {
   github: "GitHub",
   "linear-review": "Linear Review",
   choose: "Choose each time",
+};
+
+const TICKET_BEHAVIOR_LABELS: Record<LinearTicketOpenBehavior, string> = {
+  tangent: "Tangent side panel",
+  "linear-app": "Linear app",
 };
 
 function repositoryDraft(repositories: ReadonlyArray<string>): string {
@@ -53,6 +58,9 @@ export function LinearIntegrationSettingsSection() {
   const apiKeyConfigured = saved.apiKeyRedacted === true;
   const [apiKey, setApiKey] = useState("");
   const [behavior, setBehavior] = useState<LinearPrBadgeBehavior>(saved.prBadgeBehavior);
+  const [ticketBehavior, setTicketBehavior] = useState<LinearTicketOpenBehavior>(
+    saved.ticketOpenBehavior,
+  );
   const [repositories, setRepositories] = useState(() => repositoryDraft(saved.reviewRepositories));
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -62,6 +70,7 @@ export function LinearIntegrationSettingsSection() {
   const dirty =
     apiKey.trim().length > 0 ||
     behavior !== saved.prBadgeBehavior ||
+    ticketBehavior !== saved.ticketOpenBehavior ||
     normalizedRepositoryDraft !== savedRepositoryDraft;
   const reviewBehaviorNeedsRepository =
     behavior === "linear-review" && parsedRepositories.repositories.length === 0;
@@ -74,6 +83,9 @@ export function LinearIntegrationSettingsSection() {
   useEffect(() => {
     setBehavior(saved.prBadgeBehavior);
   }, [saved.prBadgeBehavior]);
+  useEffect(() => {
+    setTicketBehavior(saved.ticketOpenBehavior);
+  }, [saved.ticketOpenBehavior]);
   useEffect(() => {
     setRepositories(repositoryDraft(saved.reviewRepositories));
   }, [saved.reviewRepositories]);
@@ -89,6 +101,7 @@ export function LinearIntegrationSettingsSection() {
             apiKey,
             apiKeyRedacted: apiKey.trim().length > 0 ? false : apiKeyConfigured,
             prBadgeBehavior: behavior,
+            ticketOpenBehavior: ticketBehavior,
             reviewRepositories: [...parsedRepositories.repositories],
           },
         },
@@ -119,6 +132,7 @@ export function LinearIntegrationSettingsSection() {
     isSaving,
     parsedRepositories.repositories,
     primaryEnvironment,
+    ticketBehavior,
     updateSettings,
   ]);
 
@@ -254,6 +268,24 @@ export function LinearIntegrationSettingsSection() {
               <SelectItem value="github">GitHub</SelectItem>
               <SelectItem value="linear-review">Linear Review</SelectItem>
               <SelectItem value="choose">Choose each time</SelectItem>
+            </SelectPopup>
+          </Select>
+        }
+      />
+      <SettingsRow
+        title="Open tickets in"
+        description="Choose whether linked Linear tickets stay in Tangent or open through a deep link to the Linear desktop app."
+        control={
+          <Select
+            value={ticketBehavior}
+            onValueChange={(value) => setTicketBehavior(value as LinearTicketOpenBehavior)}
+          >
+            <SelectTrigger className="w-full sm:w-44" aria-label="Open tickets in">
+              <SelectValue>{TICKET_BEHAVIOR_LABELS[ticketBehavior]}</SelectValue>
+            </SelectTrigger>
+            <SelectPopup align="end" alignItemWithTrigger={false}>
+              <SelectItem value="tangent">Tangent side panel</SelectItem>
+              <SelectItem value="linear-app">Linear app</SelectItem>
             </SelectPopup>
           </Select>
         }

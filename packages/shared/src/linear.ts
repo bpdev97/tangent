@@ -54,3 +54,16 @@ export function linearReviewUrlForGitHubPullRequest(
     ? `https://linear.review/${pullRequest.owner}/${pullRequest.repository}/pull/${pullRequest.number}`
     : null;
 }
+
+export function linearAppUrl(linearUrl: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(linearUrl);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:" || parsed.hostname.toLowerCase() !== "linear.app") {
+    return null;
+  }
+  return `linear://${parsed.host}${parsed.pathname}${parsed.search}${parsed.hash}`;
+}

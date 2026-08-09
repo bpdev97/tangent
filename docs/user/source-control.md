@@ -132,6 +132,12 @@ Enter each GitHub repository where your workspace has Linear Review enabled as
 ticket without being available in Linear Review. Linked tickets are found automatically from
 Linear's PR attachment and appear separately in the destination menu.
 
+Use **Open tickets in** to choose where those linked tickets go. **Tangent side panel** keeps the
+ticket beside the current thread. **Linear app** uses Linear's desktop-app deep link; Linear must be
+installed on the computer running the Tangent client. Linear Review continues to open in Tangent.
+When tickets stay in Tangent, Review and each ticket use separate browser tabs. Returning to an
+existing destination reactivates its live tab instead of navigating and reloading another one.
+
 Linear lookups happen only when you activate the badge or menu. Results are cached on the server,
 and **Refresh Linear destinations** bypasses that cache. The API key stays in the environment's
 protected server secret store and is not sent back to the browser.

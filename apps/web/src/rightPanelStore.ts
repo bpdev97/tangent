@@ -29,6 +29,7 @@ export interface LinearPreviewPresentation {
   readonly reviewUrl: string | null;
   readonly tickets: ReadonlyArray<LinearTicketDestination>;
   readonly ticketLookup: "loading" | "ready" | "unavailable";
+  readonly destinationUrl?: string;
 }
 
 export type RightPanelSurface =

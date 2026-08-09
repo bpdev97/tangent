@@ -754,6 +754,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           apiKey: "lin_api_secret",
           apiKeyRedacted: false,
           prBadgeBehavior: "linear-review",
+          ticketOpenBehavior: "linear-app",
           reviewRepositories: ["owner/repository"],
         },
       });
@@ -762,6 +763,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         apiKey: "lin_api_secret",
         apiKeyRedacted: true,
         prBadgeBehavior: "linear-review",
+        ticketOpenBehavior: "linear-app",
         reviewRepositories: ["owner/repository"],
       });
       assert.deepEqual(
@@ -770,6 +772,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           apiKey: "",
           apiKeyRedacted: true,
           prBadgeBehavior: "linear-review",
+          ticketOpenBehavior: "linear-app",
           reviewRepositories: ["owner/repository"],
         },
       );
@@ -780,6 +783,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       assert.deepEqual(JSON.parse(raw).linearIntegration, {
         apiKeyRedacted: true,
         prBadgeBehavior: "linear-review",
+        ticketOpenBehavior: "linear-app",
         reviewRepositories: ["owner/repository"],
       });
 
@@ -792,6 +796,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       });
       assert.equal(behaviorUpdated.linearIntegration.apiKey, "lin_api_secret");
       assert.equal(behaviorUpdated.linearIntegration.prBadgeBehavior, "choose");
+      assert.equal(behaviorUpdated.linearIntegration.ticketOpenBehavior, "linear-app");
 
       const removed = yield* serverSettings.updateSettings({
         linearIntegration: { apiKey: "", apiKeyRedacted: false },
