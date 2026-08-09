@@ -12,6 +12,7 @@ import {
   MermaidDiagram,
   clampMermaidScale,
   mermaidDiagramWidth,
+  mermaidScalePercentage,
   mermaidViewBoxWidth,
   renderMermaidDiagram,
   shouldRenderMermaid,
@@ -82,6 +83,7 @@ describe("Mermaid diagram presentation", () => {
     expect(clampMermaidScale(4)).toBe(3);
     expect(mermaidDiagramWidth(1.25, 640)).toBe("min(125%, 800px)");
     expect(mermaidDiagramWidth(0.5, null)).toBe("50%");
+    expect(mermaidScalePercentage(1.25)).toBe("125%");
   });
 
   it("reads a positive SVG viewBox width", () => {

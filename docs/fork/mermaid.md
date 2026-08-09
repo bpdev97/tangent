@@ -16,7 +16,9 @@ queued render selects Mermaid's built-in light or dark theme. A rejection is con
 diagram and does not poison later work in the queue.
 
 The rendered SVG stays inline so colors and text remain crisp at any scale. The viewport uses native
-scrolling for panning and a bounded local scale for zooming. There is no application setting,
+scrolling for panning and a bounded local scale for zooming. The maximize action moves the existing
+render result into the app's accessible dialog primitive, where it fits both available dimensions;
+it does not invoke Mermaid again or use the browser Fullscreen API. There is no application setting,
 diagram cache, pan/zoom dependency, or server-side rendering pipeline.
 
 ## Security and failure behavior
@@ -45,6 +47,11 @@ interactive diagram with it. Invalid syntax remains visible as source instead of
 | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | ![Mermaid fences rendered as source code](assets/mermaid-before.png) | ![A valid Mermaid flowchart rendered beside an invalid diagram's source fallback](assets/mermaid-after.png) |
 
+The maximize action expands the same rendered SVG to the available window while retaining the
+toolbar and native pan-and-zoom viewport.
+
+![A Mermaid flowchart fitted to Tangent's maximized diagram view](assets/mermaid-fullscreen.png)
+
 ## Upstream ownership
 
 Upstream pull request [pingdotgg/t3code#4989](https://github.com/pingdotgg/t3code/pull/4989)
@@ -63,5 +70,7 @@ vp run typecheck
 
 Also complete one web smoke test in light and dark themes. Verify a valid flowchart, an invalid
 diagram, source toggle and copy, zoom controls and scrolling, and source-only rendering during a
-streaming turn. Desktop needs no separate rendering implementation, but the smoke test should
-confirm its shared web view remains the only integration point.
+streaming turn. In the maximized view, verify two-dimensional fit, zoom and pan, source and copy,
+window resizing, the restore button, and Escape. Desktop needs no separate rendering
+implementation, but the smoke test should confirm its shared web view remains the only integration
+point.

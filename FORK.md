@@ -347,6 +347,8 @@ Invariants:
   explicit text and edge limits, and light/dark built-in themes.
 - A failed render keeps the original source visible and copyable. Generated SVG never enables
   links, HTML labels, or Mermaid interaction callbacks.
+- The maximized view reuses the existing render result in the shared dialog primitive. Keep it
+  client-only and dependency-free; do not add browser Fullscreen API, server, or mobile branches.
 - Preserve ordinary code-fence rendering and Markdown clipboard behavior around this narrow seam.
 
 Remove this delta when upstream ships equivalent secure, streaming-aware web rendering with source
