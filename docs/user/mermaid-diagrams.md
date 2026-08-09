@@ -11,9 +11,12 @@ flowchart LR
 ````
 
 The diagram follows the current light or dark theme. Its toolbar lets you zoom, reset the view,
-switch between the diagram and its source, and copy the source. You can also focus the diagram and
-press `+`, `-`, or `0`; hold Control or Command while scrolling to zoom. Ordinary scrolling pans a
-diagram that is larger than its viewport.
+maximize the diagram, switch between the diagram and its source, and copy the source. The maximized
+view fits the diagram to the browser or desktop window and keeps the same zoom, pan, source, and copy
+controls. Use the restore button or press Escape to return to the conversation.
+
+You can also focus either diagram view and press `+`, `-`, or `0`; hold Control or Command while
+scrolling to zoom. Ordinary scrolling pans a diagram that is larger than its viewport.
 
 While a response is streaming, Tangent shows the code fence instead of repeatedly rendering partial
 syntax. If Mermaid cannot parse a completed block, the source remains visible and copyable with a

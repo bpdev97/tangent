@@ -1958,6 +1958,42 @@ label:has(> select#reasoning-effort) select {
   height: auto;
 }
 
+.chat-markdown .chat-markdown-mermaid-fullscreen {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  margin: 0;
+  border: 0;
+  border-radius: inherit;
+}
+
+.chat-markdown .chat-markdown-mermaid-fullscreen .chat-markdown-mermaid-header {
+  flex: none;
+}
+
+.chat-markdown .chat-markdown-mermaid-fullscreen .chat-markdown-mermaid-viewport {
+  display: flex;
+  min-height: 0;
+  max-height: none;
+  flex: 1;
+}
+
+.chat-markdown .chat-markdown-mermaid-fullscreen .chat-markdown-mermaid-svg {
+  flex: none;
+  margin: auto;
+}
+
+.chat-markdown .chat-markdown-mermaid-fullscreen .chat-markdown-mermaid-svg svg {
+  height: 100%;
+}
+
+.chat-markdown .chat-markdown-mermaid-fullscreen pre {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
 .chat-markdown .chat-markdown-mermaid pre {
   margin: 0;
   border: none;
