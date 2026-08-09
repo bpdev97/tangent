@@ -1281,6 +1281,12 @@ html[data-theme-id] .chat-markdown .chat-markdown-codeblock {
   color: var(--code-foreground);
 }
 
+html[data-theme-id] .chat-markdown .chat-markdown-mermaid {
+  background-color: var(--code-background);
+  border-color: var(--border);
+  color: var(--code-foreground);
+}
+
 html[data-theme-id] .chat-markdown pre {
   background-color: var(--code-background);
   color: var(--code-foreground);
@@ -1889,6 +1895,80 @@ label:has(> select#reasoning-effort) select {
 
 .chat-markdown .chat-markdown-shiki .shiki {
   background: transparent !important;
+}
+
+.chat-markdown .chat-markdown-mermaid {
+  margin: 0.65rem 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--secondary);
+}
+
+.chat-markdown .chat-markdown-mermaid-header {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  padding: 0.25rem 0.375rem 0.25rem 0.75rem;
+}
+
+.chat-markdown .chat-markdown-mermaid-title {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 0.6875rem;
+  color: color-mix(in srgb, var(--foreground) 72%, transparent);
+}
+
+.chat-markdown .chat-markdown-mermaid-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.chat-markdown .chat-markdown-mermaid-scale {
+  min-width: 2.75rem;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 0.6875rem;
+  text-align: center;
+}
+
+.chat-markdown .chat-markdown-mermaid-viewport {
+  overflow: auto;
+  max-height: min(32rem, 70vh);
+  padding: 1rem;
+  outline: none;
+  overscroll-behavior: contain;
+}
+
+.chat-markdown .chat-markdown-mermaid-viewport:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--ring);
+}
+
+.chat-markdown .chat-markdown-mermaid-svg {
+  margin-inline: auto;
+}
+
+.chat-markdown .chat-markdown-mermaid-svg svg {
+  display: block;
+  width: 100% !important;
+  max-width: none !important;
+  height: auto;
+}
+
+.chat-markdown .chat-markdown-mermaid pre {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.chat-markdown .chat-markdown-mermaid-error {
+  padding: 0.75rem 0.9rem 0;
+  color: var(--destructive-foreground);
+  font-size: 0.75rem;
 }
 
 /* Diagnostics-style tables: row separators only, uppercase headers, and a

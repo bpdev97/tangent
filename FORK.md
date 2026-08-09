@@ -52,6 +52,7 @@ the latest upstream merge, compatibility decisions, and verification.
 | `FORK-CODEX-001`   | Codex MCP tool-call approval elicitations                                       | Active, temporary    | [Codex MCP approvals](docs/fork/codex-mcp-tool-approvals.md)          | `vp test apps/server/src/provider/CodexMcpApproval.test.ts apps/server/src/provider/Layers/CodexAdapter.test.ts apps/server/src/provider/Layers/CodexSessionRuntime.test.ts apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.test.ts apps/web/src/session-logic.test.ts apps/mobile/src/lib/threadActivity.test.ts`                                                                                                                                                                                                                                                                                                                                                           |
 | `FORK-PALETTE-001` | Control-N/Control-P command-palette navigation                                  | Active, temporary    | [Ownership map](#fork-palette-001)                                    | `vp test apps/web/src/components/CommandPalette.logic.test.ts` plus a web keyboard smoke test                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `FORK-LINEAR-001`  | Linear ticket and Review destinations from new-sidebar GitHub PR badges         | Active               | [Linear PR destinations](docs/fork/linear-pr-destinations.md)         | `vp test packages/shared/src/linear.test.ts packages/contracts/src/settings.test.ts apps/server/src/linear/LinearIntegration.test.ts apps/server/src/serverSettings.test.ts apps/desktop/src/electron/ElectronShell.test.ts apps/desktop/src/preview/BrowserSession.test.ts apps/web/src/browser/openFileInPreview.test.ts apps/web/src/components/linear/linearPreviewPresentation.test.ts apps/web/src/components/linear/linearPrPrimaryDestinations.test.ts apps/web/src/components/linear/openLinearDestination.test.ts apps/web/src/components/linear/openLinearPreviewDestination.test.ts apps/web/src/rightPanelStore.test.ts apps/web/src/components/preview/PreviewView.test.tsx` |
+| `FORK-MERMAID-001` | Secure, streaming-aware Mermaid diagrams in web and desktop Markdown            | Active, temporary    | [Mermaid diagrams](docs/fork/mermaid.md)                              | `vp test apps/web/src/components/MermaidDiagram.test.tsx` plus a web light/dark smoke test                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `FORK-PREVIEW-001` | Suspend inactive browser webviews for explicitly settled threads                | Active               | [Settled preview suspension](docs/fork/settled-preview-suspension.md) | `vp test apps/web/src/browser/browserSessionSuspension.test.ts apps/web/src/browser/desktopTabLifetime.test.ts apps/web/src/AppRoot.test.tsx`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ## Restored to upstream on 2026-08-01
@@ -321,6 +322,36 @@ Invariants:
   branches.
 - Unknown or client-derived lifecycle state stays mounted; only the server-backed settled override
   authorizes suspension.
+
+### FORK-MERMAID-001
+
+Fork-owned paths:
+
+- `apps/web/src/components/MermaidDiagram.tsx` and its focused test
+- `docs/fork/mermaid.md`
+- `docs/user/mermaid-diagrams.md`
+
+Shared upstream touchpoints:
+
+- `apps/web/src/components/ChatMarkdown.tsx`
+- `apps/web/src/index.css`
+- the web package manifest and workspace lockfile
+
+Invariants:
+
+- Only completed fenced `mermaid` blocks render as diagrams. Streaming blocks stay ordinary source
+  so incomplete syntax never causes repeated parsing or layout churn.
+- Mermaid loads on demand in the client. The server, providers, wire contracts, settings, and
+  mobile client have no feature-specific code.
+- Rendering is serialized because Mermaid configuration is process-global. Use strict security,
+  explicit text and edge limits, and light/dark built-in themes.
+- A failed render keeps the original source visible and copyable. Generated SVG never enables
+  links, HTML labels, or Mermaid interaction callbacks.
+- Preserve ordinary code-fence rendering and Markdown clipboard behavior around this narrow seam.
+
+Remove this delta when upstream ships equivalent secure, streaming-aware web rendering with source
+fallback and theme support. Prefer adopting its component instead of maintaining two Mermaid
+pipelines.
 
 ## Merged upstream baseline
 

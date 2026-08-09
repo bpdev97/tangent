@@ -92,6 +92,7 @@ import {
   openUrlInPreview,
   BrowserPreviewUnavailableError,
 } from "../browser/openFileInPreview";
+import { MermaidDiagram, shouldRenderMermaid } from "./MermaidDiagram";
 
 interface ChatMarkdownProps {
   text: string;
@@ -1562,6 +1563,10 @@ function ChatMarkdown({
         }
 
         const language = extractFenceLanguage(codeBlock.className);
+        if (shouldRenderMermaid(language, isStreaming)) {
+          return <MermaidDiagram code={codeBlock.code} theme={resolvedTheme} />;
+        }
+
         const fenceTitle = extractFenceTitle(extractPreCodeMeta(node));
         return (
           <MarkdownCodeBlock
