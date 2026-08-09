@@ -5,6 +5,7 @@
 - [Install and first run](./user/install.md)
 - [Permission modes](./user/permission-modes.md)
 - [Keyboard shortcuts](./user/keybindings.md)
+- [Mermaid diagrams](./user/mermaid-diagrams.md)
 - [Organizing threads](./user/thread-sidebar.md)
 - [Remote access](./user/remote-access.md)
 - [Keeping app and server in sync](./user/updating.md)
@@ -45,6 +46,7 @@ policy in [CONTRIBUTING.md](../CONTRIBUTING.md); agent rules in [AGENTS.md](../A
 - [Personal push relay](./fork/personal-push-relay.md)
 - [HEIC/HEIF image normalization](./fork/image-normalization.md)
 - [Codex MCP tool approvals](./fork/codex-mcp-tool-approvals.md)
+- [Mermaid diagrams](./fork/mermaid.md)
 
 ### Runbooks
 
