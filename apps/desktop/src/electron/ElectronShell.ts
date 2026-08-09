@@ -8,9 +8,10 @@ import * as Electron from "electron";
 const SAFE_EXTERNAL_PROTOCOLS = new Set(["http:", "https:"]);
 
 function isSafeLinearAppUrl(url: URL): boolean {
+  const hostname = url.hostname.toLowerCase();
   return (
     url.protocol === "linear:" &&
-    url.hostname.toLowerCase() === "linear.app" &&
+    (hostname === "linear.app" || hostname === "linear.review") &&
     url.username === "" &&
     url.password === "" &&
     url.port === ""

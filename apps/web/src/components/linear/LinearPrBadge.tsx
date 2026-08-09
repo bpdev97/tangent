@@ -34,8 +34,9 @@ import {
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { cn } from "../../lib/utils";
 import { buildLinearPreviewPresentation } from "./linearPreviewPresentation";
+import { linearPrPrimaryDestinationUrls } from "./linearPrPrimaryDestinations";
+import { openLinearDestination } from "./openLinearDestination";
 import { openLinearPreviewDestination } from "./openLinearPreviewDestination";
-import { openLinearTicket } from "./openLinearTicket";
 
 function resolutionMessage(resolution: LinearPrDestinationResolution): string | null {
   switch (resolution.status) {
@@ -110,70 +111,55 @@ export function LinearPrBadge(props: {
     [props.pr.url, props.threadRef.environmentId, resolveDestinations],
   );
 
-  const openLinearUrl = useCallback(
-    async (url: string) => {
+  const openLinearInTangent = useCallback(
+    async (url: string, resolutionOverride?: LinearPrDestinationResolution | null) => {
+      const currentResolution = resolutionOverride === undefined ? resolution : resolutionOverride;
       if (isPreviewSupportedInRuntime()) {
         props.onThreadActivate(props.threadRef);
-        const reviewUrl = resolution?.review?.url ?? directReviewUrl;
-        const lookup = resolution === null ? load() : Promise.resolve(resolution);
+        const reviewUrl = currentResolution?.review?.url ?? directReviewUrl;
+        const lookup = currentResolution === null ? load() : Promise.resolve(currentResolution);
         const result = await openLinearPreviewDestination({
           threadRef: props.threadRef,
           destinationUrl: url,
           openPreview,
           presentation: buildLinearPreviewPresentation({
             reviewUrl,
-            resolution,
-            lookupComplete: resolution !== null,
+            resolution: currentResolution,
+            lookupComplete: currentResolution !== null,
             destinationUrl: url,
           }),
         });
-        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-          const error = squashAtomCommandFailure(result);
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Unable to open Linear in the side panel",
-              description: error instanceof Error ? error.message : "An error occurred.",
-            }),
-          );
+        if (result._tag === "Failure") {
+          if (isAtomCommandInterrupted(result)) return;
+          throw squashAtomCommandFailure(result);
         }
-        if (result._tag === "Success") {
-          const nextResolution = await lookup;
-          useRightPanelStore.getState().setBrowserPresentation(
-            props.threadRef,
-            result.value.tabId,
-            buildLinearPreviewPresentation({
-              reviewUrl,
-              resolution: nextResolution,
-              lookupComplete: true,
-              destinationUrl: url,
-            }),
-          );
-        }
-        return;
-      }
-      try {
-        await readLocalApi()?.shell.openExternal(url);
-      } catch (error) {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Unable to open Linear",
-            description: error instanceof Error ? error.message : "An error occurred.",
+        const nextResolution = await lookup;
+        useRightPanelStore.getState().setBrowserPresentation(
+          props.threadRef,
+          result.value.tabId,
+          buildLinearPreviewPresentation({
+            reviewUrl,
+            resolution: nextResolution,
+            lookupComplete: true,
+            destinationUrl: url,
           }),
         );
+        return;
       }
+      const api = readLocalApi();
+      if (!api) throw new Error("Local link handling is unavailable.");
+      await api.shell.openExternal(url);
     },
     [directReviewUrl, load, openPreview, props.onThreadActivate, props.threadRef, resolution],
   );
 
-  const openTicket = useCallback(
-    async (ticketUrl: string) => {
+  const openConfiguredLinearDestination = useCallback(
+    async (destinationUrl: string, resolutionOverride?: LinearPrDestinationResolution | null) => {
       try {
-        await openLinearTicket({
+        await openLinearDestination({
           behavior: linear.ticketOpenBehavior,
-          ticketUrl,
-          openInTangent: openLinearUrl,
+          destinationUrl,
+          openInTangent: (url) => openLinearInTangent(url, resolutionOverride),
           openExternal: async (url) => {
             const api = readLocalApi();
             if (!api) throw new Error("Local link handling is unavailable.");
@@ -184,13 +170,13 @@ export function LinearPrBadge(props: {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Unable to open Linear ticket",
+            title: "Unable to open Linear",
             description: error instanceof Error ? error.message : "An error occurred.",
           }),
         );
       }
     },
-    [linear.ticketOpenBehavior, openLinearUrl],
+    [linear.ticketOpenBehavior, openLinearInTangent],
   );
 
   const handleMenuOpenChange = useCallback(
@@ -201,18 +187,29 @@ export function LinearPrBadge(props: {
     [load, loading, resolution],
   );
 
-  const handleReviewClick = useCallback(
+  const handleLinearClick = useCallback(
     async (event: ReactMouseEvent<HTMLElement>) => {
       event.preventDefault();
       event.stopPropagation();
-      if (directReviewUrl !== null) {
-        await openLinearUrl(directReviewUrl);
+      const nextResolution =
+        linear.ticketOpenBehavior === "linear-app" && directReviewUrl !== null
+          ? resolution
+          : (resolution ?? (await load()));
+      const resolved = nextResolution?.status === "resolved" ? nextResolution : null;
+      const destinationUrls = linearPrPrimaryDestinationUrls({
+        behavior: linear.ticketOpenBehavior,
+        reviewUrl: resolved?.review?.url ?? directReviewUrl,
+        tickets: resolved?.tickets ?? [],
+      });
+      if (destinationUrls.length > 0) {
+        for (const destinationUrl of destinationUrls) {
+          await openConfiguredLinearDestination(destinationUrl, nextResolution);
+        }
         return;
       }
       setMenuOpen(true);
-      if (resolution === null && !loading) void load();
     },
-    [directReviewUrl, load, loading, openLinearUrl, resolution],
+    [directReviewUrl, linear.ticketOpenBehavior, load, openConfiguredLinearDestination, resolution],
   );
 
   const badgeButtonClassName = cn("shrink-0 text-xs tabular-nums hover:underline", props.className);
@@ -240,13 +237,16 @@ export function LinearPrBadge(props: {
           GitHub
         </MenuItem>
         {reviewUrl ? (
-          <MenuItem onClick={() => void openLinearUrl(reviewUrl)}>
+          <MenuItem onClick={() => void openConfiguredLinearDestination(reviewUrl, resolution)}>
             <ExternalLinkIcon />
             Linear Review
           </MenuItem>
         ) : null}
         {resolution?.tickets.map((ticket) => (
-          <MenuItem key={ticket.id} onClick={() => void openTicket(ticket.url)}>
+          <MenuItem
+            key={ticket.id}
+            onClick={() => void openConfiguredLinearDestination(ticket.url, resolution)}
+          >
             <TicketIcon />
             <span className="min-w-0">
               <span className="block font-medium">{ticket.identifier}</span>
@@ -300,7 +300,7 @@ export function LinearPrBadge(props: {
         type="button"
         onClick={
           linear.prBadgeBehavior === "linear-review"
-            ? handleReviewClick
+            ? handleLinearClick
             : (event) => openPrLink(event, props.pr.url)
         }
         className={badgeButtonClassName}

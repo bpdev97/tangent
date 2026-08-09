@@ -52,6 +52,22 @@ describe("ElectronShell", () => {
     }).pipe(Effect.provide(ElectronShell.layer)),
   );
 
+  it.effect("opens Linear Review desktop app deep links", () =>
+    Effect.gen(function* () {
+      openExternalMock.mockResolvedValue(undefined);
+
+      const electronShell = yield* ElectronShell.ElectronShell;
+      const result = yield* electronShell.openExternal(
+        "linear://linear.review/bpdev97/tangent/pull/52",
+      );
+
+      assert.equal(result, true);
+      assert.deepEqual(openExternalMock.mock.calls, [
+        ["linear://linear.review/bpdev97/tangent/pull/52"],
+      ]);
+    }).pipe(Effect.provide(ElectronShell.layer)),
+  );
+
   it.effect("does not open unsafe external URLs", () =>
     Effect.gen(function* () {
       const electronShell = yield* ElectronShell.ElectronShell;

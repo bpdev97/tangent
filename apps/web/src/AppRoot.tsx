@@ -7,15 +7,16 @@ import type { AppRouter } from "./router";
 
 /**
  * Owns renderer-wide providers. The Electron browser host intentionally sits
- * outside the router so its webviews survive route transitions, but it must
- * share the same atom registry as routed UI.
+ * outside the router so eligible webviews survive route transitions. It shares
+ * the routed UI's atom registry and receives the router only to suspend browser
+ * sessions after their thread is explicitly settled and inactive.
  */
 export function AppRoot({ router }: { readonly router: AppRouter }) {
   return (
     <AppAtomRegistryProvider>
       <RouterProvider router={router} />
       <PreviewAutomationHosts />
-      <ElectronBrowserHost />
+      <ElectronBrowserHost router={router} />
     </AppAtomRegistryProvider>
   );
 }

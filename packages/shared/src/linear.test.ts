@@ -41,10 +41,15 @@ describe("Linear pull request destinations", () => {
     expect(
       linearAppUrl("https://linear.app/tangent/issue/TAN-42/native-ticket-opening?tab=activity"),
     ).toBe("linear://linear.app/tangent/issue/TAN-42/native-ticket-opening?tab=activity");
+    expect(linearAppUrl("https://linear.review/bpdev97/tangent/pull/52?tab=files")).toBe(
+      "linear://linear.review/bpdev97/tangent/pull/52?tab=files",
+    );
   });
 
   it("does not create Linear app links from untrusted destinations", () => {
     expect(linearAppUrl("https://example.com/tangent/issue/TAN-42")).toBeNull();
+    expect(linearAppUrl("https://linear.review.example.com/owner/repo/pull/42")).toBeNull();
+    expect(linearAppUrl("https://user@linear.app/tangent/issue/TAN-42")).toBeNull();
     expect(linearAppUrl("linear://linear.app/tangent/issue/TAN-42")).toBeNull();
     expect(linearAppUrl("not a URL")).toBeNull();
   });

@@ -28,15 +28,11 @@ import {
 } from "~/previewStateStore";
 import { resolveDiscoveredServerUrl } from "~/browser/browserTargetResolver";
 import { useEnvironmentHttpBaseUrl } from "~/state/environments";
-import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { previewEnvironment } from "~/state/preview";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { selectThreadPreviewMiniPlayer, usePreviewMiniPlayerStore } from "~/previewMiniPlayerStore";
 import { type LinearPreviewPresentation, useRightPanelStore } from "~/rightPanelStore";
 
-import { LinearPreviewToolbar } from "../linear/LinearPreviewToolbar";
-import { openLinearPreviewDestination } from "../linear/openLinearPreviewDestination";
-import { openLinearTicket } from "../linear/openLinearTicket";
 import { previewBridge } from "./previewBridge";
 import { subscribePreviewAction } from "./previewActionBus";
 import { openPreviewSession } from "./openPreviewSession";
@@ -92,10 +88,6 @@ export function PreviewView({
   visible,
   onSendAnnotation,
 }: Props) {
-  const linearTicketOpenBehavior = useEnvironmentSettings(
-    threadRef.environmentId,
-    (settings) => settings.linearIntegration.ticketOpenBehavior,
-  );
   const [focusUrlNonce, setFocusUrlNonce] = useState<number | undefined>(undefined);
   const [pickActive, setPickActive] = useState(false);
   const activeRecordingTabIds = useActiveBrowserRecordingTabIds();
@@ -195,63 +187,6 @@ export function PreviewView({
       }
     },
     [navigateToResolvedUrl, threadRef],
-  );
-
-  const openLinearDestination = useCallback(
-    async (destinationUrl: string) => {
-      if (presentation?._tag !== "linear") {
-        await handleSubmitUrl(destinationUrl);
-        return;
-      }
-      const result = await openLinearPreviewDestination({
-        threadRef,
-        destinationUrl,
-        presentation,
-        openPreview: open,
-      });
-      if (result._tag === "Failure") {
-        throw squashAtomCommandFailure(result);
-      }
-    },
-    [handleSubmitUrl, open, presentation, threadRef],
-  );
-
-  const handleOpenLinearDestination = useCallback(
-    (destinationUrl: string) => {
-      void openLinearDestination(destinationUrl).catch((error: unknown) => {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Unable to open Linear in the side panel",
-            description: error instanceof Error ? error.message : "An error occurred.",
-          }),
-        );
-      });
-    },
-    [openLinearDestination],
-  );
-
-  const handleOpenLinearTicket = useCallback(
-    (ticketUrl: string) => {
-      void openLinearTicket({
-        behavior: linearTicketOpenBehavior,
-        ticketUrl,
-        openInTangent: openLinearDestination,
-        openExternal: async (url) => {
-          if (!localApi) throw new Error("Local link handling is unavailable.");
-          await localApi.shell.openExternal(url);
-        },
-      }).catch((error: unknown) => {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Unable to open Linear ticket",
-            description: error instanceof Error ? error.message : "An error occurred.",
-          }),
-        );
-      });
-    },
-    [linearTicketOpenBehavior, openLinearDestination],
   );
 
   const handleOpenServerUrl = useCallback(
@@ -722,14 +657,7 @@ export function PreviewView({
       className="flex min-h-0 flex-1 flex-col bg-background"
       data-thread-key={scopedThreadKey(threadRef)}
     >
-      {presentation?._tag === "linear" ? (
-        <LinearPreviewToolbar
-          currentUrl={url}
-          presentation={presentation}
-          onNavigate={handleOpenLinearDestination}
-          onOpenTicket={handleOpenLinearTicket}
-        />
-      ) : (
+      {presentation?._tag === "linear" ? null : (
         <PreviewChromeRow
           url={url}
           loading={loading}

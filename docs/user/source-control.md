@@ -123,8 +123,8 @@ sidebar. Open **Settings → Source Control → Linear**, save a Linear personal
 clicking a PR number should do:
 
 - **GitHub** opens GitHub directly and keeps a small menu for Linear destinations.
-- **Linear Review** opens an eligible PR in the side panel. If it is not eligible, the destination
-  menu opens instead.
+- **Linear** opens an eligible PR in Linear. If it is not eligible, the destination menu opens
+  instead.
 - **Choose each time** always opens the destination menu.
 
 Enter each GitHub repository where your workspace has Linear Review enabled as
@@ -132,11 +132,17 @@ Enter each GitHub repository where your workspace has Linear Review enabled as
 ticket without being available in Linear Review. Linked tickets are found automatically from
 Linear's PR attachment and appear separately in the destination menu.
 
-Use **Open tickets in** to choose where those linked tickets go. **Tangent side panel** keeps the
-ticket beside the current thread. **Linear app** uses Linear's desktop-app deep link; Linear must be
-installed on the computer running the Tangent client. Linear Review continues to open in Tangent.
-When tickets stay in Tangent, Review and each ticket use separate browser tabs. Returning to an
-existing destination reactivates its live tab instead of navigating and reloading another one.
+Use **Open Linear in** to choose where both Review and ticket destinations go. **Tangent side
+panel** opens Review and the primary linked ticket as two separate, addressless tabs, with Review
+active. **Linear app** uses Linear's desktop-app deep link and opens only Review from the primary PR
+action so destinations do not compete for focus. Choosing an individual Review or ticket from the
+menu follows the same setting. Linear must be installed on the computer running the Tangent client
+for the app option.
+
+Returning to an existing Tangent destination reactivates its tab instead of navigating another
+one. After you settle and leave a thread, Tangent unloads its embedded pages to release resources
+but retains their tabs and URLs. Returning reloads them with the same Linear sign-in and browser
+cache.
 
 Linear lookups happen only when you activate the badge or menu. Results are cached on the server,
 and **Refresh Linear destinations** bypasses that cache. The API key stays in the environment's

@@ -10,7 +10,8 @@ import { AppRoot } from "./AppRoot";
 
 describe("AppRoot", () => {
   it("shares the application atom registry with routed UI and renderer-wide desktop hosts", () => {
-    const root = AppRoot({ router: {} as AppRouter });
+    const router = {} as AppRouter;
+    const root = AppRoot({ router });
 
     expect(root.type).toBe(AppAtomRegistryProvider);
     const children = Children.toArray(
@@ -20,5 +21,8 @@ describe("AppRoot", () => {
     expect(isValidElement(children[0]) && children[0].type).toBe(RouterProvider);
     expect(isValidElement(children[1]) && children[1].type).toBe(PreviewAutomationHosts);
     expect(isValidElement(children[2]) && children[2].type).toBe(ElectronBrowserHost);
+    expect(
+      isValidElement<{ readonly router: AppRouter }>(children[2]) && children[2].props.router,
+    ).toBe(router);
   });
 });

@@ -1,5 +1,5 @@
 import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
-import type { LinearPrBadgeBehavior, LinearTicketOpenBehavior } from "@t3tools/contracts";
+import type { LinearDestinationOpenBehavior, LinearPrBadgeBehavior } from "@t3tools/contracts";
 import { normalizeLinearReviewRepository } from "@t3tools/shared/linear";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -16,11 +16,11 @@ import { SettingsRow, SettingsSection } from "./settingsLayout";
 
 const BEHAVIOR_LABELS: Record<LinearPrBadgeBehavior, string> = {
   github: "GitHub",
-  "linear-review": "Linear Review",
+  "linear-review": "Linear",
   choose: "Choose each time",
 };
 
-const TICKET_BEHAVIOR_LABELS: Record<LinearTicketOpenBehavior, string> = {
+const DESTINATION_BEHAVIOR_LABELS: Record<LinearDestinationOpenBehavior, string> = {
   tangent: "Tangent side panel",
   "linear-app": "Linear app",
 };
@@ -58,7 +58,7 @@ export function LinearIntegrationSettingsSection() {
   const apiKeyConfigured = saved.apiKeyRedacted === true;
   const [apiKey, setApiKey] = useState("");
   const [behavior, setBehavior] = useState<LinearPrBadgeBehavior>(saved.prBadgeBehavior);
-  const [ticketBehavior, setTicketBehavior] = useState<LinearTicketOpenBehavior>(
+  const [destinationBehavior, setDestinationBehavior] = useState<LinearDestinationOpenBehavior>(
     saved.ticketOpenBehavior,
   );
   const [repositories, setRepositories] = useState(() => repositoryDraft(saved.reviewRepositories));
@@ -70,7 +70,7 @@ export function LinearIntegrationSettingsSection() {
   const dirty =
     apiKey.trim().length > 0 ||
     behavior !== saved.prBadgeBehavior ||
-    ticketBehavior !== saved.ticketOpenBehavior ||
+    destinationBehavior !== saved.ticketOpenBehavior ||
     normalizedRepositoryDraft !== savedRepositoryDraft;
   const reviewBehaviorNeedsRepository =
     behavior === "linear-review" && parsedRepositories.repositories.length === 0;
@@ -84,7 +84,7 @@ export function LinearIntegrationSettingsSection() {
     setBehavior(saved.prBadgeBehavior);
   }, [saved.prBadgeBehavior]);
   useEffect(() => {
-    setTicketBehavior(saved.ticketOpenBehavior);
+    setDestinationBehavior(saved.ticketOpenBehavior);
   }, [saved.ticketOpenBehavior]);
   useEffect(() => {
     setRepositories(repositoryDraft(saved.reviewRepositories));
@@ -101,7 +101,7 @@ export function LinearIntegrationSettingsSection() {
             apiKey,
             apiKeyRedacted: apiKey.trim().length > 0 ? false : apiKeyConfigured,
             prBadgeBehavior: behavior,
-            ticketOpenBehavior: ticketBehavior,
+            ticketOpenBehavior: destinationBehavior,
             reviewRepositories: [...parsedRepositories.repositories],
           },
         },
@@ -132,7 +132,7 @@ export function LinearIntegrationSettingsSection() {
     isSaving,
     parsedRepositories.repositories,
     primaryEnvironment,
-    ticketBehavior,
+    destinationBehavior,
     updateSettings,
   ]);
 
@@ -255,7 +255,7 @@ export function LinearIntegrationSettingsSection() {
       />
       <SettingsRow
         title="Open PR badges with"
-        description="Choose what the PR number in the new sidebar does. Linear Review falls back to the destination menu when that PR is not eligible."
+        description="Choose what the PR number in the new sidebar does. Linear opens Review and, in Tangent, the primary linked ticket in separate tabs. It falls back to the destination menu when Review is unavailable."
         control={
           <Select
             value={behavior}
@@ -266,22 +266,24 @@ export function LinearIntegrationSettingsSection() {
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>
               <SelectItem value="github">GitHub</SelectItem>
-              <SelectItem value="linear-review">Linear Review</SelectItem>
+              <SelectItem value="linear-review">Linear</SelectItem>
               <SelectItem value="choose">Choose each time</SelectItem>
             </SelectPopup>
           </Select>
         }
       />
       <SettingsRow
-        title="Open tickets in"
-        description="Choose whether linked Linear tickets stay in Tangent or open through a deep link to the Linear desktop app."
+        title="Open Linear in"
+        description="Choose where Review and ticket destinations open. Tangent uses separate addressless side-panel tabs; Linear app uses desktop deep links."
         control={
           <Select
-            value={ticketBehavior}
-            onValueChange={(value) => setTicketBehavior(value as LinearTicketOpenBehavior)}
+            value={destinationBehavior}
+            onValueChange={(value) =>
+              setDestinationBehavior(value as LinearDestinationOpenBehavior)
+            }
           >
-            <SelectTrigger className="w-full sm:w-44" aria-label="Open tickets in">
-              <SelectValue>{TICKET_BEHAVIOR_LABELS[ticketBehavior]}</SelectValue>
+            <SelectTrigger className="w-full sm:w-44" aria-label="Open Linear in">
+              <SelectValue>{DESTINATION_BEHAVIOR_LABELS[destinationBehavior]}</SelectValue>
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>
               <SelectItem value="tangent">Tangent side panel</SelectItem>

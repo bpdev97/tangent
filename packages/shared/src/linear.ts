@@ -62,7 +62,14 @@ export function linearAppUrl(linearUrl: string): string | null {
   } catch {
     return null;
   }
-  if (parsed.protocol !== "https:" || parsed.hostname.toLowerCase() !== "linear.app") {
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    parsed.protocol !== "https:" ||
+    (hostname !== "linear.app" && hostname !== "linear.review") ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    parsed.port !== ""
+  ) {
     return null;
   }
   return `linear://${parsed.host}${parsed.pathname}${parsed.search}${parsed.hash}`;

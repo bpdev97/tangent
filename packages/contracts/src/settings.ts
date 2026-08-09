@@ -582,8 +582,12 @@ export type PersonalPushRelaySettings = typeof PersonalPushRelaySettings.Type;
 export const LinearPrBadgeBehavior = Schema.Literals(["github", "linear-review", "choose"]);
 export type LinearPrBadgeBehavior = typeof LinearPrBadgeBehavior.Type;
 
-export const LinearTicketOpenBehavior = Schema.Literals(["tangent", "linear-app"]);
-export type LinearTicketOpenBehavior = typeof LinearTicketOpenBehavior.Type;
+export const LinearDestinationOpenBehavior = Schema.Literals(["tangent", "linear-app"]);
+export type LinearDestinationOpenBehavior = typeof LinearDestinationOpenBehavior.Type;
+
+// Retain the original export and persisted field name for settings compatibility.
+export const LinearTicketOpenBehavior = LinearDestinationOpenBehavior;
+export type LinearTicketOpenBehavior = LinearDestinationOpenBehavior;
 
 export const LinearIntegrationSettings = Schema.Struct({
   apiKey: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
@@ -591,7 +595,7 @@ export const LinearIntegrationSettings = Schema.Struct({
   prBadgeBehavior: LinearPrBadgeBehavior.pipe(
     Schema.withDecodingDefault(Effect.succeed("github" as const)),
   ),
-  ticketOpenBehavior: LinearTicketOpenBehavior.pipe(
+  ticketOpenBehavior: LinearDestinationOpenBehavior.pipe(
     Schema.withDecodingDefault(Effect.succeed("tangent" as const)),
   ),
   reviewRepositories: Schema.Array(TrimmedNonEmptyString).pipe(
@@ -800,7 +804,7 @@ export const ServerSettingsPatch = Schema.Struct({
       apiKey: Schema.optionalKey(TrimmedString),
       apiKeyRedacted: Schema.optionalKey(Schema.Boolean),
       prBadgeBehavior: Schema.optionalKey(LinearPrBadgeBehavior),
-      ticketOpenBehavior: Schema.optionalKey(LinearTicketOpenBehavior),
+      ticketOpenBehavior: Schema.optionalKey(LinearDestinationOpenBehavior),
       reviewRepositories: Schema.optionalKey(Schema.Array(TrimmedNonEmptyString)),
     }),
   ),
