@@ -59,10 +59,11 @@ chat transcript.
   background run thread. T3 still forks the request effect from `sendTurn`; streaming events own the
   actual turn lifecycle, and `session.steer` handles text sent during the active turn.
 - `message.*`, `reasoning.*`, `tool.*`, `subagent.*`, and `background.complete` become canonical T3
-  runtime events. Hermes subagents use upstream `task.started`, `task.progress`, and
-  `task.completed`, keyed by a required `subagent_id`; Tangent does not maintain a separate
-  provider-neutral `agent.*` contract. Per-session queues preserve Hermes event order before
-  ingestion.
+  runtime events. `message.interim` seals assistant commentary as a separate message without ending
+  the turn; a terminal response marked `response_previewed` is de-duplicated against those interim
+  segments. Hermes subagents use upstream `task.started`, `task.progress`, and `task.completed`,
+  keyed by a required `subagent_id`; Tangent does not maintain a separate provider-neutral `agent.*`
+  contract. Per-session queues preserve Hermes event order before ingestion.
 - `image.attach` stages T3 image attachments before the next prompt. Shared server ingestion
   normalizes HEIC/HEIF uploads to JPEG first because Hermes 0.19 rejects those container
   extensions at the gateway boundary.
@@ -128,16 +129,22 @@ page documents the separate multi-platform messaging gateway rather than the TUI
 so it is no longer listed as a protocol reference here. The current programmatic guide, TUI gateway
 server, WebSocket transport, TypeScript client, and protocol types remain the relevant sources.
 
-On 2026-08-07, Hermes main at `b3aa561faffd64f05436e429a6415d175e534ec9` reported Agent
-0.20.0 and desktop contract 5. Source review confirmed that the isolated `serve` launch, authenticated
-WebSocket, ready sentinel, durable session ID, mapped RPC methods, and mapped event families remain
-compatible. No 0.20.0 binary smoke ran, so the tested baseline remains Agent 0.19.0 and contract 2.
+On 2026-08-09, Hermes Agent tag `v2026.8.3` at
+`3c27eb6234bf91b8ceee9e9071591b31e9b148cb` reported Agent 0.20.0 and desktop contract 5. Source
+review confirmed that the isolated `serve` launch, authenticated WebSocket, ready sentinel, durable
+session ID, and existing mapped RPC methods remain compatible. It also identified the new
+`message.interim` assistant-segment event and the canonical `{ "jobs": [...], "updated_at": ... }`
+cron store wrapper. A disposable editable install of that exact tag passed an authenticated loopback
+smoke for `gateway.ready`, `setup.status`, `model.options`, `session.create`, durable
+`stored_session_id`, contract 5, and `session.close`. No configured-model prompt, tool, attachment,
+or browser/mobile smoke ran in that isolated profile.
 
 ## Automations
 
 Automation management is deliberately unchanged. Availability and mutations still use
 `hermes --profile <profile> cron ...`; listing still projects the profile's bounded
-`cron/jobs.json`. The web and mobile clients do not write Hermes storage directly.
+`cron/jobs.json`. The reader accepts Hermes 0.20's canonical object wrapper and the legacy bare-array
+form, while the web and mobile clients continue to avoid writing Hermes storage directly.
 
 The chat gateway does not currently convert scheduled runs into T3 threads or deliver a post-run
 reply into an existing thread. Do not enable Hermes's desktop cron ticker or add gateway polling as

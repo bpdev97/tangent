@@ -209,6 +209,108 @@ it.layer(testLayer)("HermesAdapter gateway", (it) => {
     ),
   );
 
+  it.effect("preserves interim assistant commentary as a separate segment", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const gateway = new FakeGateway();
+        const emitter: { current?: (event: HermesGatewayEvent) => void } = {};
+        const adapter = yield* makeHermesAdapter(decodeSettings({ profile: "default" }), {
+          gatewayRuntime: fakeRuntime(gateway, emitter),
+        });
+        const events: ProviderRuntimeEvent[] = [];
+        const eventFiber = yield* Stream.runForEach(adapter.streamEvents, (event) =>
+          Effect.sync(() => events.push(event)),
+        ).pipe(Effect.forkChild);
+        yield* Effect.yieldNow;
+        const threadId = ThreadId.make("hermes-gateway-interim");
+        yield* adapter.startSession({ threadId, runtimeMode: "approval-required" });
+        yield* adapter.sendTurn({ threadId, input: "inspect the project" });
+
+        emitter.current?.({ type: "message.start", session_id: "live-1" });
+        emitter.current?.({
+          type: "message.delta",
+          session_id: "live-1",
+          payload: { text: "Checking the project." },
+        });
+        emitter.current?.({
+          type: "message.interim",
+          session_id: "live-1",
+          payload: { text: "Checking the project.", already_streamed: true },
+        });
+        emitter.current?.({
+          type: "message.delta",
+          session_id: "live-1",
+          payload: { text: "The project looks good." },
+        });
+        emitter.current?.({
+          type: "message.complete",
+          session_id: "live-1",
+          payload: { text: "The project looks good.", status: "complete" },
+        });
+        yield* settleEvents;
+
+        const assistantDeltas = events.filter(
+          (event) =>
+            event.type === "content.delta" && event.payload.streamKind === "assistant_text",
+        );
+        assert.equal(assistantDeltas.length, 2);
+        assert.notEqual(assistantDeltas[0]?.itemId, assistantDeltas[1]?.itemId);
+        assert.deepEqual(
+          events
+            .filter(
+              (event) =>
+                event.type === "item.completed" && event.payload.itemType === "assistant_message",
+            )
+            .map((event) => (event.type === "item.completed" ? event.payload.detail : undefined)),
+          ["Checking the project.", "The project looks good."],
+        );
+        yield* Fiber.interrupt(eventFiber);
+      }),
+    ),
+  );
+
+  it.effect("does not duplicate an interim response preview at turn completion", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const gateway = new FakeGateway();
+        const emitter: { current?: (event: HermesGatewayEvent) => void } = {};
+        const adapter = yield* makeHermesAdapter(decodeSettings({ profile: "default" }), {
+          gatewayRuntime: fakeRuntime(gateway, emitter),
+        });
+        const events: ProviderRuntimeEvent[] = [];
+        const eventFiber = yield* Stream.runForEach(adapter.streamEvents, (event) =>
+          Effect.sync(() => events.push(event)),
+        ).pipe(Effect.forkChild);
+        yield* Effect.yieldNow;
+        const threadId = ThreadId.make("hermes-gateway-response-preview");
+        yield* adapter.startSession({ threadId, runtimeMode: "approval-required" });
+        yield* adapter.sendTurn({ threadId, input: "answer once" });
+
+        emitter.current?.({ type: "message.start", session_id: "live-1" });
+        emitter.current?.({
+          type: "message.interim",
+          session_id: "live-1",
+          payload: { text: "One answer.", already_streamed: false },
+        });
+        emitter.current?.({
+          type: "message.complete",
+          session_id: "live-1",
+          payload: { text: "One answer.", status: "complete", response_previewed: true },
+        });
+        yield* settleEvents;
+
+        assert.equal(
+          events.filter(
+            (event) =>
+              event.type === "item.completed" && event.payload.itemType === "assistant_message",
+          ).length,
+          1,
+        );
+        yield* Fiber.interrupt(eventFiber);
+      }),
+    ),
+  );
+
   it.effect("routes approval and clarification responses through Hermes", () =>
     Effect.scoped(
       Effect.gen(function* () {

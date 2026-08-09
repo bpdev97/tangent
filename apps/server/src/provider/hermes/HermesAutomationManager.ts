@@ -90,11 +90,11 @@ function normalizeRepeat(value: unknown): HermesAutomation["repeat"] {
 }
 
 export function projectHermesAutomationJobs(value: unknown): ReadonlyArray<HermesAutomation> {
-  if (!Array.isArray(value)) {
-    throw new Error("Hermes cron store must contain an array.");
-  }
+  const store = record(value);
+  const jobs = Array.isArray(value) ? value : store?.jobs;
+  if (!Array.isArray(jobs)) throw new Error("Hermes cron store must contain a jobs array.");
 
-  return value
+  return jobs
     .flatMap((entry): ReadonlyArray<HermesAutomation> => {
       const job = record(entry);
       const id = optionalText(job?.id);

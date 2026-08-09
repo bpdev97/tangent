@@ -58,7 +58,7 @@ configured on each job. It does not currently create or continue T3 chat threads
 
 - Approval required asks before protected operations.
 - Auto-accept edits currently retains the same protected-operation prompts as Approval required;
-  gateway contract 2 has no safe session-local accept-edits mode.
+  the Hermes gateway has no safe session-local accept-edits mode.
 - Full access automatically answers gateway approval prompts once without creating permanent rules.
 
 Hermes does not currently expose a T3 plan/implementation toggle.
