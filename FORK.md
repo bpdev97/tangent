@@ -169,10 +169,11 @@ Invariants:
 - Provider setup stays terminal-owned; the app reports the remediation command but does not run it.
 - Automation delivery and the gateway desktop cron ticker remain disabled.
 
-Current compatibility baseline: Hermes Agent 0.19.0, TUI gateway contract 2. Revalidate the
-programmatic guide, gateway types/transport/server handlers, focused fixtures, and a real binary
-before raising the baseline. Remove this feature only when upstream can continue or migrate the
-versioned sessions and provides equivalent profile-aware gateway behavior.
+Current compatibility baseline: Hermes Agent 0.20.0, TUI gateway contract 5. Contract 2 remains
+the minimum because the required methods are still compatible and the newer contracts are additive.
+Revalidate the programmatic guide, gateway types/transport/server handlers, focused fixtures, and a
+real binary before raising the baseline. Remove this feature only when upstream can continue or
+migrate the versioned sessions and provides equivalent profile-aware gateway behavior.
 
 ### FORK-PUSH-001
 

@@ -78,6 +78,9 @@ interface HermesSessionContext {
   turns: Array<{ id: TurnId; items: Array<unknown> }>;
   activeTurnId: TurnId | undefined;
   assistantItemId: RuntimeItemId | undefined;
+  assistantSegmentIndex: number;
+  assistantText: string;
+  assistantInterimTexts: Array<string>;
   reasoningItemId: RuntimeItemId | undefined;
   currentModelId: string | undefined;
   stopped: boolean;
@@ -125,6 +128,15 @@ function text(value: unknown): string | undefined {
 
 function number(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function finalAssistantTail(finalText: string, priorSegments: ReadonlyArray<string>): string {
+  let tail = finalText.trimStart();
+  for (const segment of priorSegments) {
+    const trimmed = segment.trim();
+    if (trimmed && tail.startsWith(trimmed)) tail = tail.slice(trimmed.length).trimStart();
+  }
+  return tail;
 }
 
 function answerText(value: unknown): string {
@@ -301,6 +313,24 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
   const makeItemId = (context: HermesSessionContext, suffix: string) =>
     RuntimeItemId.make(`hermes:${context.liveSessionId}:${suffix}`);
 
+  const ensureAssistantItem = Effect.fn("HermesAdapter.ensureAssistantItem")(function* (
+    context: HermesSessionContext,
+    event: HermesGatewayEvent,
+  ) {
+    if (context.assistantItemId) return context.assistantItemId;
+    const suffix = context.assistantSegmentIndex === 0 ? "" : `:${context.assistantSegmentIndex}`;
+    const itemId = makeItemId(context, `${context.activeTurnId ?? "idle"}:assistant${suffix}`);
+    context.assistantItemId = itemId;
+    yield* publish({
+      type: "item.started",
+      ...(yield* stamp()),
+      ...base(context, event),
+      itemId,
+      payload: { itemType: "assistant_message", status: "inProgress" },
+    });
+    return itemId;
+  });
+
   const abandonPendingInteractions = Effect.fn("HermesAdapter.abandonPendingInteractions")(
     function* (
       context: HermesSessionContext,
@@ -346,6 +376,9 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
     yield* abandonPendingInteractions(context);
     context.activeTurnId = undefined;
     context.assistantItemId = undefined;
+    context.assistantSegmentIndex = 0;
+    context.assistantText = "";
+    context.assistantInterimTexts = [];
     context.reasoningItemId = undefined;
     const { activeTurnId: _activeTurnId, ...session } = context.session;
     context.session = { ...session, status: "ready", updatedAt: yield* nowIso };
@@ -592,31 +625,73 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
             payload: context.currentModelId ? { model: context.currentModelId } : {},
           });
         }
-        context.assistantItemId = makeItemId(context, `${context.activeTurnId}:assistant`);
-        yield* publish({
-          type: "item.started",
-          ...(yield* stamp()),
-          ...base(context, event),
-          itemId: context.assistantItemId,
-          payload: { itemType: "assistant_message", status: "inProgress" },
-        });
+        context.assistantItemId = undefined;
+        context.assistantSegmentIndex = 0;
+        context.assistantText = "";
+        context.assistantInterimTexts = [];
+        yield* ensureAssistantItem(context, event);
         return;
       }
       case "message.delta": {
         const delta = typeof payload.text === "string" ? payload.text : "";
         if (!delta) return;
+        const itemId = yield* ensureAssistantItem(context, event);
+        context.assistantText += delta;
         yield* publish({
           type: "content.delta",
           ...(yield* stamp()),
           ...base(context, event),
-          ...(context.assistantItemId ? { itemId: context.assistantItemId } : {}),
+          itemId,
           payload: { streamKind: "assistant_text", delta },
         });
+        return;
+      }
+      case "message.interim": {
+        const interimText = typeof payload.text === "string" ? payload.text.trimStart() : "";
+        if (!interimText) return;
+        const itemId = yield* ensureAssistantItem(context, event);
+        if (payload.already_streamed !== true) {
+          const missingText = interimText.startsWith(context.assistantText)
+            ? interimText.slice(context.assistantText.length)
+            : "";
+          if (missingText) {
+            yield* publish({
+              type: "content.delta",
+              ...(yield* stamp()),
+              ...base(context, event),
+              itemId,
+              payload: { streamKind: "assistant_text", delta: missingText },
+            });
+          }
+        }
+        yield* publish({
+          type: "item.completed",
+          ...(yield* stamp()),
+          ...base(context, event),
+          itemId,
+          payload: {
+            itemType: "assistant_message",
+            status: "completed",
+            detail: interimText,
+            data: { ...payload, interim: true },
+          },
+        });
+        context.assistantInterimTexts.push(interimText);
+        context.assistantItemId = undefined;
+        context.assistantSegmentIndex += 1;
+        context.assistantText = "";
         return;
       }
       case "message.complete": {
         const status = text(payload.status) ?? "complete";
         const finalText = typeof payload.text === "string" ? payload.text : "";
+        const completionText =
+          payload.response_previewed === true
+            ? finalAssistantTail(finalText, context.assistantInterimTexts)
+            : finalText;
+        if (!context.assistantItemId && completionText) {
+          yield* ensureAssistantItem(context, event);
+        }
         if (context.assistantItemId) {
           yield* publish({
             type: "item.completed",
@@ -626,7 +701,7 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
             payload: {
               itemType: "assistant_message",
               status: status === "error" ? "failed" : "completed",
-              ...(finalText ? { detail: finalText } : {}),
+              ...(completionText ? { detail: completionText } : {}),
               data: payload,
             },
           });
@@ -1009,6 +1084,9 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
           turns: [],
           activeTurnId: undefined,
           assistantItemId: undefined,
+          assistantSegmentIndex: 0,
+          assistantText: "",
+          assistantInterimTexts: [],
           reasoningItemId: undefined,
           currentModelId: currentModel,
           stopped: false,
