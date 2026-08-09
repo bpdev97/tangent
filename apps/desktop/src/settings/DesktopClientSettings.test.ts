@@ -30,7 +30,9 @@ const clientSettings: ClientSettings = {
   fontSmoothing: true,
   glassOpacity: 80,
   planModeEnabled: false,
+  preferredGenericChatEnvironmentId: null,
   providerModelPreferences: {},
+  quickChatResumeMinutes: 5,
   sidebarAutoSettleAfterDays: 3,
   sidebarProjectGroupingMode: "repository_path",
   sidebarProjectGroupingOverrides: {

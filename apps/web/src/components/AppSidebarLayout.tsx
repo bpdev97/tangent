@@ -1,20 +1,35 @@
 import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
 import {
+  useCallback,
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
 } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 
 import { isElectron } from "../env";
 import { getLocalStorageItem } from "../hooks/useLocalStorage";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import { cn, isMacPlatform } from "../lib/utils";
 import { primaryServerKeybindingsAtom } from "../state/server";
-import { useEnvironmentIdentificationMode, useLegacySidebarEnabled } from "../hooks/useSettings";
+import {
+  useClientSettings,
+  useClientSettingsHydrated,
+  useEnvironmentIdentificationMode,
+  useLegacySidebarEnabled,
+} from "../hooks/useSettings";
+import { useHandleNewChat } from "../hooks/useHandleNewThread";
+import { focusVisibleChatComposer, resolveQuickChatTarget } from "../lib/quickChat";
+import { useAllEnvironmentShellsBootstrapped, useThreadShells } from "../state/entities";
+import { useUiStateStore } from "../uiStateStore";
+import { buildThreadRouteParams } from "../threadRoutes";
+import { stackedThreadToast, toastManager } from "./ui/toast";
 import LegacyThreadSidebar from "./LegacySidebar";
 import ThreadSidebar from "./Sidebar";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
@@ -120,6 +135,13 @@ function SidebarControl() {
 
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const threads = useThreadShells();
+  const shellsBootstrapped = useAllEnvironmentShellsBootstrapped();
+  const clientSettingsHydrated = useClientSettingsHydrated();
+  const quickChatResumeMinutes = useClientSettings((settings) => settings.quickChatResumeMinutes);
+  const lastGenericChatVisit = useUiStateStore((state) => state.lastGenericChatVisit);
+  const { chatHostEnvironmentId, chatProject, handleNewChat } = useHandleNewChat();
+  const pendingQuickChatRef = useRef(false);
   const legacySidebarEnabled = useLegacySidebarEnabled();
   // Settings routes show the settings nav in place of whichever thread
   // sidebar is active.
@@ -144,6 +166,48 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       ? { "--workspace-controls-left": MACOS_TRAFFIC_LIGHTS_LEFT_INSET }
       : {}),
   } as CSSProperties;
+
+  const runQuickChat = useCallback(async () => {
+    const target = resolveQuickChatTarget({
+      lastVisit: lastGenericChatVisit,
+      resumeMinutes: quickChatResumeMinutes,
+      threads,
+    });
+    if (target.kind === "resume") {
+      await navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(
+          scopeThreadRef(EnvironmentId.make(target.environmentId), ThreadId.make(target.threadId)),
+        ),
+      });
+      focusVisibleChatComposer();
+      return;
+    }
+
+    if (chatProject === null) {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Chat host unavailable",
+          description: chatHostEnvironmentId
+            ? "Your preferred chat host is not available. The draft was not moved to another environment."
+            : "Choose a chat host in Settings, then try again.",
+        }),
+      );
+      return;
+    }
+
+    await handleNewChat();
+    focusVisibleChatComposer();
+  }, [
+    chatHostEnvironmentId,
+    chatProject,
+    handleNewChat,
+    lastGenericChatVisit,
+    navigate,
+    quickChatResumeMinutes,
+    threads,
+  ]);
 
   useEffect(() => {
     if (!isMacosDesktop) return;
@@ -174,13 +238,34 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         if (!isSettingsRoute) {
           void navigate({ to: "/settings" });
         }
+        return;
+      }
+      if (action === "quick-chat") {
+        if (!clientSettingsHydrated || !shellsBootstrapped) {
+          pendingQuickChatRef.current = true;
+          return;
+        }
+        void runQuickChat();
       }
     });
 
     return () => {
       unsubscribe?.();
     };
-  }, [navigate, pathname]);
+  }, [
+    chatHostEnvironmentId,
+    clientSettingsHydrated,
+    navigate,
+    pathname,
+    runQuickChat,
+    shellsBootstrapped,
+  ]);
+
+  useEffect(() => {
+    if (!clientSettingsHydrated || !shellsBootstrapped || !pendingQuickChatRef.current) return;
+    pendingQuickChatRef.current = false;
+    void runQuickChat();
+  }, [clientSettingsHydrated, runQuickChat, shellsBootstrapped]);
 
   return (
     <SidebarProvider className="h-dvh! min-h-0!" defaultOpen style={sidebarProviderStyle}>

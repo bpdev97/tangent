@@ -35,9 +35,22 @@ the stored seed.
 
 ## Client behavior
 
-Web, desktop, and mobile expose a first-class **New chat** action that targets the managed project
-in the preferred environment, falling back to any available environment. The logical project is
-grouped across environments under `Chats`.
+Web, desktop, and iOS expose Chats as a first-class destination. New chats target the device's
+preferred chat environment. Once the user chooses a host, selection is strict: an unavailable host
+keeps the draft in place and never falls back to another environment. Existing chats stay on the
+environment where they were created, and the logical project remains grouped across environments
+under `Chats`.
+
+On desktop and web, Chats sits above project scoping and shows the selected host inline. The normal
+active/settled thread model remains shared with the rest of the sidebar. On iOS, the home screen has
+a persistent generic-chat composer at the bottom; Search, New Thread, filters, and Settings live in
+the top navigation area. Android retains the upstream mobile layout.
+
+The macOS build registers the dedicated, fixed action URL `bpdev-code-action://quick-chat`. It is
+not a general navigation scheme. The renderer resumes the most recently viewed, unarchived generic
+chat when its visit is inside the configurable window; otherwise it opens a fresh draft on the
+preferred host. Actions received during desktop cold start are deduplicated and delivered after the
+backend and renderer are ready. Ordinary Dock activation remains unchanged.
 
 Generic-chat threads do not expose project-only affordances:
 
@@ -71,6 +84,11 @@ review, terminal, and their nested routes cannot be opened through deep links or
 - Derive existing-thread capability from `thread.projectId`; project catalog objects may arrive a
   render later and must not temporarily enable project tools.
 - Keep generic-chat presentation aligned with upstream provider-turn folding.
+- Keep the preferred-host resolver strict after explicit selection; never reintroduce implicit
+  fallback for a temporarily unavailable host.
+- Keep Quick Chat's external action fixed and allowlisted. Do not turn the action scheme into an
+  arbitrary in-app URL router.
+- Keep the iOS home composer on the existing project-thread creation and offline outbox paths.
 - Keep normal project behavior unchanged; shared helpers must branch only on the reserved ID.
 
 ## Revalidation procedure
@@ -79,12 +97,19 @@ Run the focused tests:
 
 ```sh
 vp test packages/shared/src/genericChat.test.ts \
+  packages/contracts/src/settings.test.ts \
   packages/client-runtime/src/state/projectGrouping.genericChat.test.ts \
   apps/server/src/genericChat.test.ts \
   apps/server/src/orchestration/Layers/ProviderCommandReactor.genericChat.test.ts \
-  apps/web/src/lib/chatThreadActions.test.ts
+  apps/web/src/lib/chatThreadActions.test.ts \
+  apps/web/src/lib/quickChat.test.ts \
+  apps/desktop/src/app/DesktopQuickChat.test.ts \
+  apps/desktop/src/app/DesktopLifecycle.test.ts \
+  apps/desktop/src/window/DesktopWindow.test.ts \
+  apps/mobile/src/features/home/homeChat.test.ts
 ```
 
 Then run `vp check`, `vp run typecheck`, and `vp run lint:mobile`. Smoke-test New Chat on web and
-mobile, switch its environment, resume an existing chat, and confirm that files, Git, terminal,
-branch, worktree, and project-script controls remain absent.
+mobile, select and disconnect a preferred host, exercise Quick Chat inside and outside its resume
+window, resume an existing chat, and confirm that files, Git, terminal, branch, worktree, and
+project-script controls remain absent.

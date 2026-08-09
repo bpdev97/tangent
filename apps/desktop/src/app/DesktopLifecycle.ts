@@ -13,6 +13,7 @@ import * as DesktopShutdown from "./DesktopShutdown.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronTheme from "../electron/ElectronTheme.ts";
 import * as DesktopState from "./DesktopState.ts";
+import { isQuickChatActionUrl, resolveQuickChatActionScheme } from "./DesktopQuickChat.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
 
 export class DesktopLifecycleRelaunchError extends Schema.TaggedErrorClass<DesktopLifecycleRelaunchError>()(
@@ -206,6 +207,18 @@ export const make = DesktopLifecycle.of({
     yield* electronApp.on("activate", () => {
       void runEffect(desktopWindow.activate.pipe(Effect.withSpan("desktop.lifecycle.activate")));
     });
+    if (environment.platform === "darwin") {
+      const quickChatScheme = resolveQuickChatActionScheme(environment.isDevelopment);
+      yield* electronApp.on("open-url", (event: Electron.Event, url: string) => {
+        if (!isQuickChatActionUrl(url, quickChatScheme)) return;
+        event.preventDefault();
+        void runEffect(
+          desktopWindow
+            .dispatchMenuAction("quick-chat")
+            .pipe(Effect.withSpan("desktop.lifecycle.quickChat")),
+        );
+      });
+    }
     yield* electronApp.on("window-all-closed", () => {
       void runEffect(
         Effect.gen(function* () {

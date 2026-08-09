@@ -17,6 +17,7 @@ describe("DesktopLifecycle", () => {
   for (const platform of ["darwin", "win32", "linux"] satisfies ReadonlyArray<NodeJS.Platform>) {
     it.effect(`lets the updater's quit event proceed on ${platform}`, () => {
       const appListeners = new Map<string, (...args: readonly unknown[]) => void>();
+      const dispatchedMenuActions: string[] = [];
 
       const electronAppLayer = Layer.succeed(ElectronApp.ElectronApp, {
         metadata: Effect.die("unexpected metadata read"),
@@ -77,7 +78,10 @@ describe("DesktopLifecycle", () => {
         handleBackendReady: () => Effect.void,
         handleBackendNotReady: Effect.void,
         flushMainWindowBounds: Effect.void,
-        dispatchMenuAction: () => Effect.void,
+        dispatchMenuAction: (action) =>
+          Effect.sync(() => {
+            dispatchedMenuActions.push(action);
+          }),
         zoomMain: () => Effect.void,
         syncAppearance: Effect.void,
       });
@@ -100,6 +104,21 @@ describe("DesktopLifecycle", () => {
         Effect.gen(function* () {
           const lifecycle = yield* DesktopLifecycle.DesktopLifecycle;
           yield* lifecycle.register;
+
+          if (platform === "darwin") {
+            let quickChatPrevented = false;
+            appListeners.get("open-url")?.(
+              {
+                preventDefault: () => {
+                  quickChatPrevented = true;
+                },
+              } as Electron.Event,
+              "bpdev-code-action://quick-chat",
+            );
+            yield* Effect.yieldNow;
+            assert.isTrue(quickChatPrevented);
+            assert.deepEqual(dispatchedMenuActions, ["quick-chat"]);
+          }
 
           appListeners.get("before-quit-for-update")?.();
 

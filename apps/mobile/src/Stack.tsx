@@ -434,7 +434,7 @@ export const RootStack = createNativeStackNavigator({
         ...GLASS_HEADER_OPTIONS,
         contentStyle: { backgroundColor: "transparent" },
         headerBackVisible: false,
-        ...getCompactBrandHeaderOptions(),
+        ...(Platform.OS === "ios" ? { title: "Chats" } : getCompactBrandHeaderOptions()),
       },
     }),
     Thread: createNativeStackScreen({

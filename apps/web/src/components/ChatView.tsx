@@ -1263,6 +1263,7 @@ function ChatViewContent(props: ChatViewProps) {
     };
   }, [routeKind, routeThreadRef, routeThreadState]);
   const markThreadVisited = useUiStateStore((store) => store.markThreadVisited);
+  const recordGenericChatVisit = useUiStateStore((store) => store.recordGenericChatVisit);
   const settings = useEnvironmentSettings(environmentId);
   // New-thread defaults live in the primary environment's settings.json (the
   // settings UI never writes to remote environments), so read them from the
@@ -1657,6 +1658,14 @@ function ChatViewContent(props: ChatViewProps) {
     : null;
   const activeProject = useProject(activeProjectRef);
   const isGenericChat = isGenericChatProject(activeProject);
+  useEffect(() => {
+    if (!isGenericChat || !isServerThread || activeThreadRef === null) return;
+    recordGenericChatVisit({
+      environmentId: activeThreadRef.environmentId,
+      threadId: activeThreadRef.threadId,
+      visitedAt: new Date().toISOString(),
+    });
+  }, [activeThreadRef, isGenericChat, isServerThread, recordGenericChatVisit]);
   const projectToolsAvailable = activeProject !== null && !isGenericChat;
   const handleNewThreadInActiveProject = useCallback(() => {
     startNewThreadForProject(activeProjectRef, handleNewThread);
@@ -6062,7 +6071,7 @@ function ChatViewContent(props: ChatViewProps) {
             activeThreadEnvironmentId={activeThread.environmentId}
             activeThreadId={activeThread.id}
             {...(routeKind === "draft" && draftId ? { draftId } : {})}
-            activeThreadTitle={activeThread.title}
+            activeThreadTitle={isGenericChat && !isServerThread ? "New chat" : activeThread.title}
             isServerThread={isServerThread}
             changeRequestState={activeThreadPr?.state ?? null}
             activeProjectName={isGenericChat ? undefined : activeProject?.title}

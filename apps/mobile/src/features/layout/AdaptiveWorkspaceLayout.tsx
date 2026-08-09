@@ -319,9 +319,7 @@ function AdaptiveWorkspaceLayoutContent(
   const activeThreadShell = useThreadShell(selectedThreadRef);
   const activeThreadSupportsProjectTools =
     activeThreadShell !== null && !isGenericChatProjectId(activeThreadShell.projectId);
-  const { genericChatAvailable, startGenericChat } = useStartGenericChat(
-    selectedThreadRef?.environmentId ?? null,
-  );
+  const { genericChatAvailable, startGenericChat } = useStartGenericChat();
   // Wrapped in an object: bare functions in useState would be treated as
   // lazy initializers/updaters. `active: false` keeps the outgoing route's
   // content mounted so the pane can animate closed (or be replaced

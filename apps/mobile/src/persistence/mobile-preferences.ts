@@ -34,6 +34,8 @@ export interface Preferences {
    * default flat list — see `resolveThreadListV2Enabled`.
    */
   readonly legacyThreadListEnabled?: boolean;
+  /** Device-local environment used for every new generic chat. */
+  readonly preferredGenericChatEnvironmentId?: string;
 }
 
 export class MobilePreferencesLoadError extends Schema.TaggedErrorClass<MobilePreferencesLoadError>()(
@@ -86,6 +88,7 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     projectGroupingEnabled?: boolean;
     projectGroupingMode?: SidebarProjectGroupingMode;
     legacyThreadListEnabled?: boolean;
+    preferredGenericChatEnvironmentId?: string;
   } = {};
 
   if (typeof parsed.liveActivitiesEnabled === "boolean") {
@@ -124,6 +127,12 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   }
   if (typeof parsed.legacyThreadListEnabled === "boolean") {
     preferences.legacyThreadListEnabled = parsed.legacyThreadListEnabled;
+  }
+  if (
+    typeof parsed.preferredGenericChatEnvironmentId === "string" &&
+    parsed.preferredGenericChatEnvironmentId.trim().length > 0
+  ) {
+    preferences.preferredGenericChatEnvironmentId = parsed.preferredGenericChatEnvironmentId.trim();
   }
   return preferences;
 }
