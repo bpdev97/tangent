@@ -5963,6 +5963,9 @@ function ChatViewContent(props: ChatViewProps) {
           mode="embedded"
           threadRef={activeThreadRef}
           tabId={activeRightPanelSurface.resourceId}
+          {...(activeRightPanelSurface.presentation
+            ? { presentation: activeRightPanelSurface.presentation }
+            : {})}
           configuredUrls={configuredPreviewUrls}
           visible
           onSendAnnotation={(annotation, image) => {

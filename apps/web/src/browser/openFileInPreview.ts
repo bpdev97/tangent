@@ -20,7 +20,7 @@ import {
   isPreviewSupportedInRuntime,
   rememberPreviewUrl,
 } from "~/previewStateStore";
-import { useRightPanelStore } from "~/rightPanelStore";
+import { type LinearPreviewPresentation, useRightPanelStore } from "~/rightPanelStore";
 
 export const isBrowserPreviewFile = (path: string): boolean =>
   /\.(?:html?|pdf)$/i.test(path.split(/[?#]/, 1)[0] ?? "");
@@ -36,11 +36,16 @@ export type OpenPreviewMutation<E = unknown> = (input: {
   readonly input: PreviewOpenInput;
 }) => Promise<AtomCommandResult<PreviewSessionSnapshot, E>>;
 
-export async function openUrlInPreview<E>(input: {
+interface OpenUrlInPreviewInput<E> {
   readonly threadRef: ScopedThreadRef;
   readonly url: string;
   readonly openPreview: OpenPreviewMutation<E>;
-}): Promise<AtomCommandResult<void, E>> {
+  readonly presentation?: LinearPreviewPresentation;
+}
+
+export async function openUrlInPreviewSession<E>(
+  input: OpenUrlInPreviewInput<E>,
+): Promise<AtomCommandResult<PreviewSessionSnapshot, E>> {
   const result = await input.openPreview({
     environmentId: input.threadRef.environmentId,
     input: { threadId: input.threadRef.threadId, url: input.url },
@@ -48,8 +53,16 @@ export async function openUrlInPreview<E>(input: {
   return mapAtomCommandResult(result, (snapshot) => {
     applyPreviewServerSnapshot(input.threadRef, snapshot);
     rememberPreviewUrl(input.threadRef, input.url);
-    useRightPanelStore.getState().openBrowser(input.threadRef, snapshot.tabId);
+    useRightPanelStore.getState().openBrowser(input.threadRef, snapshot.tabId, input.presentation);
+    return snapshot;
   });
+}
+
+export async function openUrlInPreview<E>(
+  input: OpenUrlInPreviewInput<E>,
+): Promise<AtomCommandResult<void, E>> {
+  const result = await openUrlInPreviewSession(input);
+  return mapAtomCommandResult(result, () => undefined);
 }
 
 export async function openFileInPreview<AssetError, PreviewError>(input: {

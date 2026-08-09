@@ -327,6 +327,48 @@ describe("rightPanelStore", () => {
     });
   });
 
+  it("keeps Linear presentation metadata with its browser surface", () => {
+    useRightPanelStore.getState().openBrowser(refA, "tab-linear", {
+      _tag: "linear",
+      reviewUrl: "https://linear.review/bpdev97/tangent/pull/52",
+      tickets: [],
+      ticketLookup: "loading",
+    });
+
+    useRightPanelStore.getState().setBrowserPresentation(refA, "tab-linear", {
+      _tag: "linear",
+      reviewUrl: "https://linear.review/bpdev97/tangent/pull/52",
+      tickets: [
+        {
+          id: "issue-1",
+          identifier: "TAN-42",
+          title: "Make Linear feel native",
+          url: "https://linear.app/tangent/issue/TAN-42",
+        },
+      ],
+      ticketLookup: "ready",
+    });
+
+    expect(selectActiveRightPanelSurface(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
+      id: "browser:tab-linear",
+      kind: "preview",
+      resourceId: "tab-linear",
+      presentation: {
+        _tag: "linear",
+        reviewUrl: "https://linear.review/bpdev97/tangent/pull/52",
+        tickets: [
+          {
+            id: "issue-1",
+            identifier: "TAN-42",
+            title: "Make Linear feel native",
+            url: "https://linear.app/tangent/issue/TAN-42",
+          },
+        ],
+        ticketLookup: "ready",
+      },
+    });
+  });
+
   it("tracks one surface per terminal session", () => {
     useRightPanelStore.getState().openTerminal(refA, "term-1");
     useRightPanelStore.getState().openTerminal(refA, "term-2");

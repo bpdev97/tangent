@@ -8,7 +8,7 @@
  * workspace paths, and diff/files remain singleton surfaces.
  */
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import type { LinearTicketDestination, ScopedThreadRef } from "@t3tools/contracts";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
@@ -24,9 +24,21 @@ export const RIGHT_PANEL_KINDS = [
 ] as const;
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
 
+export interface LinearPreviewPresentation {
+  readonly _tag: "linear";
+  readonly reviewUrl: string | null;
+  readonly tickets: ReadonlyArray<LinearTicketDestination>;
+  readonly ticketLookup: "loading" | "ready" | "unavailable";
+}
+
 export type RightPanelSurface =
-  | { id: `browser:${string}`; kind: "preview"; resourceId: string }
-  | { id: "browser:new"; kind: "preview"; resourceId: null }
+  | {
+      id: `browser:${string}`;
+      kind: "preview";
+      resourceId: string;
+      presentation?: LinearPreviewPresentation;
+    }
+  | { id: "browser:new"; kind: "preview"; resourceId: null; presentation?: undefined }
   | {
       id: `terminal:${string}`;
       kind: "terminal";
@@ -59,7 +71,16 @@ export interface ThreadRightPanelState {
 interface RightPanelStoreState {
   byThreadKey: Record<string, ThreadRightPanelState>;
   open: (ref: ScopedThreadRef, kind: Exclude<RightPanelKind, "file" | "terminal">) => void;
-  openBrowser: (ref: ScopedThreadRef, tabId: string | null) => void;
+  openBrowser: (
+    ref: ScopedThreadRef,
+    tabId: string | null,
+    presentation?: LinearPreviewPresentation,
+  ) => void;
+  setBrowserPresentation: (
+    ref: ScopedThreadRef,
+    tabId: string,
+    presentation: LinearPreviewPresentation,
+  ) => void;
   openFile: (ref: ScopedThreadRef, relativePath: string, line?: number) => void;
   openTerminal: (ref: ScopedThreadRef, terminalId: string) => void;
   splitTerminal: (
@@ -103,9 +124,17 @@ const singletonSurface = (
   }
 };
 
-const browserSurface = (tabId: string | null): RightPanelSurface =>
+const browserSurface = (
+  tabId: string | null,
+  presentation?: LinearPreviewPresentation,
+): RightPanelSurface =>
   tabId
-    ? { id: `browser:${tabId}`, kind: "preview", resourceId: tabId }
+    ? {
+        id: `browser:${tabId}`,
+        kind: "preview",
+        resourceId: tabId,
+        ...(presentation ? { presentation } : {}),
+      }
     : { id: "browser:new", kind: "preview", resourceId: null };
 
 const fileSurface = (
@@ -268,14 +297,29 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             return upsertSurface(current, singletonSurface(kind));
           }),
         })),
-      openBrowser: (ref, tabId) =>
+      openBrowser: (ref, tabId, presentation) =>
         set((state) => ({
           byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
-            const surface = browserSurface(tabId);
+            const surface = browserSurface(tabId, presentation);
             const withoutPlaceholder = tabId
               ? current.surfaces.filter((entry) => entry.id !== "browser:new")
               : current.surfaces;
             return upsertSurface({ ...current, surfaces: withoutPlaceholder }, surface);
+          }),
+        })),
+      setBrowserPresentation: (ref, tabId, presentation) =>
+        set((state) => ({
+          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+            const surfaceId = `browser:${tabId}`;
+            if (!current.surfaces.some((surface) => surface.id === surfaceId)) return current;
+            return {
+              ...current,
+              surfaces: current.surfaces.map((surface) =>
+                surface.kind === "preview" && surface.resourceId === tabId
+                  ? { ...surface, presentation }
+                  : surface,
+              ),
+            };
           }),
         })),
       openFile: (ref, relativePath, line) =>
