@@ -68,7 +68,10 @@ describe("openLinearPreviewDestination", () => {
       openPreview,
     });
 
-    expect(result).toEqual(AsyncResult.success(review));
+    expect(result._tag).toBe("Success");
+    if (result._tag === "Success") {
+      expect(result.value).toEqual(review);
+    }
     expect(openPreview).not.toHaveBeenCalled();
     expect(readThreadPreviewState(threadRef).activeTabId).toBe(review.tabId);
     expect(
