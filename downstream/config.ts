@@ -28,6 +28,8 @@ export const PERSONAL_DISTRIBUTION = {
     appId: "com.bpdev97.t3code.macos",
     scheme: "bpdev-code",
     developmentScheme: "bpdev-code-dev",
+    actionScheme: "bpdev-code-action",
+    developmentActionScheme: "bpdev-code-dev-action",
     productName: "Tangent",
     developmentProductName: "Tangent Dev",
     nightlyProductName: "Tangent Nightly",

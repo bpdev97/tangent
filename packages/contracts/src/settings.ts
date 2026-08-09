@@ -103,6 +103,17 @@ export const EnvironmentIdentificationMode = Schema.Literals(["artwork", "pill",
 export type EnvironmentIdentificationMode = typeof EnvironmentIdentificationMode.Type;
 export const DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE: EnvironmentIdentificationMode = "artwork";
 
+export const MIN_QUICK_CHAT_RESUME_MINUTES = 1;
+export const MAX_QUICK_CHAT_RESUME_MINUTES = 60;
+export const QuickChatResumeMinutes = Schema.Int.check(
+  Schema.isBetween({
+    minimum: MIN_QUICK_CHAT_RESUME_MINUTES,
+    maximum: MAX_QUICK_CHAT_RESUME_MINUTES,
+  }),
+);
+export type QuickChatResumeMinutes = typeof QuickChatResumeMinutes.Type;
+export const DEFAULT_QUICK_CHAT_RESUME_MINUTES: QuickChatResumeMinutes = 5;
+
 /**
  * A user-chosen font family (a single name or a comma-separated list). Empty
  * means "use the app default"; clients compose their own fallback stacks.
@@ -171,6 +182,12 @@ export const ClientSettingsSchema = Schema.Struct({
   // default UI; this beta flag restores it (plus the /plan and /default slash
   // commands) for users who still rely on the old workflow.
   planModeEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  preferredGenericChatEnvironmentId: Schema.NullOr(TrimmedNonEmptyString).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  quickChatResumeMinutes: Schema.NullOr(QuickChatResumeMinutes).pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_QUICK_CHAT_RESUME_MINUTES)),
+  ),
   // Legacy sidebar (the original per-project tree). Deliberately a fresh key
   // (was `sidebarV2Enabled` + `sidebarV2ConfiguredByUser`): decoding drops the
   // old keys, so everyone, including prior beta opt-outs, resets to the new
@@ -877,6 +894,8 @@ export const ClientSettingsPatch = Schema.Struct({
     ),
   ),
   planModeEnabled: Schema.optionalKey(Schema.Boolean),
+  preferredGenericChatEnvironmentId: Schema.optionalKey(Schema.NullOr(TrimmedNonEmptyString)),
+  quickChatResumeMinutes: Schema.optionalKey(Schema.NullOr(QuickChatResumeMinutes)),
   legacySidebarEnabled: Schema.optionalKey(Schema.Boolean),
   sidebarAutoSettleAfterDays: Schema.optionalKey(Schema.NullOr(SidebarAutoSettleAfterDays)),
   sidebarProjectGroupingMode: Schema.optionalKey(SidebarProjectGroupingMode),

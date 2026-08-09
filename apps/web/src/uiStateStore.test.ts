@@ -10,6 +10,7 @@ import {
   type PersistedUiState,
   persistState,
   reorderProjects,
+  recordGenericChatVisit,
   resolveProjectExpanded,
   setDefaultAdvertisedEndpointKey,
   setProjectExpanded,
@@ -23,6 +24,7 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
     projectOrder: [],
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
+    lastGenericChatVisit: null,
     defaultAdvertisedEndpointKey: null,
     ...overrides,
   };
@@ -135,6 +137,19 @@ describe("uiStateStore pure functions", () => {
     });
   });
 
+  it("records the last generic chat visit with its environment scope", () => {
+    const visit = {
+      environmentId: "mac-mini",
+      threadId: "chat-1",
+      visitedAt: "2026-08-09T15:00:00.000Z",
+    };
+    const next = recordGenericChatVisit(makeUiState(), visit);
+
+    expect(next.lastGenericChatVisit).toEqual(visit);
+    expect(recordGenericChatVisit(next, visit)).toBe(next);
+    expect(recordGenericChatVisit(next, { ...visit, visitedAt: "invalid" })).toBe(next);
+  });
+
   it("stores the endpoint preference by stable key", () => {
     const next = setDefaultAdvertisedEndpointKey(makeUiState(), "desktop-core:lan:http");
 
@@ -158,6 +173,11 @@ describe("parsePersistedState", () => {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
         invalid: "not-a-date",
       },
+      lastGenericChatVisit: {
+        environmentId: "mac-mini",
+        threadId: "chat-1",
+        visitedAt: "2026-08-09T15:00:00.000Z",
+      },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
       threadChangedFilesExpansionVersion: 1,
       threadChangedFilesExpandedById: {
@@ -175,6 +195,11 @@ describe("parsePersistedState", () => {
       projectOrder: ["physical-b", "physical-a"],
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
+      },
+      lastGenericChatVisit: {
+        environmentId: "mac-mini",
+        threadId: "chat-1",
+        visitedAt: "2026-08-09T15:00:00.000Z",
       },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
       threadChangedFilesExpandedById: {
@@ -273,6 +298,11 @@ describe("uiStateStore persistence", () => {
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
+      lastGenericChatVisit: {
+        environmentId: "mac-mini",
+        threadId: "chat-1",
+        visitedAt: "2026-08-09T15:00:00.000Z",
+      },
       threadChangedFilesExpandedById: {
         "environment:thread-1": {
           "turn-1": false,
@@ -294,6 +324,11 @@ describe("uiStateStore persistence", () => {
       projectOrder: ["physical-b", "physical-a"],
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
+      },
+      lastGenericChatVisit: {
+        environmentId: "mac-mini",
+        threadId: "chat-1",
+        visitedAt: "2026-08-09T15:00:00.000Z",
       },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
       threadChangedFilesExpansionVersion: 1,

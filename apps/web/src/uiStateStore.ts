@@ -21,6 +21,7 @@ export interface PersistedUiState {
   projectExpandedById?: Record<string, boolean>;
   projectOrder?: string[];
   threadLastVisitedAtById?: Record<string, string>;
+  lastGenericChatVisit?: LastGenericChatVisit | null;
   collapsedProjectCwds?: string[];
   expandedProjectCwds?: string[];
   projectOrderCwds?: string[];
@@ -37,6 +38,13 @@ export interface UiProjectState {
 export interface UiThreadState {
   threadLastVisitedAtById: Record<string, string>;
   threadChangedFilesExpandedById: Record<string, Record<string, boolean>>;
+  lastGenericChatVisit: LastGenericChatVisit | null;
+}
+
+export interface LastGenericChatVisit {
+  readonly environmentId: string;
+  readonly threadId: string;
+  readonly visitedAt: string;
 }
 
 export interface UiEndpointState {
@@ -50,6 +58,7 @@ const initialState: UiState = {
   projectOrder: [],
   threadLastVisitedAtById: {},
   threadChangedFilesExpandedById: {},
+  lastGenericChatVisit: null,
   defaultAdvertisedEndpointKey: null,
 };
 
@@ -98,6 +107,26 @@ function sanitizeTimestampRecord(value: unknown): Record<string, string> {
   );
 }
 
+function sanitizeLastGenericChatVisit(value: unknown): LastGenericChatVisit | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<LastGenericChatVisit>;
+  if (
+    typeof candidate.environmentId !== "string" ||
+    candidate.environmentId.length === 0 ||
+    typeof candidate.threadId !== "string" ||
+    candidate.threadId.length === 0 ||
+    typeof candidate.visitedAt !== "string" ||
+    !Number.isFinite(Date.parse(candidate.visitedAt))
+  ) {
+    return null;
+  }
+  return {
+    environmentId: candidate.environmentId,
+    threadId: candidate.threadId,
+    visitedAt: candidate.visitedAt,
+  };
+}
+
 export function parsePersistedState(parsed: PersistedUiState): UiState {
   const projectExpandedById =
     parsed.projectExpandedById === undefined
@@ -126,6 +155,7 @@ export function parsePersistedState(parsed: PersistedUiState): UiState {
     projectExpandedById,
     projectOrder,
     threadLastVisitedAtById: sanitizeTimestampRecord(parsed.threadLastVisitedAtById),
+    lastGenericChatVisit: sanitizeLastGenericChatVisit(parsed.lastGenericChatVisit),
     threadChangedFilesExpandedById:
       parsed.threadChangedFilesExpansionVersion === THREAD_CHANGED_FILES_EXPANSION_VERSION
         ? sanitizePersistedThreadChangedFilesExpanded(parsed.threadChangedFilesExpandedById)
@@ -204,6 +234,7 @@ export function persistState(state: UiState): void {
         projectExpandedById,
         projectOrder: state.projectOrder,
         threadLastVisitedAtById: state.threadLastVisitedAtById,
+        lastGenericChatVisit: state.lastGenericChatVisit,
         defaultAdvertisedEndpointKey: state.defaultAdvertisedEndpointKey,
         threadChangedFilesExpansionVersion: THREAD_CHANGED_FILES_EXPANSION_VERSION,
         threadChangedFilesExpandedById: state.threadChangedFilesExpandedById,
@@ -268,6 +299,19 @@ export function markThreadUnread(
       [threadId]: unreadVisitedAt,
     },
   };
+}
+
+export function recordGenericChatVisit(state: UiState, visit: LastGenericChatVisit): UiState {
+  if (!Number.isFinite(Date.parse(visit.visitedAt))) return state;
+  const previous = state.lastGenericChatVisit;
+  if (
+    previous?.environmentId === visit.environmentId &&
+    previous.threadId === visit.threadId &&
+    previous.visitedAt === visit.visitedAt
+  ) {
+    return state;
+  }
+  return { ...state, lastGenericChatVisit: visit };
 }
 
 export function setThreadChangedFilesExpanded(
@@ -384,6 +428,7 @@ export function reorderProjects(
 interface UiStateStore extends UiState {
   markThreadVisited: (threadId: string, visitedAt: string) => void;
   markThreadUnread: (threadId: string, latestTurnCompletedAt: string | null | undefined) => void;
+  recordGenericChatVisit: (visit: LastGenericChatVisit) => void;
   setThreadChangedFilesExpanded: (threadId: string, turnId: string, expanded: boolean) => void;
   setDefaultAdvertisedEndpointKey: (key: string | null) => void;
   setProjectExpanded: (projectIds: string | readonly string[], expanded: boolean) => void;
@@ -400,6 +445,7 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
     set((state) => markThreadVisited(state, threadId, visitedAt)),
   markThreadUnread: (threadId, latestTurnCompletedAt) =>
     set((state) => markThreadUnread(state, threadId, latestTurnCompletedAt)),
+  recordGenericChatVisit: (visit) => set((state) => recordGenericChatVisit(state, visit)),
   setThreadChangedFilesExpanded: (threadId, turnId, expanded) =>
     set((state) => setThreadChangedFilesExpanded(state, threadId, turnId, expanded)),
   setDefaultAdvertisedEndpointKey: (key) =>

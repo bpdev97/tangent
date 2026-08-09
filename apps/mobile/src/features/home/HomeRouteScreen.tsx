@@ -2,6 +2,7 @@ import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
 import { useNavigation } from "@react-navigation/native";
 import { useEffect, useMemo, useState } from "react";
+import { Platform, View } from "react-native";
 
 import { NativeHeaderToolbar, NativeStackScreenOptions } from "../../native/StackHeader";
 import { useProjects, useThreadShells } from "../../state/entities";
@@ -15,6 +16,7 @@ import { checkForAppUpdateOnLaunch } from "../updates/app-updates";
 import { AndroidHomeFabLayout } from "./AndroidHomeFab";
 import { HomeScreen } from "./HomeScreen";
 import { HomeHeader } from "./HomeHeader";
+import { HOME_CHAT_COMPOSER_CLEARANCE, HomeChatComposer } from "./HomeChatComposer";
 import { useHomeListOptions } from "./home-list-options";
 import { buildHomeProjectScopes } from "./homeThreadList";
 import { usePendingTaskListActions } from "./usePendingTaskListActions";
@@ -77,7 +79,7 @@ export function HomeRouteScreen() {
     setThreadSortOrder,
   } = useHomeListOptions(availableEnvironmentIds);
   const selectedEnvironmentId = listOptions.selectedEnvironmentId;
-  const { genericChatAvailable, startGenericChat } = useStartGenericChat(selectedEnvironmentId);
+  const { genericChatAvailable, startGenericChat } = useStartGenericChat();
   const [selectedProjectKey, setSelectedProjectKey] = useState<string | null>(null);
   const projectFilterOptions = useMemo(
     () =>
@@ -116,18 +118,13 @@ export function HomeRouteScreen() {
               onPress={() => navigation.navigate("NewTaskSheet", { screen: "NewTask" })}
             />
           }
-        >
-          <NativeHeaderToolbar.Button
-            accessibilityLabel="New chat"
-            disabled={!genericChatAvailable}
-            icon="bubble.left.and.bubble.right"
-            onPress={startGenericChat}
-          />
-        </WorkspaceSidebarToolbar>
-        <WorkspaceEmptyDetail
-          onStartNewChat={genericChatAvailable ? startGenericChat : undefined}
-          onStartNewTask={() => navigation.navigate("NewTaskSheet", { screen: "NewTask" })}
         />
+        <View className="flex-1">
+          <WorkspaceEmptyDetail
+            onStartNewTask={() => navigation.navigate("NewTaskSheet", { screen: "NewTask" })}
+          />
+          {Platform.OS === "ios" ? <HomeChatComposer /> : null}
+        </View>
       </>
     );
   }
@@ -141,12 +138,14 @@ export function HomeRouteScreen() {
             header. The brand slot doubles as the connection status surface:
             while an environment reconnects, the lockup fades to a status label
             in place (no layout shift in the list below). */}
-        <NativeStackScreenOptions
-          options={getConnectionAwareBrandHeaderOptions({
-            onOpenEnvironments: () =>
-              navigation.navigate("SettingsSheet", { screen: "SettingsEnvironments" }),
-          })}
-        />
+        {Platform.OS === "ios" ? null : (
+          <NativeStackScreenOptions
+            options={getConnectionAwareBrandHeaderOptions({
+              onOpenEnvironments: () =>
+                navigation.navigate("SettingsSheet", { screen: "SettingsEnvironments" }),
+            })}
+          />
+        )}
         <HomeHeader
           environments={environments}
           projects={projectFilterOptions}
@@ -170,6 +169,7 @@ export function HomeRouteScreen() {
         />
 
         <HomeScreen
+          bottomOverlayHeight={Platform.OS === "ios" ? HOME_CHAT_COMPOSER_CLEARANCE : 0}
           catalogState={catalogState}
           environments={environments}
           onAddConnection={() =>
@@ -222,6 +222,7 @@ export function HomeRouteScreen() {
           threads={threads}
           threadSortOrder={listOptions.threadSortOrder}
         />
+        {Platform.OS === "ios" ? <HomeChatComposer /> : null}
       </>
     </AndroidHomeFabLayout>
   );

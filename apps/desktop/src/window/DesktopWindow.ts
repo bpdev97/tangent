@@ -267,6 +267,7 @@ export const make = Effect.gen(function* () {
   // createMainIfBackendReady, which gates the post-readiness window
   // open in development and the macOS "activate without windows" path.
   const backendReadyRef = yield* Ref.make(false);
+  const pendingMenuActionsRef = yield* Ref.make<ReadonlySet<string>>(new Set());
   // The transient "Connecting to WSL" splash window, tracked separately so it
   // is never mistaken for the real main window.
   const splashWindowRef = yield* Ref.make<Option.Option<Electron.BrowserWindow>>(Option.none());
@@ -731,6 +732,26 @@ export const make = Effect.gen(function* () {
     return window;
   }).pipe(Effect.withSpan("desktop.window.revealOrCreateMain"));
 
+  const dispatchMenuActionNow = Effect.fn("desktop.window.dispatchMenuActionNow")(function* (
+    action: string,
+  ) {
+    const existingWindow = yield* focusedMainWindow;
+    const targetWindow = Option.isSome(existingWindow) ? existingWindow.value : yield* ensureMain;
+
+    const send = () => {
+      if (targetWindow.isDestroyed()) return;
+      targetWindow.webContents.send(MENU_ACTION_CHANNEL, action);
+      void runPromise(electronWindow.reveal(targetWindow));
+    };
+
+    if (targetWindow.webContents.isLoadingMainFrame()) {
+      targetWindow.webContents.once("did-finish-load", send);
+      return;
+    }
+
+    send();
+  });
+
   const createMainIfBackendReady = Effect.gen(function* () {
     const backendReady = yield* Ref.get(backendReadyRef);
     if (!backendReady) return;
@@ -816,6 +837,10 @@ export const make = Effect.gen(function* () {
       yield* Ref.set(backendReadyRef, true);
       yield* logWindowInfo("backend ready", { source: "http", url: httpBaseUrl.href });
       yield* createMainIfBackendReady;
+      const pendingActions = yield* Ref.getAndSet(pendingMenuActionsRef, new Set());
+      for (const action of pendingActions) {
+        yield* dispatchMenuActionNow(action);
+      }
     }),
     handleBackendNotReady: Ref.set(backendReadyRef, false).pipe(
       Effect.withSpan("desktop.window.handleBackendNotReady"),
@@ -825,24 +850,11 @@ export const make = Effect.gen(function* () {
     ),
     dispatchMenuAction: Effect.fn("desktop.window.dispatchMenuAction")(function* (action) {
       yield* Effect.annotateCurrentSpan({ action });
-      const existingWindow = yield* focusedMainWindow;
-      if (Option.isNone(existingWindow) && !(yield* Ref.get(backendReadyRef))) {
+      if (!(yield* Ref.get(backendReadyRef))) {
+        yield* Ref.update(pendingMenuActionsRef, (pending) => new Set([...pending, action]));
         return;
       }
-      const targetWindow = Option.isSome(existingWindow) ? existingWindow.value : yield* ensureMain;
-
-      const send = () => {
-        if (targetWindow.isDestroyed()) return;
-        targetWindow.webContents.send(MENU_ACTION_CHANNEL, action);
-        void runPromise(electronWindow.reveal(targetWindow));
-      };
-
-      if (targetWindow.webContents.isLoadingMainFrame()) {
-        targetWindow.webContents.once("did-finish-load", send);
-        return;
-      }
-
-      send();
+      yield* dispatchMenuActionNow(action);
     }),
     zoomMain: Effect.fn("desktop.window.zoomMain")(function* (direction) {
       yield* Effect.annotateCurrentSpan({ direction });

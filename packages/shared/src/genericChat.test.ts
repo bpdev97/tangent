@@ -5,6 +5,7 @@ import {
   buildGenericChatProviderInput,
   extractGenericChatUserInput,
   findGenericChatProject,
+  findGenericChatProjectInEnvironment,
   GENERIC_CHAT_PROJECT_ID,
   isGenericChatProject,
   isGenericChatProjectId,
@@ -52,6 +53,8 @@ describe("generic chat", () => {
 
     expect(findGenericChatProject(projects, "local")?.environmentId).toBe("local");
     expect(findGenericChatProject(projects, "missing")?.environmentId).toBe("remote");
+    expect(findGenericChatProjectInEnvironment(projects, "local")?.environmentId).toBe("local");
+    expect(findGenericChatProjectInEnvironment(projects, "missing")).toBeNull();
   });
 
   it("still supplies the host context for attachment-only turns", () => {

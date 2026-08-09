@@ -516,7 +516,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     assert.notInclude(error.message, secret);
   });
 
-  it.effect("adds passkey entitlements without registering upstream URL schemes", () =>
+  it.effect("adds passkey entitlements and only the dedicated Quick Chat scheme", () =>
     Effect.gen(function* () {
       const config = yield* createBuildConfig("mac", "dmg", "1.2.3", true, false, undefined, {
         entitlementsPath: "/tmp/entitlements.mac.plist",
@@ -528,7 +528,9 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       assert.equal(config.artifactName, "tangent-${version}-${arch}.${ext}");
       assert.equal(mac.entitlements, "/tmp/entitlements.mac.plist");
       assert.equal(mac.provisioningProfile, "/tmp/t3code.provisionprofile");
-      assert.notProperty(mac, "protocols");
+      assert.deepStrictEqual(mac.protocols, [
+        { name: "Tangent Quick Chat", schemes: ["bpdev-code-action"] },
+      ]);
     }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
   );
 

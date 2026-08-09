@@ -1569,6 +1569,12 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       target: target === "dmg" ? [target, "zip"] : [target],
       icon: "icon.icns",
       category: "public.app-category.developer-tools",
+      protocols: [
+        {
+          name: `${PERSONAL_DISTRIBUTION.macos.productName} Quick Chat`,
+          schemes: [PERSONAL_DISTRIBUTION.macos.actionScheme],
+        },
+      ],
       ...(macPasskeySigning
         ? {
             entitlements: macPasskeySigning.entitlementsPath,

@@ -94,6 +94,16 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/appearance",
   },
   {
+    id: "chat-host",
+    title: "Chat host",
+    to: "/settings/general",
+  },
+  {
+    id: "quick-chat",
+    title: "Quick Chat",
+    to: "/settings/general",
+  },
+  {
     id: "project-grouping",
     title: "Project grouping",
     to: "/settings/general",

@@ -9,7 +9,15 @@ import { SymbolView } from "../../components/AppSymbol";
 import * as Effect from "effect/Effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Alert, Linking, Platform, Pressable, ScrollView, View } from "react-native";
+import {
+  ActionSheetIOS,
+  Alert,
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -540,8 +548,61 @@ function ConfiguredSettingsRouteScreen() {
 }
 
 function GeneralSettingsSection() {
+  const preferencesResult = useAtomValue(mobilePreferencesAtom);
+  const savePreferences = useAtomSet(updateMobilePreferencesAtom);
+  const { savedConnectionsById } = useSavedRemoteConnections();
+  const connections = useMemo(
+    () =>
+      Object.values(savedConnectionsById).sort((left, right) =>
+        left.environmentLabel.localeCompare(right.environmentLabel),
+      ),
+    [savedConnectionsById],
+  );
+  const preferredEnvironmentId = AsyncResult.isSuccess(preferencesResult)
+    ? preferencesResult.value.preferredGenericChatEnvironmentId
+    : undefined;
+  const preferredConnection = connections.find(
+    (connection) => connection.environmentId === preferredEnvironmentId,
+  );
+  const chatHostLabel = preferredEnvironmentId
+    ? (preferredConnection?.environmentLabel ?? "Unavailable")
+    : "Automatic";
+
+  const chooseChatHost = useCallback(() => {
+    if (Platform.OS !== "ios") return;
+    const cancelButtonIndex = connections.length + 1;
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        title: "Chat Host",
+        message:
+          "Every new chat starts on this environment. Tangent will not silently choose another host if it is unavailable.",
+        options: [
+          "Automatic",
+          ...connections.map((connection) => connection.environmentLabel),
+          "Cancel",
+        ],
+        cancelButtonIndex,
+      },
+      (buttonIndex) => {
+        if (buttonIndex === cancelButtonIndex) return;
+        savePreferences({
+          preferredGenericChatEnvironmentId:
+            buttonIndex === 0 ? undefined : String(connections[buttonIndex - 1]?.environmentId),
+        });
+      },
+    );
+  }, [connections, savePreferences]);
+
   return (
     <SettingsSection title="General">
+      {Platform.OS === "ios" ? (
+        <SettingsRow
+          icon="desktopcomputer"
+          label="Chat Host"
+          value={chatHostLabel}
+          onPress={chooseChatHost}
+        />
+      ) : null}
       <SettingsRow icon="folder" label="Project Grouping" target="SettingsProjectGrouping" />
     </SettingsSection>
   );

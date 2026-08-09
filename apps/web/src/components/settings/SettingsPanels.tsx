@@ -81,7 +81,7 @@ import {
   primaryServerProvidersAtom,
   serverEnvironment,
 } from "../../state/server";
-import { usePrimaryEnvironment } from "../../state/environments";
+import { useEnvironments, usePrimaryEnvironment } from "../../state/environments";
 import { useProjects } from "../../state/entities";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
@@ -476,6 +476,13 @@ export function useSettingsRestore(onRestored?: () => void) {
       DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays
         ? ["Auto-settle inactive threads"]
         : []),
+      ...(settings.preferredGenericChatEnvironmentId !==
+      DEFAULT_UNIFIED_SETTINGS.preferredGenericChatEnvironmentId
+        ? ["Chat host"]
+        : []),
+      ...(settings.quickChatResumeMinutes !== DEFAULT_UNIFIED_SETTINGS.quickChatResumeMinutes
+        ? ["Quick Chat"]
+        : []),
       ...(settings.wordWrap !== DEFAULT_UNIFIED_SETTINGS.wordWrap ? ["Word wrap"] : []),
       ...(settings.fontFamilySans !== DEFAULT_UNIFIED_SETTINGS.fontFamilySans
         ? ["Interface font"]
@@ -541,6 +548,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.sidebarAutoSettleAfterDays,
       settings.sidebarProjectGroupingMode,
       settings.sidebarThreadPreviewCount,
+      settings.preferredGenericChatEnvironmentId,
+      settings.quickChatResumeMinutes,
       settings.timestampFormat,
       settings.wordWrap,
       followSystem,
@@ -618,6 +627,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
       sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
+      preferredGenericChatEnvironmentId: DEFAULT_UNIFIED_SETTINGS.preferredGenericChatEnvironmentId,
+      quickChatResumeMinutes: DEFAULT_UNIFIED_SETTINGS.quickChatResumeMinutes,
       enableLegacyTokenStreaming: DEFAULT_UNIFIED_SETTINGS.enableLegacyTokenStreaming,
       enableProviderUpdateChecks: DEFAULT_UNIFIED_SETTINGS.enableProviderUpdateChecks,
       backgroundActivity: DEFAULT_UNIFIED_SETTINGS.backgroundActivity,
@@ -1676,6 +1687,18 @@ export function GeneralSettingsPanel() {
   const settings = usePrimarySettings();
   const updateSettings = useUpdatePrimarySettings();
   const primaryEnvironment = usePrimaryEnvironment();
+  const { environments } = useEnvironments();
+  const preferredChatEnvironment =
+    environments.find(
+      (environment) => environment.environmentId === settings.preferredGenericChatEnvironmentId,
+    ) ?? null;
+  const chatHostLabel =
+    preferredChatEnvironment?.label ??
+    (settings.preferredGenericChatEnvironmentId === null
+      ? primaryEnvironment?.label
+        ? `${primaryEnvironment.label} (primary)`
+        : "Primary environment"
+      : "Unavailable environment");
   const persistServerSettings = useAtomCommand(serverEnvironment.updateSettings, {
     reportFailure: false,
   });
@@ -1830,6 +1853,103 @@ export function GeneralSettingsPanel() {
   return (
     <SettingsPageContainer>
       <SettingsSection title="General">
+        <SettingsRow
+          {...searchableSetting("chat-host")}
+          description="New chats always start on this environment. If it is unavailable, Tangent keeps the draft instead of choosing another host."
+          resetAction={
+            settings.preferredGenericChatEnvironmentId !==
+            DEFAULT_UNIFIED_SETTINGS.preferredGenericChatEnvironmentId ? (
+              <SettingResetButton
+                label="chat host"
+                onClick={() =>
+                  updateSettings({
+                    preferredGenericChatEnvironmentId:
+                      DEFAULT_UNIFIED_SETTINGS.preferredGenericChatEnvironmentId,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={settings.preferredGenericChatEnvironmentId ?? "primary"}
+              onValueChange={(value) =>
+                updateSettings({
+                  preferredGenericChatEnvironmentId:
+                    value === "primary"
+                      ? null
+                      : (value as typeof settings.preferredGenericChatEnvironmentId),
+                })
+              }
+            >
+              <SelectTrigger className="w-full sm:w-52" aria-label="Chat host">
+                <SelectValue>{chatHostLabel}</SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                <SelectItem hideIndicator value="primary">
+                  {primaryEnvironment?.label
+                    ? `${primaryEnvironment.label} (primary)`
+                    : "Primary environment"}
+                </SelectItem>
+                {environments.map((environment) => (
+                  <SelectItem
+                    key={environment.environmentId}
+                    hideIndicator
+                    value={environment.environmentId}
+                  >
+                    {environment.label}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("quick-chat")}
+          description="The Raycast Quick Chat action reopens your last chat within this window; otherwise it starts a fresh draft."
+          resetAction={
+            settings.quickChatResumeMinutes !== DEFAULT_UNIFIED_SETTINGS.quickChatResumeMinutes ? (
+              <SettingResetButton
+                label="Quick Chat"
+                onClick={() =>
+                  updateSettings({
+                    quickChatResumeMinutes: DEFAULT_UNIFIED_SETTINGS.quickChatResumeMinutes,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={settings.quickChatResumeMinutes?.toString() ?? "always-new"}
+              onValueChange={(value) =>
+                updateSettings({
+                  quickChatResumeMinutes: value === "always-new" ? null : Number(value),
+                })
+              }
+            >
+              <SelectTrigger className="w-full sm:w-52" aria-label="Quick Chat resume window">
+                <SelectValue>
+                  {settings.quickChatResumeMinutes === null
+                    ? "Always start new"
+                    : `${settings.quickChatResumeMinutes} minutes`}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                <SelectItem hideIndicator value="always-new">
+                  Always start new
+                </SelectItem>
+                {[2, 5, 10, 15, 30, 60].map((minutes) => (
+                  <SelectItem key={minutes} hideIndicator value={minutes.toString()}>
+                    {minutes} minutes
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          }
+        />
+
         <SettingsRow
           {...searchableSetting("project-grouping")}
           description="Combine matching repositories across environments."

@@ -22,6 +22,7 @@ the APNs provider key to phones or T3 servers.
 - App Store Connect name: `Tangent`
 - App Store Connect app ID: `6790012550`
 - Mobile URL scheme: `bpdev-code://`
+- macOS Quick Chat action: `bpdev-code-action://quick-chat`
 - Desktop state root: `~/.bpdev-code`
 - Electron user-data directory: `bpdev-code`
 

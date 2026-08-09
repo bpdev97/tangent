@@ -405,6 +405,32 @@ describe("DesktopWindow", () => {
     );
   });
 
+  it.effect("queues and deduplicates Quick Chat while the backend starts", () =>
+    Effect.gen(function* () {
+      const fakeWindow = makeFakeBrowserWindow();
+      const createCount = yield* Ref.make(0);
+      const mainWindow = yield* Ref.make<Option.Option<Electron.BrowserWindow>>(Option.none());
+      const layer = makeTestLayer({
+        window: fakeWindow.window,
+        createCount,
+        mainWindow,
+        createdWindowOptions: [],
+      });
+
+      yield* Effect.gen(function* () {
+        const desktopWindow = yield* DesktopWindow.DesktopWindow;
+        yield* desktopWindow.dispatchMenuAction("quick-chat");
+        yield* desktopWindow.dispatchMenuAction("quick-chat");
+        assert.equal(yield* Ref.get(createCount), 0);
+        assert.equal(fakeWindow.send.mock.calls.length, 0);
+
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        assert.equal(yield* Ref.get(createCount), 1);
+        assert.deepEqual(fakeWindow.send.mock.calls, [[MENU_ACTION_CHANNEL, "quick-chat"]]);
+      }).pipe(Effect.provide(layer));
+    }),
+  );
+
   it.effect("does not open a development window until the backend is ready", () =>
     Effect.gen(function* () {
       const fakeWindow = makeFakeBrowserWindow();

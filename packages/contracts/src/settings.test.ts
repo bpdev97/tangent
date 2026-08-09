@@ -127,6 +127,27 @@ describe("ClientSettings sidebar", () => {
   });
 });
 
+describe("ClientSettings chats", () => {
+  it("defaults chats to the primary host and resumes quick chat for five minutes", () => {
+    const settings = decodeClientSettings({});
+
+    expect(settings.preferredGenericChatEnvironmentId).toBeNull();
+    expect(settings.quickChatResumeMinutes).toBe(5);
+  });
+
+  it("accepts an explicit host and an always-new quick chat policy", () => {
+    const settings = decodeClientSettings({
+      preferredGenericChatEnvironmentId: "mac-mini",
+      quickChatResumeMinutes: null,
+    });
+
+    expect(settings.preferredGenericChatEnvironmentId).toBe("mac-mini");
+    expect(settings.quickChatResumeMinutes).toBeNull();
+    expect(() => decodeClientSettings({ quickChatResumeMinutes: 0 })).toThrow();
+    expect(() => decodeClientSettingsPatch({ quickChatResumeMinutes: 61 })).toThrow();
+  });
+});
+
 describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
   it("defaults text generation to Luna at low reasoning effort", () => {
     expect(DEFAULT_SERVER_SETTINGS.textGenerationModelSelection).toEqual({

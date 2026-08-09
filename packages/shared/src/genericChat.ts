@@ -43,6 +43,20 @@ export function findGenericChatProject<
   );
 }
 
+/**
+ * Resolves the managed chat project on one exact environment. Unlike
+ * `findGenericChatProject`, this never falls back to another host.
+ */
+export function findGenericChatProjectInEnvironment<
+  T extends { readonly id: string; readonly environmentId: string },
+>(projects: ReadonlyArray<T>, environmentId: string): T | null {
+  return (
+    projects.find(
+      (project) => isGenericChatProject(project) && project.environmentId === environmentId,
+    ) ?? null
+  );
+}
+
 export function buildGenericChatProviderInput(userInput?: string): string {
   const normalizedInput = userInput?.trim();
   return normalizedInput

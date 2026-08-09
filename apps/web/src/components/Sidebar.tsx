@@ -102,7 +102,7 @@ import {
 import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { useThreadActions } from "../hooks/useThreadActions";
-import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { useHandleNewChat, useHandleNewThread } from "../hooks/useHandleNewThread";
 import { openCommandPalette } from "../commandPaletteBus";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
 import { useClientSettings, useUpdateClientSettings } from "../hooks/useSettings";
@@ -1425,6 +1425,7 @@ export default function Sidebar() {
   );
   const [projectScopeMenuOpen, setProjectScopeMenuOpen] = useState(false);
   const newThreadContext = useHandleNewThread();
+  const { chatHostEnvironmentId, chatProject, handleNewChat } = useHandleNewChat();
   const openAddProjectCommandPalette = useCallback(
     () => openCommandPalette({ open: "add-project" }),
     [],
@@ -1466,7 +1467,9 @@ export default function Sidebar() {
   const environmentLabelById = useMemo(
     () =>
       new Map(
-        environments.map((environment) => [environment.environmentId, environment.label] as const),
+        environments.map(
+          (environment) => [String(environment.environmentId), environment.label] as const,
+        ),
       ),
     [environments],
   );
@@ -1503,6 +1506,12 @@ export default function Sidebar() {
   const projectGroups = useMemo(
     () => sortLogicalProjectsForSidebar(unsortedProjectGroups, threads, sidebarProjectSortOrder),
     [sidebarProjectSortOrder, threads, unsortedProjectGroups],
+  );
+  const genericChatProjectGroup =
+    projectGroups.find((project) => isGenericChatProjectId(project.id)) ?? null;
+  const regularProjectGroups = useMemo(
+    () => projectGroups.filter((project) => !isGenericChatProjectId(project.id)),
+    [projectGroups],
   );
   const serverProviders = useAtomValue(primaryServerProvidersAtom);
   const providerEntryByInstanceId = useMemo(
@@ -2994,7 +3003,7 @@ export default function Sidebar() {
   // for multi-project setups.
   const handleNewThreadClick = useCallback(() => {
     // One project: nothing to pick, create immediately.
-    if (projectGroups.length <= 1) {
+    if (regularProjectGroups.length <= 1) {
       if (isMobile) setOpenMobile(false);
       void startNewThreadFromContext({
         activeDraftThread: newThreadContext.activeDraftThread,
@@ -3006,7 +3015,35 @@ export default function Sidebar() {
     }
     if (isMobile) setOpenMobile(false);
     openCommandPalette({ open: "new-thread-in" });
-  }, [isMobile, newThreadContext, projectGroups.length, setOpenMobile]);
+  }, [isMobile, newThreadContext, regularProjectGroups.length, setOpenMobile]);
+
+  const chatHostLabel =
+    (chatHostEnvironmentId && environmentLabelById.get(chatHostEnvironmentId)) ??
+    (chatHostEnvironmentId ? "Unavailable" : "Not configured");
+  const startNewChat = useCallback(() => {
+    if (genericChatProjectGroup) {
+      setProjectScopeKey(genericChatProjectGroup.projectKey);
+    }
+    if (isMobile) setOpenMobile(false);
+    if (chatProject === null) {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Chat host unavailable",
+          description: "The draft stayed here; Tangent did not choose another environment.",
+        }),
+      );
+      return;
+    }
+    void handleNewChat();
+  }, [chatProject, genericChatProjectGroup, handleNewChat, isMobile, setOpenMobile]);
+
+  const openChats = useCallback(() => {
+    if (genericChatProjectGroup) {
+      setProjectScopeKey(genericChatProjectGroup.projectKey);
+    }
+    if (!scopedProjectIsGenericChat) startNewChat();
+  }, [genericChatProjectGroup, scopedProjectIsGenericChat, startNewChat]);
 
   // The button mirrors chat.new: in multi-project setups both route through
   // the command palette's "New thread in..." picker, and in single-project
@@ -3099,7 +3136,46 @@ export default function Sidebar() {
                 </Tooltip>
               </div>
             </div>
-            {projectGroups.length > 0 ? (
+            {genericChatProjectGroup ? (
+              <div className="flex items-center gap-1">
+                <SidebarMenuButton
+                  type="button"
+                  isActive={scopedProjectIsGenericChat}
+                  className="min-w-0 flex-1"
+                  onClick={openChats}
+                  aria-label="Open chats"
+                >
+                  <MessageSquareIcon className="size-4 shrink-0" />
+                  <span className="flex min-w-0 flex-1 items-baseline">
+                    <span className="shrink-0 truncate text-sm">Chats</span>
+                    <span className="ml-auto min-w-0 truncate text-[11px] font-normal text-sidebar-muted-foreground">
+                      {chatHostLabel}
+                    </span>
+                  </span>
+                </SidebarMenuButton>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <SidebarMenuButton
+                        size="icon"
+                        type="button"
+                        className="relative shrink-0 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+                        onClick={startNewChat}
+                        aria-label="New chat"
+                      />
+                    }
+                  >
+                    <PlusIcon />
+                    <span
+                      className="pointer-events-none absolute left-1/2 top-1/2 size-[max(100%,3rem)] -translate-1/2 pointer-fine:hidden"
+                      aria-hidden="true"
+                    />
+                  </TooltipTrigger>
+                  <TooltipPopup side="right">New chat</TooltipPopup>
+                </Tooltip>
+              </div>
+            ) : null}
+            {regularProjectGroups.length > 0 ? (
               <div className="flex items-center gap-1">
                 <Menu open={projectScopeMenuOpen} onOpenChange={setProjectScopeMenuOpen}>
                   <MenuTrigger
@@ -3124,7 +3200,9 @@ export default function Sidebar() {
                       <FolderIcon className="size-4 shrink-0" />
                     )}
                     <span className="min-w-0 flex-1 truncate">
-                      {scopedProjectGroup?.displayName ?? "All projects"}
+                      {scopedProjectIsGenericChat
+                        ? "All threads"
+                        : (scopedProjectGroup?.displayName ?? "All threads")}
                     </span>
                     <ChevronDownIcon className="-mr-px size-4 shrink-0" />
                   </MenuTrigger>
@@ -3141,11 +3219,10 @@ export default function Sidebar() {
                         className="h-8 min-h-8 px-1 py-0 text-sm font-medium [&>span:last-child]:flex [&>span:last-child]:min-w-0 [&>span:last-child]:items-center [&>span:last-child]:gap-2"
                       >
                         <FolderIcon className="size-4 shrink-0" />
-                        <span className="min-w-0 truncate text-sm">All projects</span>
+                        <span className="min-w-0 truncate text-sm">All threads</span>
                       </MenuRadioItem>
-                      {projectGroups.map((project) => {
+                      {regularProjectGroups.map((project) => {
                         const scopeKey = project.projectKey;
-                        const isGenericChat = isGenericChatProjectId(project.id);
                         return (
                           <MenuRadioItem
                             key={scopeKey}
@@ -3153,30 +3230,24 @@ export default function Sidebar() {
                             closeOnClick
                             className="h-8 min-h-8 px-1 py-0 text-sm font-medium [&>span:last-child]:flex [&>span:last-child]:min-w-0 [&>span:last-child]:items-center [&>span:last-child]:gap-2"
                           >
-                            {isGenericChat ? (
-                              <MessageSquareIcon className="size-4 shrink-0" />
-                            ) : (
-                              <ProjectFavicon
-                                environmentId={project.environmentId}
-                                cwd={project.workspaceRoot}
-                                className="size-4 shrink-0"
-                              />
-                            )}
+                            <ProjectFavicon
+                              environmentId={project.environmentId}
+                              cwd={project.workspaceRoot}
+                              className="size-4 shrink-0"
+                            />
                             <span className="min-w-0 truncate text-sm">{project.displayName}</span>
-                            {isGenericChat ? null : (
-                              <button
-                                type="button"
-                                aria-label={`Project actions for ${project.displayName}`}
-                                title={`Project actions for ${project.displayName}`}
-                                className="ml-auto inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-icon-muted outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                                onPointerDown={(event) => event.stopPropagation()}
-                                onClick={(event) => {
-                                  void handleProjectActions(event, project);
-                                }}
-                              >
-                                <EllipsisIcon className="size-3.5" />
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              aria-label={`Project actions for ${project.displayName}`}
+                              title={`Project actions for ${project.displayName}`}
+                              className="ml-auto inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-icon-muted outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                              onPointerDown={(event) => event.stopPropagation()}
+                              onClick={(event) => {
+                                void handleProjectActions(event, project);
+                              }}
+                            >
+                              <EllipsisIcon className="size-3.5" />
+                            </button>
                           </MenuRadioItem>
                         );
                       })}
