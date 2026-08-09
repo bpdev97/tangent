@@ -2,6 +2,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import mobilePackageJson from "../apps/mobile/package.json" with { type: "json" };
 
 import { PERSONAL_DISTRIBUTION } from "../downstream/config.ts";
@@ -35,6 +36,8 @@ describe("personal distribution identity", () => {
   it.effect("keeps desktop-only distribution changes out of the mobile native fingerprint", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const repoRoot = yield* path.fromFileUrl(new URL("..", import.meta.url));
       const mobileConsumers = [
         "apps/mobile/app.config.ts",
         "apps/mobile/src/App.tsx",
@@ -42,8 +45,8 @@ describe("personal distribution identity", () => {
         "apps/mobile/src/features/connection/pairing.ts",
       ];
 
-      for (const path of mobileConsumers) {
-        const source = yield* fs.readFileString(path);
+      for (const relativePath of mobileConsumers) {
+        const source = yield* fs.readFileString(path.join(repoRoot, relativePath));
         expect(source).toContain("downstream/mobile-config");
         expect(source).not.toContain("downstream/config");
       }
