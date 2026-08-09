@@ -235,13 +235,6 @@ export function LinearIntegrationSettingsSection() {
               >
                 {isTesting ? "Testing…" : "Test connection"}
               </Button>
-              <Button
-                size="xs"
-                disabled={!canSave || isSaving || isTesting}
-                onClick={() => void save()}
-              >
-                {isSaving ? "Saving…" : "Save"}
-              </Button>
             </div>
           </div>
         }
@@ -292,6 +285,14 @@ export function LinearIntegrationSettingsSection() {
           />
         }
       />
+      <div className="mx-3 flex flex-col gap-2 border-t border-border/70 pt-3 sm:mx-4 sm:flex-row sm:items-center sm:justify-between">
+        <p aria-live="polite" className="text-xs text-muted-foreground">
+          {dirty ? "You have unsaved changes." : "Linear settings are up to date."}
+        </p>
+        <Button size="sm" disabled={!canSave || isSaving || isTesting} onClick={() => void save()}>
+          {isSaving ? "Saving…" : "Save changes"}
+        </Button>
+      </div>
     </SettingsSection>
   );
 }
