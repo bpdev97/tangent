@@ -15,32 +15,35 @@ const instanceId = ProviderInstanceId.make("hermes_research");
 describe("Hermes automation projection", () => {
   it("normalizes current and legacy cron job fields without exposing storage details", () => {
     expect(
-      projectHermesAutomationJobs([
-        {
-          id: "0123456789ab",
-          name: null,
-          prompt: "Summarize alerts",
-          schedule: { value: "0 9 * * *" },
-          repeat: { times: 3, completed: 1 },
-          enabled: true,
-          deliver: "telegram",
-          skill: "ops",
-          next_run_at: "2026-07-15T13:00:00Z",
-          no_agent: false,
-        },
-        {
-          id: "abcdef012345",
-          name: "Paused watchdog",
-          prompt: null,
-          schedule_display: "every 5m",
-          enabled: false,
-          skills: ["metrics", "metrics", ""],
-          deliver: ["local", "slack"],
-          script: "watchdog.sh",
-          no_agent: true,
-          workdir: "/srv/app",
-        },
-      ]),
+      projectHermesAutomationJobs({
+        jobs: [
+          {
+            id: "0123456789ab",
+            name: null,
+            prompt: "Summarize alerts",
+            schedule: { value: "0 9 * * *" },
+            repeat: { times: 3, completed: 1 },
+            enabled: true,
+            deliver: "telegram",
+            skill: "ops",
+            next_run_at: "2026-07-15T13:00:00Z",
+            no_agent: false,
+          },
+          {
+            id: "abcdef012345",
+            name: "Paused watchdog",
+            prompt: null,
+            schedule_display: "every 5m",
+            enabled: false,
+            skills: ["metrics", "metrics", ""],
+            deliver: ["local", "slack"],
+            script: "watchdog.sh",
+            no_agent: true,
+            workdir: "/srv/app",
+          },
+        ],
+        updated_at: "2026-08-09T12:00:00Z",
+      }),
     ).toEqual([
       {
         id: "0123456789ab",
@@ -79,9 +82,22 @@ describe("Hermes automation projection", () => {
     ]);
   });
 
+  it("continues to read legacy bare-array cron stores", () => {
+    expect(
+      projectHermesAutomationJobs([
+        {
+          id: "legacy-job",
+          name: "Legacy job",
+          prompt: "Check the legacy store",
+          schedule: "every 1h",
+        },
+      ]),
+    ).toHaveLength(1);
+  });
+
   it("rejects a malformed cron store", () => {
-    expect(() => projectHermesAutomationJobs({ jobs: [] })).toThrow(
-      "Hermes cron store must contain an array.",
+    expect(() => projectHermesAutomationJobs({ jobs: "invalid" })).toThrow(
+      "Hermes cron store must contain a jobs array.",
     );
   });
 });
