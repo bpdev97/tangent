@@ -10,6 +10,18 @@ import * as Schema from "effect/Schema";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 
 const PREVIEW_PARTITION_PREFIX = "persist:t3code-preview-";
+const CHROME_USER_AGENT_PRODUCTS = new Set(["Mozilla", "AppleWebKit", "Chrome", "Safari"]);
+const USER_AGENT_PRODUCT_PATTERN = /(^|\s)([A-Za-z][A-Za-z0-9._-]*\/[^\s()]+)(?=\s|$)/g;
+
+export function normalizePreviewUserAgent(userAgent: string): string {
+  return userAgent.replace(
+    USER_AGENT_PRODUCT_PATTERN,
+    (match, _prefix: string, product: string) => {
+      const separator = product.indexOf("/");
+      return CHROME_USER_AGENT_PRODUCTS.has(product.slice(0, separator)) ? match : "";
+    },
+  );
+}
 
 // Permissions granted to preview web content. `clipboard-sanitized-write` is the
 // Electron permission behind `navigator.clipboard.writeText()` — note it is NOT
@@ -132,11 +144,7 @@ export const make = Effect.gen(function* BrowserSessionMake() {
       return Effect.try({
         try: () => {
           const browserSession = session.fromPartition(partition);
-          const userAgent = browserSession
-            .getUserAgent()
-            .replace(/Electron\/[\d.]+ /, "")
-            .replace(/\s*t3code\/[\d.]+/, "");
-          browserSession.setUserAgent(userAgent);
+          browserSession.setUserAgent(normalizePreviewUserAgent(browserSession.getUserAgent()));
           browserSession.setPermissionRequestHandler((_webContents, permission, callback) => {
             callback(ALLOWED_PREVIEW_PERMISSIONS.has(permission));
           });

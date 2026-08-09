@@ -31,6 +31,30 @@ import * as BrowserSession from "./BrowserSession.ts";
 
 const layer = BrowserSession.layer.pipe(Layer.provide(NodeServices.layer));
 
+const electronUserAgent =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Tangent/0.1.36 Chrome/146.0.7680.216 Electron/41.5.0 Safari/537.36";
+const browserUserAgent =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.7680.216 Safari/537.36";
+
+describe("normalizePreviewUserAgent", () => {
+  it("removes distribution and Electron products while preserving Chromium capabilities", () => {
+    assert.equal(BrowserSession.normalizePreviewUserAgent(electronUserAgent), browserUserAgent);
+  });
+
+  it("leaves an already browser-shaped user agent unchanged", () => {
+    assert.equal(BrowserSession.normalizePreviewUserAgent(browserUserAgent), browserUserAgent);
+  });
+
+  it("removes prerelease distribution products", () => {
+    assert.equal(
+      BrowserSession.normalizePreviewUserAgent(
+        browserUserAgent.replace(" Chrome/", " Tangent/0.1.37-nightly.1 Chrome/"),
+      ),
+      browserUserAgent,
+    );
+  });
+});
+
 describe("BrowserSession", () => {
   beforeEach(() => {
     sessions.clear();
@@ -39,7 +63,7 @@ describe("BrowserSession", () => {
       const browserSession = {
         clearCache: vi.fn(() => Promise.resolve()),
         clearStorageData: vi.fn(() => Promise.resolve()),
-        getUserAgent: vi.fn(() => "Mozilla/5.0 Electron/41.5.0 t3code/0.0.27"),
+        getUserAgent: vi.fn(() => electronUserAgent),
         setPermissionRequestHandler: vi.fn(),
         setPermissionCheckHandler: vi.fn(),
         setUserAgent: vi.fn(),
@@ -60,6 +84,7 @@ describe("BrowserSession", () => {
       assert.strictEqual(partition, "persist:t3code-preview-f051bb2c68cb7b2fe969");
       assert.strictEqual(first, second);
       assert.strictEqual(fromPartition.mock.calls.length, 1);
+      assert.deepEqual(sessions.get(partition)?.setUserAgent.mock.calls, [[browserUserAgent]]);
     }).pipe(Effect.provide(layer)),
   );
 

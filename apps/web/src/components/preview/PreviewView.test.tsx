@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   toggleNativePictureInPicture: null as (() => void) | null,
   pictureInPicturePressed: false,
   miniPlayerTabId: null as string | null,
+  controller: "none" as "agent" | "human" | "none",
   openMiniPlayer: vi.fn(),
   closeMiniPlayer: vi.fn(),
   closeRightPanel: vi.fn(),
@@ -75,7 +76,7 @@ vi.mock("~/previewStateStore", () => ({
         zoomFactor: 1,
         pictureInPicture: mocks.pictureInPicture,
         colorScheme: "system",
-        controller: "none",
+        controller: mocks.controller,
       },
     },
     recentlySeenUrls: [],
@@ -243,6 +244,7 @@ describe("PreviewView navigation", () => {
     mocks.toggleNativePictureInPicture = null;
     mocks.pictureInPicturePressed = false;
     mocks.miniPlayerTabId = null;
+    mocks.controller = "none";
     mocks.openMiniPlayer.mockClear();
     mocks.closeMiniPlayer.mockClear();
     mocks.closeRightPanel.mockClear();
@@ -344,6 +346,29 @@ describe("PreviewView navigation", () => {
         "https://linear.app/tangent/issue/TAN-42",
       ),
     );
+  });
+
+  it("hides human-control chrome from Linear while preserving agent-control status", () => {
+    const presentation = {
+      _tag: "linear" as const,
+      reviewUrl: "https://linear.review/bpdev97/tangent/pull/52",
+      tickets: [],
+      ticketLookup: "ready" as const,
+    };
+    mocks.controller = "human";
+
+    const humanMarkup = renderToStaticMarkup(
+      <PreviewView threadRef={TEST_THREAD_REF} tabId="tab-1" presentation={presentation} visible />,
+    );
+
+    expect(humanMarkup).not.toContain("Human control");
+
+    mocks.controller = "agent";
+    const agentMarkup = renderToStaticMarkup(
+      <PreviewView threadRef={TEST_THREAD_REF} tabId="tab-1" presentation={presentation} visible />,
+    );
+
+    expect(agentMarkup).toContain("Agent controlling browser");
   });
 
   it("maps an empty-state localhost server onto the WSL host", async () => {

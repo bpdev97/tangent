@@ -605,6 +605,8 @@ export const DesktopPreviewPointerEventSchema: Schema.Codec<DesktopPreviewPointe
 export interface DesktopPreviewWebviewConfig {
   /** `persist:t3code-preview` (or whatever the desktop chose). */
   partition: string;
+  /** Browser-shaped user agent applied directly to each preview webview. */
+  userAgent: string;
   /**
    * Canonical `<webview webpreferences="...">` string. Encodes the security
    * posture (sandboxed but contextIsolation off so the picker preload can
@@ -622,6 +624,7 @@ export interface DesktopPreviewWebviewConfig {
 export const DesktopPreviewWebviewConfigSchema: Schema.Codec<DesktopPreviewWebviewConfig> =
   Schema.Struct({
     partition: Schema.String,
+    userAgent: Schema.String,
     webPreferences: Schema.String,
     preloadUrl: Schema.NullOr(Schema.String),
   });

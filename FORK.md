@@ -281,7 +281,9 @@ Invariants:
   open them externally. GitHub remains external.
 - Linear browser surfaces reuse the desktop preview partition scoped by environment, so Linear
   cookies persist across thread tabs and app restarts. Their dedicated toolbar hides the generic
-  address bar and keeps Review and resolved ticket navigation visible.
+  address bar and human-control chrome while keeping Review and resolved ticket navigation visible.
+- Preview webviews receive the sanitized Chrome-shaped user agent directly; distribution and
+  Electron product tokens must not leak back in through per-web-contents defaults.
 
 Remove or reduce this feature when upstream owns equivalent server-secure Linear resolution and
 default-sidebar destination behavior. Prefer adapting upstream seams over preserving duplicate

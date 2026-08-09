@@ -25,6 +25,7 @@ import * as Schema from "effect/Schema";
 import * as NodeURL from "node:url";
 
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
+import { normalizePreviewUserAgent } from "../../preview/BrowserSession.ts";
 import * as PreviewManager from "../../preview/Manager.ts";
 import { PREVIEW_WEBVIEW_PREFERENCES } from "../../preview/WebviewPreferences.ts";
 import * as IpcChannels from "../channels.ts";
@@ -205,9 +206,10 @@ export const getPreviewConfig = DesktopIpc.makeIpcMethod({
   result: DesktopPreviewWebviewConfigSchema,
   handler: Effect.fn("desktop.ipc.preview.getConfig")(function* ({ environmentId }) {
     const manager = yield* PreviewManager.PreviewManager;
-    yield* manager.getBrowserSession(environmentId);
+    const browserSession = yield* manager.getBrowserSession(environmentId);
     return {
       partition: yield* manager.getBrowserPartition(environmentId),
+      userAgent: normalizePreviewUserAgent(browserSession.getUserAgent()),
       webPreferences: PREVIEW_WEBVIEW_PREFERENCES,
       preloadUrl: NodeURL.pathToFileURL(`${__dirname}/preview-pick-preload.cjs`).href,
     };

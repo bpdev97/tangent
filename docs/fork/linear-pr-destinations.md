@@ -50,11 +50,14 @@ available.
 Desktop Linear destinations open through the existing thread-scoped right-panel browser surface,
 but use a Linear-specific presentation instead of the generic address bar and preview controls. The
 toolbar keeps Review and resolved ticket destinations available while the embedded Linear page is
-open; multiple tickets collapse into a destination menu.
+open; multiple tickets collapse into a destination menu. Human-control status stays hidden on this
+dedicated surface, while active agent control remains visible.
 
 Electron preview webviews use a persistent partition derived from the environment id, not the
 thread id. Linear authentication cookies therefore carry across threads and desktop restarts for
 that environment. The page/tab remains thread-scoped; only browser session storage is shared.
+The browser-shaped user agent is applied on the webview itself so Electron and distribution product
+tokens cannot reappear after the session is created.
 
 Hosted web clients, where the right-panel browser is unavailable, open a new external browser tab.
 GitHub uses the existing external-link behavior on every surface.
