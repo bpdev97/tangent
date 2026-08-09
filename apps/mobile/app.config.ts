@@ -1,6 +1,6 @@
 import type { ExpoConfig } from "expo/config";
 
-import { PERSONAL_DISTRIBUTION } from "../../downstream/config.ts";
+import { PERSONAL_MOBILE_DISTRIBUTION } from "../../downstream/mobile-config.ts";
 import { BRAND_ASSET_PATHS } from "../../scripts/lib/brand-assets.ts";
 import { loadRepoEnv } from "../../scripts/lib/public-config.ts";
 
@@ -10,7 +10,7 @@ const repoEnv = loadRepoEnv();
 Object.assign(process.env, repoEnv);
 
 const APP_VARIANT = resolveAppVariant(repoEnv.APP_VARIANT);
-const personalMobile = PERSONAL_DISTRIBUTION.mobile;
+const personalMobile = PERSONAL_MOBILE_DISTRIBUTION;
 const isIosPersonalTeamBuild = repoEnv.T3CODE_IOS_PERSONAL_TEAM === "1";
 
 const personalTeamBundleIdentifier = repoEnv.T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID?.trim();
@@ -163,7 +163,7 @@ const config: ExpoConfig = {
   slug: personalMobile.expoSlug,
   platforms: ["ios"],
   scheme: variant.scheme,
-  version: "1.0.2",
+  version: "1.0.3",
   runtimeVersion: {
     // Fingerprint (not appVersion) so an OTA only reaches binaries whose native
     // project — native deps, config plugins, AND patches/ — matches the update.

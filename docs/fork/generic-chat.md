@@ -43,14 +43,17 @@ under `Chats`.
 
 On desktop and web, Chats sits above project scoping and shows the selected host inline. The normal
 active/settled thread model remains shared with the rest of the sidebar. On iOS, the home screen has
-a persistent generic-chat composer at the bottom; Search, New Thread, filters, and Settings live in
-the top navigation area. Android retains the upstream mobile layout.
+a persistent new-chat field at the bottom; tapping it presents the existing full new-task composer
+already scoped to the managed chat project. Search, New Thread, filters, and Settings live in the
+top navigation area. Android retains the upstream mobile layout.
 
 The macOS build registers the dedicated, fixed action URL `bpdev-code-action://quick-chat`. It is
 not a general navigation scheme. The renderer resumes the most recently viewed, unarchived generic
-chat when its visit is inside the configurable window; otherwise it opens a fresh draft on the
-preferred host. Actions received during desktop cold start are deduplicated and delivered after the
-backend and renderer are ready. Ordinary Dock activation remains unchanged.
+chat that has not been explicitly settled when its visit is inside the configurable window;
+otherwise it opens a fresh draft on the preferred host. Settling a chat makes it immediately
+ineligible for resume.
+Actions received during desktop cold start are deduplicated and delivered after the backend and
+renderer are ready. Ordinary Dock activation remains unchanged.
 
 Generic-chat threads do not expose project-only affordances:
 
@@ -88,7 +91,8 @@ review, terminal, and their nested routes cannot be opened through deep links or
   fallback for a temporarily unavailable host.
 - Keep Quick Chat's external action fixed and allowlisted. Do not turn the action scheme into an
   arbitrary in-app URL router.
-- Keep the iOS home composer on the existing project-thread creation and offline outbox paths.
+- Keep the iOS home field as a launcher for the existing new-task composer. Model selection,
+  attachments, draft retention, thread creation, and the offline outbox must remain shared.
 - Keep normal project behavior unchanged; shared helpers must branch only on the reserved ID.
 
 ## Revalidation procedure
@@ -105,8 +109,7 @@ vp test packages/shared/src/genericChat.test.ts \
   apps/web/src/lib/quickChat.test.ts \
   apps/desktop/src/app/DesktopQuickChat.test.ts \
   apps/desktop/src/app/DesktopLifecycle.test.ts \
-  apps/desktop/src/window/DesktopWindow.test.ts \
-  apps/mobile/src/features/home/homeChat.test.ts
+  apps/desktop/src/window/DesktopWindow.test.ts
 ```
 
 Then run `vp check`, `vp run typecheck`, and `vp run lint:mobile`. Smoke-test New Chat on web and

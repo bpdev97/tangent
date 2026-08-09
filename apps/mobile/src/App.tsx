@@ -22,7 +22,7 @@ import { appAtomRegistry } from "./state/atom-registry";
 import { OverlayPortalHost } from "./components/OverlayPortal";
 import { appBlurTargetRef } from "./lib/appBlurTarget";
 import { useThemeColor } from "./lib/useThemeColor";
-import { PERSONAL_DISTRIBUTION } from "../../../downstream/config";
+import { PERSONAL_MOBILE_DISTRIBUTION } from "../../../downstream/mobile-config";
 import { useSavedRemoteConnections } from "./state/use-remote-environment-registry";
 import {
   syncAgentAwarenessConnections,
@@ -42,9 +42,9 @@ void SplashScreen.preventAutoHideAsync().catch(() => {
 const appLinking = {
   prefixes: [
     Linking.createURL("/"),
-    `${PERSONAL_DISTRIBUTION.mobile.scheme}://`,
-    `${PERSONAL_DISTRIBUTION.mobile.developmentScheme}://`,
-    `${PERSONAL_DISTRIBUTION.mobile.previewScheme}://`,
+    `${PERSONAL_MOBILE_DISTRIBUTION.scheme}://`,
+    `${PERSONAL_MOBILE_DISTRIBUTION.developmentScheme}://`,
+    `${PERSONAL_MOBILE_DISTRIBUTION.previewScheme}://`,
   ],
   // The Expo dev client launches the app via
   // <scheme>://expo-development-client/?url=<packager> — that URL addresses

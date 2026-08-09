@@ -9,6 +9,7 @@ const chat = {
   id: "chat-1",
   projectId: GENERIC_CHAT_PROJECT_ID,
   archivedAt: null,
+  settledOverride: null,
 };
 
 describe("resolveQuickChatTarget", () => {
@@ -42,7 +43,7 @@ describe("resolveQuickChatTarget", () => {
     ).toEqual({ kind: "new" });
   });
 
-  it("never resumes a missing, archived, or project-bound thread", () => {
+  it("never resumes a missing, archived, settled, or project-bound thread", () => {
     const lastVisit = {
       environmentId: "mac-mini",
       threadId: "chat-1",
@@ -54,6 +55,14 @@ describe("resolveQuickChatTarget", () => {
         lastVisit,
         resumeMinutes: 5,
         threads: [{ ...chat, archivedAt: "2026-08-09T15:04:30.000Z" }],
+        nowMs: NOW,
+      }),
+    ).toEqual({ kind: "new" });
+    expect(
+      resolveQuickChatTarget({
+        lastVisit,
+        resumeMinutes: 5,
+        threads: [{ ...chat, settledOverride: "settled" }],
         nowMs: NOW,
       }),
     ).toEqual({ kind: "new" });

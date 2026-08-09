@@ -79,7 +79,12 @@ export function HomeRouteScreen() {
     setThreadSortOrder,
   } = useHomeListOptions(availableEnvironmentIds);
   const selectedEnvironmentId = listOptions.selectedEnvironmentId;
-  const { genericChatAvailable, startGenericChat } = useStartGenericChat();
+  const { genericChatAvailable, genericChatEnvironmentId, startGenericChat } =
+    useStartGenericChat();
+  const genericChatHostLabel =
+    Object.values(savedConnectionsById).find(
+      (connection) => connection.environmentId === genericChatEnvironmentId,
+    )?.environmentLabel ?? "Chat host";
   const [selectedProjectKey, setSelectedProjectKey] = useState<string | null>(null);
   const projectFilterOptions = useMemo(
     () =>
@@ -123,7 +128,13 @@ export function HomeRouteScreen() {
           <WorkspaceEmptyDetail
             onStartNewTask={() => navigation.navigate("NewTaskSheet", { screen: "NewTask" })}
           />
-          {Platform.OS === "ios" ? <HomeChatComposer /> : null}
+          {Platform.OS === "ios" ? (
+            <HomeChatComposer
+              disabled={!genericChatAvailable}
+              hostLabel={genericChatHostLabel}
+              onPress={startGenericChat}
+            />
+          ) : null}
         </View>
       </>
     );
@@ -222,7 +233,13 @@ export function HomeRouteScreen() {
           threads={threads}
           threadSortOrder={listOptions.threadSortOrder}
         />
-        {Platform.OS === "ios" ? <HomeChatComposer /> : null}
+        {Platform.OS === "ios" ? (
+          <HomeChatComposer
+            disabled={!genericChatAvailable}
+            hostLabel={genericChatHostLabel}
+            onPress={startGenericChat}
+          />
+        ) : null}
       </>
     </AndroidHomeFabLayout>
   );

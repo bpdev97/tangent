@@ -25,10 +25,11 @@ repository's Actions settings. Tangent workflows begin with `personal-`.
 
 ## Distribution identity
 
-All canonical distribution identity belongs in [`downstream/config.ts`](downstream/config.ts):
-installed app names, repository, update tag and artifact names, bundle IDs, URL schemes, Expo
-ownership, Apple team, service name, and state directories. Credentials belong only in GitHub
-Actions, Expo, App Store Connect, or deployed secret files.
+Canonical distribution identity is composed in [`downstream/config.ts`](downstream/config.ts).
+The mobile-only identity slice lives in
+[`downstream/mobile-config.ts`](downstream/mobile-config.ts) so Expo fingerprinting does not absorb
+desktop-only release configuration. Credentials belong only in GitHub Actions, Expo, App Store
+Connect, or deployed secret files.
 
 The Tangent name exists to distinguish the installed fork, its releases, and its runtime state from
 upstream. In-app product vocabulary, wordmarks, icons, splash artwork, notifications, and features
@@ -49,7 +50,7 @@ the latest upstream merge, compatibility decisions, and verification.
 | ID                 | Kept behavior                                                                                | Status               | Maintenance record                                                    | Focused verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ------------------ | -------------------------------------------------------------------------------------------- | -------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `FORK-DIST-001`    | Tangent distribution identity, macOS/iOS release, server self-update, and service boundaries | Active               | [Personal distribution](docs/personal-distribution.md)                | `vp test scripts/personal-distribution-identity.test.ts scripts/build-desktop-artifact.test.ts apps/server/src/cloud/serverRelease.test.ts apps/server/src/cloud/pinnedRuntime.test.ts apps/server/src/cloud/selfUpdate.test.ts apps/server/src/cli/service.test.ts apps/desktop/src/app/DesktopEnvironment.test.ts packages/ssh/src/command.test.ts`                                                                                                                                                                                                                                                                                                                                      |
-| `FORK-CHAT-001`    | Managed generic chats, preferred hosts, iOS composer, and macOS Quick Chat                   | Active               | [Generic chat](docs/fork/generic-chat.md)                             | `vp test packages/shared/src/genericChat.test.ts packages/contracts/src/settings.test.ts packages/client-runtime/src/state/projectGrouping.genericChat.test.ts apps/server/src/genericChat.test.ts apps/server/src/orchestration/Layers/ProviderCommandReactor.genericChat.test.ts apps/web/src/lib/chatThreadActions.test.ts apps/web/src/lib/quickChat.test.ts apps/desktop/src/app/DesktopQuickChat.test.ts apps/desktop/src/app/DesktopLifecycle.test.ts apps/desktop/src/window/DesktopWindow.test.ts apps/mobile/src/features/home/homeChat.test.ts`                                                                                                                                 |
+| `FORK-CHAT-001`    | Managed generic chats, preferred hosts, iOS composer, and macOS Quick Chat                   | Active               | [Generic chat](docs/fork/generic-chat.md)                             | `vp test packages/shared/src/genericChat.test.ts packages/contracts/src/settings.test.ts packages/client-runtime/src/state/projectGrouping.genericChat.test.ts apps/server/src/genericChat.test.ts apps/server/src/orchestration/Layers/ProviderCommandReactor.genericChat.test.ts apps/web/src/lib/chatThreadActions.test.ts apps/web/src/lib/quickChat.test.ts apps/desktop/src/app/DesktopQuickChat.test.ts apps/desktop/src/app/DesktopLifecycle.test.ts apps/desktop/src/window/DesktopWindow.test.ts`                                                                                                                                                                                |
 | `FORK-HERMES-001`  | Hermes TUI-gateway provider and automation management                                        | Active, early access | [Hermes](docs/fork/hermes.md)                                         | `vp test apps/server/src/provider/hermes apps/server/src/persistence/Migrations/039_TangentMigrationCompatibility.test.ts packages/client-runtime/src/operations/hermesAutomations.test.ts apps/web/src/components/settings/SettingsPanels.logic.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `FORK-PUSH-001`    | Personal APNs notifications and Live Activities                                              | Active               | [Personal push relay](docs/fork/personal-push-relay.md)               | `vp test apps/push-relay/src apps/server/src/personalPush apps/server/src/relay/AgentAwarenessRelay.test.ts apps/mobile/src/features/agent-awareness/remoteRegistration.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `FORK-IMAGE-001`   | Shared HEIC/HEIF-to-JPEG upload normalization                                                | Active               | [Image normalization](docs/fork/image-normalization.md)               | `vp test apps/server/src/imageNormalization.test.ts apps/server/src/orchestration/Normalizer.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -87,6 +88,7 @@ for active requirements.
 Fork-owned paths:
 
 - `downstream/config.ts`
+- `downstream/mobile-config.ts`
 - `.github/workflows/personal-*.yml`
 - `apps/mobile/src/features/updates/app-updates.ts` and its focused test
 - `docs/personal-distribution.md`
@@ -113,6 +115,8 @@ Invariants:
   failures. They stay quiet on launch; a user-initiated check reports the error in the settings UI.
 - A matching upstream package version is not an equivalent update source.
 - Release workflows must not publish unless checks pass and the requested version is absent.
+- Mobile and Expo consumers import only `downstream/mobile-config.ts`; desktop-only identity changes
+  must not alter the iOS runtime fingerprint.
 
 ### FORK-CHAT-001
 
@@ -121,7 +125,7 @@ Fork-owned paths:
 - `packages/shared/src/genericChat.ts`
 - `apps/server/src/genericChat.ts` and focused generic-chat tests
 - `apps/mobile/src/features/threads/use-start-generic-chat.ts`
-- `apps/mobile/src/features/home/HomeChatComposer.tsx` and `homeChat.ts`
+- `apps/mobile/src/features/home/HomeChatComposer.tsx`
 - `apps/mobile/src/features/threads/ProjectThreadRouteGuard.tsx`
 - `apps/desktop/src/app/DesktopQuickChat.ts`
 - `scripts/raycast-tangent-quick-chat.sh`

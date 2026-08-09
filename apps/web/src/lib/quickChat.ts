@@ -7,6 +7,7 @@ interface QuickChatThreadLike {
   readonly id: string;
   readonly projectId: string;
   readonly archivedAt: string | null;
+  readonly settledOverride: "settled" | "active" | null;
 }
 
 export type QuickChatTarget =
@@ -36,6 +37,7 @@ export function resolveQuickChatTarget(input: {
       candidate.environmentId === input.lastVisit?.environmentId &&
       candidate.id === input.lastVisit.threadId &&
       candidate.archivedAt === null &&
+      candidate.settledOverride !== "settled" &&
       isGenericChatThread(candidate),
   );
   return thread
