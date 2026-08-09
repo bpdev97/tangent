@@ -42,6 +42,7 @@ export function useStartGenericChat() {
 
   return {
     genericChatAvailable: genericChatProject !== null,
+    genericChatEnvironmentId: genericChatProject?.environmentId ?? preferredEnvironmentId ?? null,
     startGenericChat,
   };
 }

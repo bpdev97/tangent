@@ -1,13 +1,13 @@
 import { readHostedPairingRequest } from "@t3tools/shared/remote";
 import * as Schema from "effect/Schema";
 
-import { PERSONAL_DISTRIBUTION } from "../../../../../downstream/config.ts";
+import { PERSONAL_MOBILE_DISTRIBUTION } from "../../../../../downstream/mobile-config.ts";
 
 const MOBILE_PAIRING_URL_PARAM = "pairingUrl";
 const PERSONAL_MOBILE_SCHEMES = new Set([
-  `${PERSONAL_DISTRIBUTION.mobile.scheme}:`,
-  `${PERSONAL_DISTRIBUTION.mobile.developmentScheme}:`,
-  `${PERSONAL_DISTRIBUTION.mobile.previewScheme}:`,
+  `${PERSONAL_MOBILE_DISTRIBUTION.scheme}:`,
+  `${PERSONAL_MOBILE_DISTRIBUTION.developmentScheme}:`,
+  `${PERSONAL_MOBILE_DISTRIBUTION.previewScheme}:`,
 ]);
 
 function isIpLiteral(host: string): boolean {

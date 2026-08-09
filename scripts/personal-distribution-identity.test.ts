@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vite-plus/test";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe, expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import mobilePackageJson from "../apps/mobile/package.json" with { type: "json" };
 
 import { PERSONAL_DISTRIBUTION } from "../downstream/config.ts";
+import { PERSONAL_MOBILE_DISTRIBUTION } from "../downstream/mobile-config.ts";
 
 describe("personal distribution identity", () => {
   it("keeps installed identities and persistent state distinct from upstream", () => {
@@ -14,6 +18,7 @@ describe("personal distribution identity", () => {
       artifactNamePrefix: "tangent-server",
     });
     expect(mobile.appName).toBe("Tangent");
+    expect(mobile).toBe(PERSONAL_MOBILE_DISTRIBUTION);
     expect([mobile.scheme, mobile.developmentScheme, mobile.previewScheme]).toEqual([
       "bpdev-code",
       "bpdev-code-dev",
@@ -26,6 +31,24 @@ describe("personal distribution identity", () => {
     expect(macos.stateHomeDirectoryName).toBe(".bpdev-code");
     expect(macos.userDataDirectoryName).toBe("bpdev-code");
   });
+
+  it.effect("keeps desktop-only distribution changes out of the mobile native fingerprint", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const mobileConsumers = [
+        "apps/mobile/app.config.ts",
+        "apps/mobile/src/App.tsx",
+        "apps/mobile/src/branding.ts",
+        "apps/mobile/src/features/connection/pairing.ts",
+      ];
+
+      for (const path of mobileConsumers) {
+        const source = yield* fs.readFileString(path);
+        expect(source).toContain("downstream/mobile-config");
+        expect(source).not.toContain("downstream/config");
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
 
   it("starts mobile development clients through the personal URL schemes", () => {
     expect(mobilePackageJson.scripts["dev:client"]).toContain("--scheme bpdev-code-dev");

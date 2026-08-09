@@ -43,6 +43,11 @@ The personal iOS workflow supports two manually selected operations:
 Use `build` whenever the Expo fingerprint changes. Use `update` only when the installed native
 runtime is compatible.
 
+Mobile identity lives in `downstream/mobile-config.ts`, which is the only downstream distribution
+module imported by the Expo config and mobile runtime. `downstream/config.ts` composes that mobile
+slice with desktop and server identity. Keep this boundary narrow: changing a desktop-only release
+field must not invalidate an otherwise compatible iOS update.
+
 The mobile app checks this channel once per JavaScript launch. Offline and development-client
 failures are recoverable and stay quiet during that automatic check. A manual check from Settings
 continues to show its concrete failure so the user can retry or diagnose the release channel.
