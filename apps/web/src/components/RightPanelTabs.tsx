@@ -1,6 +1,6 @@
 import type { ContextMenuItem, PreviewSessionSnapshot } from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
-import { Bot, FileDiff, Files, Globe2, Plus, TerminalSquare, X } from "lucide-react";
+import { Bot, FileDiff, Files, Globe2, Plus, TerminalSquare, Ticket, X } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
   type ReactElement,
@@ -219,6 +219,7 @@ function surfaceTitle(
     case "agents":
       return "Agents";
     case "preview": {
+      if (surface.presentation?._tag === "linear") return "Linear";
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
       if (snapshot.navStatus.title.trim().length > 0) return snapshot.navStatus.title;
@@ -258,6 +259,9 @@ function SurfaceIcon({
 }) {
   switch (surface.kind) {
     case "preview": {
+      if (surface.presentation?._tag === "linear") {
+        return <Ticket className="size-3 shrink-0" />;
+      }
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       const url = !snapshot || snapshot.navStatus._tag === "Idle" ? null : snapshot.navStatus.url;
       return <PreviewFavicon url={url} />;

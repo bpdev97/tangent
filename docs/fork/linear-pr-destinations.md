@@ -47,9 +47,17 @@ for linked tickets and manual fallback. Linear Review opens directly only after 
 eligibility; otherwise the menu explains the missing or failed resolution and keeps GitHub
 available.
 
-Desktop Linear destinations open through the existing thread-scoped right-panel browser surface.
-Hosted web clients, where that surface is unavailable, open a new external browser tab. GitHub uses
-the existing external-link behavior on every surface.
+Desktop Linear destinations open through the existing thread-scoped right-panel browser surface,
+but use a Linear-specific presentation instead of the generic address bar and preview controls. The
+toolbar keeps Review and resolved ticket destinations available while the embedded Linear page is
+open; multiple tickets collapse into a destination menu.
+
+Electron preview webviews use a persistent partition derived from the environment id, not the
+thread id. Linear authentication cookies therefore carry across threads and desktop restarts for
+that environment. The page/tab remains thread-scoped; only browser session storage is shared.
+
+Hosted web clients, where the right-panel browser is unavailable, open a new external browser tab.
+GitHub uses the existing external-link behavior on every surface.
 
 ## Verification
 
@@ -57,7 +65,13 @@ the existing external-link behavior on every surface.
 vp test packages/shared/src/linear.test.ts \
   packages/contracts/src/settings.test.ts \
   apps/server/src/linear/LinearIntegration.test.ts \
-  apps/server/src/serverSettings.test.ts
+  apps/server/src/serverSettings.test.ts \
+  apps/desktop/src/preview/BrowserSession.test.ts \
+  apps/web/src/browser/openFileInPreview.test.ts \
+  apps/web/src/components/linear/linearPreviewPresentation.test.ts \
+  apps/web/src/components/linear/LinearPreviewToolbar.test.tsx \
+  apps/web/src/rightPanelStore.test.ts \
+  apps/web/src/components/preview/PreviewView.test.tsx
 vp check
 vp run typecheck
 ```

@@ -49,7 +49,7 @@ describe("BrowserSession", () => {
     });
   });
 
-  it.effect("derives deterministic partitions and memoizes sessions", () =>
+  it.effect("reuses a persistent browser session for one environment scope", () =>
     Effect.gen(function* () {
       const browserSessions = yield* BrowserSession.BrowserSession;
 

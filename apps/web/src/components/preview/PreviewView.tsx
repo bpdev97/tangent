@@ -31,8 +31,9 @@ import { useEnvironmentHttpBaseUrl } from "~/state/environments";
 import { previewEnvironment } from "~/state/preview";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { selectThreadPreviewMiniPlayer, usePreviewMiniPlayerStore } from "~/previewMiniPlayerStore";
-import { useRightPanelStore } from "~/rightPanelStore";
+import { type LinearPreviewPresentation, useRightPanelStore } from "~/rightPanelStore";
 
+import { LinearPreviewToolbar } from "../linear/LinearPreviewToolbar";
 import { previewBridge } from "./previewBridge";
 import { subscribePreviewAction } from "./previewActionBus";
 import { openPreviewSession } from "./openPreviewSession";
@@ -65,6 +66,7 @@ import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 interface Props {
   threadRef: ScopedThreadRef;
   tabId?: string | null;
+  presentation?: LinearPreviewPresentation;
   configuredUrls?: ReadonlyArray<string> | undefined;
   visible: boolean;
   onSendAnnotation?: (
@@ -82,6 +84,7 @@ const localApi = typeof window === "undefined" ? null : ensureLocalApi();
 export function PreviewView({
   threadRef,
   tabId: requestedTabId,
+  presentation,
   configuredUrls,
   visible,
   onSendAnnotation,
@@ -655,49 +658,57 @@ export function PreviewView({
       className="flex min-h-0 flex-1 flex-col bg-background"
       data-thread-key={scopedThreadKey(threadRef)}
     >
-      <PreviewChromeRow
-        url={url}
-        loading={loading}
-        loadProgress={loadProgress}
-        canGoBack={canGoBack}
-        canGoForward={canGoForward}
-        refreshDisabled={refreshDisabled}
-        focusUrlNonce={focusUrlNonce}
-        onBack={handleBack}
-        onForward={handleForward}
-        onRefresh={handleRefresh}
-        onSubmit={(next) => void handleSubmitUrl(next)}
-        onOpenInBrowser={tabId ? handleOpenInBrowser : undefined}
-        onCapture={previewBridge && tabId ? handleCapture : undefined}
-        captureDisabled={!desktopOverlay || isUnreachable}
-        recording={recordingRuntimeTabId !== null}
-        onPictureInPicture={previewBridge && tabId ? handlePictureInPicture : undefined}
-        pictureInPicture={miniPlayer?.tabId === tabId}
-        pictureInPictureDisabled={!desktopOverlay?.hasWebContents || isUnreachable}
-        onPickElement={previewBridge && tabId ? handlePickElement : undefined}
-        pickActive={pickActive}
-        // Disable when there's no tab (nothing to pick on) OR the page
-        // failed to load (a React overlay covers the webview, so the
-        // user wouldn't be able to actually click anything underneath).
-        pickDisabled={!tabId || isUnreachable}
-        pickDisabledReason={
-          isUnreachable ? "Page didn't load — pick unavailable until the page renders" : undefined
-        }
-        trailingActions={
-          previewBridge ? (
-            <PreviewMoreMenu
-              tabId={runtimeTabId}
-              hasWebContents={desktopOverlay?.hasWebContents ?? false}
-              zoomFactor={desktopOverlay?.zoomFactor ?? 1}
-              colorScheme={desktopOverlay?.colorScheme ?? "system"}
-              deviceToolbarVisible={viewport._tag !== "fill"}
-              onToggleDeviceToolbar={handleToggleDeviceToolbar}
-              nativePictureInPicture={desktopOverlay?.pictureInPicture ?? false}
-              onNativePictureInPicture={handleNativePictureInPicture}
-            />
-          ) : null
-        }
-      />
+      {presentation?._tag === "linear" ? (
+        <LinearPreviewToolbar
+          currentUrl={url}
+          presentation={presentation}
+          onNavigate={(next) => void handleSubmitUrl(next)}
+        />
+      ) : (
+        <PreviewChromeRow
+          url={url}
+          loading={loading}
+          loadProgress={loadProgress}
+          canGoBack={canGoBack}
+          canGoForward={canGoForward}
+          refreshDisabled={refreshDisabled}
+          focusUrlNonce={focusUrlNonce}
+          onBack={handleBack}
+          onForward={handleForward}
+          onRefresh={handleRefresh}
+          onSubmit={(next) => void handleSubmitUrl(next)}
+          onOpenInBrowser={tabId ? handleOpenInBrowser : undefined}
+          onCapture={previewBridge && tabId ? handleCapture : undefined}
+          captureDisabled={!desktopOverlay || isUnreachable}
+          recording={recordingRuntimeTabId !== null}
+          onPictureInPicture={previewBridge && tabId ? handlePictureInPicture : undefined}
+          pictureInPicture={miniPlayer?.tabId === tabId}
+          pictureInPictureDisabled={!desktopOverlay?.hasWebContents || isUnreachable}
+          onPickElement={previewBridge && tabId ? handlePickElement : undefined}
+          pickActive={pickActive}
+          // Disable when there's no tab (nothing to pick on) OR the page
+          // failed to load (a React overlay covers the webview, so the
+          // user wouldn't be able to actually click anything underneath).
+          pickDisabled={!tabId || isUnreachable}
+          pickDisabledReason={
+            isUnreachable ? "Page didn't load — pick unavailable until the page renders" : undefined
+          }
+          trailingActions={
+            previewBridge ? (
+              <PreviewMoreMenu
+                tabId={runtimeTabId}
+                hasWebContents={desktopOverlay?.hasWebContents ?? false}
+                zoomFactor={desktopOverlay?.zoomFactor ?? 1}
+                colorScheme={desktopOverlay?.colorScheme ?? "system"}
+                deviceToolbarVisible={viewport._tag !== "fill"}
+                onToggleDeviceToolbar={handleToggleDeviceToolbar}
+                nativePictureInPicture={desktopOverlay?.pictureInPicture ?? false}
+                onNativePictureInPicture={handleNativePictureInPicture}
+              />
+            ) : null
+          }
+        />
+      )}
 
       <div className="relative min-h-0 flex-1 overflow-hidden">
         {runtimeTabId && snapshot && !showEmptyState ? (

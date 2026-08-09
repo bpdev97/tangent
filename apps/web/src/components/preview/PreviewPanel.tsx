@@ -4,6 +4,7 @@ import type { PreviewAnnotationPayload, ScopedThreadRef } from "@t3tools/contrac
 
 import type { ComposerImageAttachment } from "~/composerDraftStore";
 import { isPreviewSupportedInRuntime } from "~/previewStateStore";
+import type { LinearPreviewPresentation } from "~/rightPanelStore";
 
 import { PreviewPanelShell, type PreviewPanelMode } from "./PreviewPanelShell";
 import { PreviewView } from "./PreviewView";
@@ -12,6 +13,7 @@ interface Props {
   mode: PreviewPanelMode;
   threadRef: ScopedThreadRef;
   tabId?: string | null;
+  presentation?: LinearPreviewPresentation;
   configuredUrls?: ReadonlyArray<string> | undefined;
   visible: boolean;
   onSendAnnotation?: (
@@ -24,6 +26,7 @@ export function PreviewPanel({
   mode,
   threadRef,
   tabId,
+  presentation,
   configuredUrls,
   visible,
   onSendAnnotation,
@@ -45,6 +48,7 @@ export function PreviewPanel({
       <PreviewView
         threadRef={threadRef}
         {...(tabId !== undefined ? { tabId } : {})}
+        {...(presentation ? { presentation } : {})}
         configuredUrls={configuredUrls}
         visible={visible}
         {...(onSendAnnotation ? { onSendAnnotation } : {})}

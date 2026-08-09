@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   rememberPreviewUrl: vi.fn(),
   readPreparedConnection: vi.fn(() => ({ httpBaseUrl: "http://172.25.85.75:3773" })),
   submittedUrl: null as ((url: string) => void) | null,
+  linearSubmittedUrl: null as ((url: string) => void) | null,
+  linearToolbarRendered: false,
   emptyStateUrl: null as ((url: string) => void) | null,
   togglePictureInPicture: null as (() => void) | null,
   toggleNativePictureInPicture: null as (() => void) | null,
@@ -192,6 +194,14 @@ vi.mock("./PreviewChromeRow", () => ({
   },
 }));
 
+vi.mock("../linear/LinearPreviewToolbar", () => ({
+  LinearPreviewToolbar: (props: { onNavigate: (url: string) => void }) => {
+    mocks.linearSubmittedUrl = props.onNavigate;
+    mocks.linearToolbarRendered = true;
+    return null;
+  },
+}));
+
 vi.mock("./PreviewEmptyState", () => ({
   PreviewEmptyState: (props: { onOpenUrl: (url: string) => void }) => {
     mocks.emptyStateUrl = props.onOpenUrl;
@@ -226,6 +236,8 @@ describe("PreviewView navigation", () => {
     mocks.rememberPreviewUrl.mockClear();
     mocks.readPreparedConnection.mockClear();
     mocks.submittedUrl = null;
+    mocks.linearSubmittedUrl = null;
+    mocks.linearToolbarRendered = false;
     mocks.emptyStateUrl = null;
     mocks.togglePictureInPicture = null;
     mocks.toggleNativePictureInPicture = null;
@@ -298,6 +310,40 @@ describe("PreviewView navigation", () => {
         "http://localhost:3000/admin",
       );
     });
+  });
+
+  it("uses destination navigation instead of the generic address bar for Linear", async () => {
+    renderToStaticMarkup(
+      <PreviewView
+        threadRef={TEST_THREAD_REF}
+        tabId="tab-1"
+        presentation={{
+          _tag: "linear",
+          reviewUrl: "https://linear.review/bpdev97/tangent/pull/52",
+          tickets: [
+            {
+              id: "issue-1",
+              identifier: "TAN-42",
+              title: "Make Linear feel native",
+              url: "https://linear.app/tangent/issue/TAN-42",
+            },
+          ],
+          ticketLookup: "ready",
+        }}
+        visible
+      />,
+    );
+
+    expect(mocks.linearToolbarRendered).toBe(true);
+    expect(mocks.submittedUrl).toBeNull();
+    mocks.linearSubmittedUrl?.("https://linear.app/tangent/issue/TAN-42");
+
+    await vi.waitFor(() =>
+      expect(mocks.navigate).toHaveBeenCalledWith(
+        TEST_RUNTIME_TAB_ID,
+        "https://linear.app/tangent/issue/TAN-42",
+      ),
+    );
   });
 
   it("maps an empty-state localhost server onto the WSL host", async () => {
