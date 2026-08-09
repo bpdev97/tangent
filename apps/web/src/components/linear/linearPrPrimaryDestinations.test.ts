@@ -19,7 +19,7 @@ const TICKETS = [
 ];
 
 describe("linearPrPrimaryDestinationUrls", () => {
-  it("opens the primary ticket and then Review in Tangent", () => {
+  it("opens the primary ticket and then Review in the side panel", () => {
     expect(
       linearPrPrimaryDestinationUrls({
         behavior: "tangent",

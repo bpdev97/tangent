@@ -1,8 +1,9 @@
-# Tangent
+# T3 Code
 
-Tangent is my personal fork of [T3 Code](https://github.com/pingdotgg/t3code), an agent-harness
-control surface for web, desktop, and mobile. It carries a small distribution-specific layer while
-staying close to upstream.
+This repository builds Tangent, my personal distribution of
+[T3 Code](https://github.com/pingdotgg/t3code), an agent-harness control surface for web, desktop,
+and mobile. The separate name distinguishes the installed fork and its releases; the product keeps
+T3 Code's visual identity and vocabulary.
 
 It works with Claude Code, Codex, Cursor, Grok Build, OpenCode, and the fork's early-access Hermes
 Agent integration.

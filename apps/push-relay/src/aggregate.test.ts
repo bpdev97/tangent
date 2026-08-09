@@ -51,6 +51,7 @@ describe("personal push relay aggregation", () => {
       Date.parse("2026-07-14T12:03:00.000Z"),
     );
 
+    expect(aggregate?.title).toBe("T3 Code");
     expect(aggregate?.activeCount).toBe(1);
     expect(aggregate?.activities.map((row) => row.phase)).toEqual(["running", "completed"]);
   });

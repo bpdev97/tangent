@@ -111,7 +111,7 @@ export function LinearPrBadge(props: {
     [props.pr.url, props.threadRef.environmentId, resolveDestinations],
   );
 
-  const openLinearInTangent = useCallback(
+  const openLinearInSidePanel = useCallback(
     async (url: string, resolutionOverride?: LinearPrDestinationResolution | null) => {
       const currentResolution = resolutionOverride === undefined ? resolution : resolutionOverride;
       if (isPreviewSupportedInRuntime()) {
@@ -159,7 +159,7 @@ export function LinearPrBadge(props: {
         await openLinearDestination({
           behavior: linear.ticketOpenBehavior,
           destinationUrl,
-          openInTangent: (url) => openLinearInTangent(url, resolutionOverride),
+          openInSidePanel: (url) => openLinearInSidePanel(url, resolutionOverride),
           openExternal: async (url) => {
             const api = readLocalApi();
             if (!api) throw new Error("Local link handling is unavailable.");
@@ -176,7 +176,7 @@ export function LinearPrBadge(props: {
         );
       }
     },
-    [linear.ticketOpenBehavior, openLinearInTangent],
+    [linear.ticketOpenBehavior, openLinearInSidePanel],
   );
 
   const handleMenuOpenChange = useCallback(

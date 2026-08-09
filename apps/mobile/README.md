@@ -1,8 +1,8 @@
-# Tangent Mobile
+# T3 Code Mobile
 
 > [!WARNING]
-> Tangent Mobile is a personal distribution. Production iOS builds are delivered through
-> TestFlight; local development still requires building from source.
+> This repository packages the mobile app as the Tangent personal distribution. Production iOS
+> builds are delivered through TestFlight; local development still requires building from source.
 
 ## Quickstart
 

@@ -6,7 +6,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { APP_BASE_NAME } from "../../branding";
+import { PRODUCT_NAME } from "../../branding";
 import {
   applyThemeColorPreview,
   THEME_COLOR_ROLES,
@@ -859,7 +859,7 @@ export function ThemeEditorPanel({
     <label className="grid cursor-pointer grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-center gap-3">
       <span className="text-sm font-medium">Sidebar artwork</span>
       <span className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <span>Show {APP_BASE_NAME} environment artwork</span>
+        <span>Show {PRODUCT_NAME} environment artwork</span>
         <Switch
           aria-label="Allow sidebar artwork with this theme"
           checked={sidebarArtwork}

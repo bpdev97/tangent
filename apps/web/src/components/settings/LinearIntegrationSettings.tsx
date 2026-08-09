@@ -21,7 +21,7 @@ const BEHAVIOR_LABELS: Record<LinearPrBadgeBehavior, string> = {
 };
 
 const DESTINATION_BEHAVIOR_LABELS: Record<LinearDestinationOpenBehavior, string> = {
-  tangent: "Tangent side panel",
+  tangent: "Side panel",
   "linear-app": "Linear app",
 };
 
@@ -255,7 +255,7 @@ export function LinearIntegrationSettingsSection() {
       />
       <SettingsRow
         title="Open PR badges with"
-        description="Choose what the PR number in the new sidebar does. Linear opens Review and, in Tangent, the primary linked ticket in separate tabs. It falls back to the destination menu when Review is unavailable."
+        description="Choose what the PR number in the new sidebar does. Linear opens Review and the primary linked ticket in separate side-panel tabs. It falls back to the destination menu when Review is unavailable."
         control={
           <Select
             value={behavior}
@@ -274,7 +274,7 @@ export function LinearIntegrationSettingsSection() {
       />
       <SettingsRow
         title="Open Linear in"
-        description="Choose where Review and ticket destinations open. Tangent uses separate addressless side-panel tabs; Linear app uses desktop deep links."
+        description="Choose where Review and ticket destinations open. The side panel uses separate addressless tabs; Linear app uses desktop deep links."
         control={
           <Select
             value={destinationBehavior}
@@ -286,7 +286,7 @@ export function LinearIntegrationSettingsSection() {
               <SelectValue>{DESTINATION_BEHAVIOR_LABELS[destinationBehavior]}</SelectValue>
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>
-              <SelectItem value="tangent">Tangent side panel</SelectItem>
+              <SelectItem value="tangent">Side panel</SelectItem>
               <SelectItem value="linear-app">Linear app</SelectItem>
             </SelectPopup>
           </Select>

@@ -582,6 +582,7 @@ export type PersonalPushRelaySettings = typeof PersonalPushRelaySettings.Type;
 export const LinearPrBadgeBehavior = Schema.Literals(["github", "linear-review", "choose"]);
 export type LinearPrBadgeBehavior = typeof LinearPrBadgeBehavior.Type;
 
+// `tangent` is the legacy persisted discriminant for the distribution-neutral side-panel option.
 export const LinearDestinationOpenBehavior = Schema.Literals(["tangent", "linear-app"]);
 export type LinearDestinationOpenBehavior = typeof LinearDestinationOpenBehavior.Type;
 

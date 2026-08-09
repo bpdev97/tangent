@@ -34,6 +34,7 @@ describe("branding", () => {
 
     const branding = await import("./branding");
 
+    expect(branding.PRODUCT_NAME).toBe("T3 Code");
     expect(branding.APP_BASE_NAME).toBe("T3 Code");
     expect(branding.APP_STAGE_LABEL).toBe("Nightly");
     expect(branding.APP_DISPLAY_NAME).toBe("T3 Code (Nightly)");

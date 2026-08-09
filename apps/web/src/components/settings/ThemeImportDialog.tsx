@@ -1,7 +1,7 @@
 import { PlusIcon, UploadIcon } from "lucide-react";
 import type { ChangeEvent, DragEvent, UIEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { APP_BASE_NAME } from "../../branding";
+import { PRODUCT_NAME } from "../../branding";
 import { cn } from "../../lib/utils";
 import {
   getCustomThemes,
@@ -506,7 +506,7 @@ export function ThemeImportDialog({
                   <div className="min-w-0">
                     <p className="text-sm font-medium">Theme file</p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {fileName ?? `Drop ${APP_BASE_NAME} or VS Code .json files`}
+                      {fileName ?? `Drop ${PRODUCT_NAME} or VS Code .json files`}
                     </p>
                   </div>
                   {chooseButton()}

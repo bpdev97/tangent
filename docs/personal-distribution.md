@@ -4,6 +4,9 @@ This guide covers the `bpdev97` personal distribution. It intentionally omits An
 app, npm publishing, Clerk, and the managed relay. Mobile connects directly to an environment over
 LAN or a tailnet.
 
+Tangent is the installed-app and release identity used to keep the fork separate from upstream.
+The in-app product identity, wordmarks, icons, and feature names remain T3 Code.
+
 Notifications and Live Activities can optionally use the fork-owned homelab relay. See
 [`docs/fork/personal-push-relay.md`](fork/personal-push-relay.md); it does not add Clerk or expose
 the APNs provider key to phones or T3 servers.

@@ -28,7 +28,7 @@ const state: RelayAgentActivityState = {
 };
 
 const aggregate: RelayAgentActivityAggregateState = {
-  title: "Tangent",
+  title: "T3 Code",
   subtitle: "1 agent needs attention",
   activeCount: 1,
   updatedAt: state.updatedAt,

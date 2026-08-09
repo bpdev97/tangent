@@ -1,7 +1,7 @@
 # Hermes
 
 Hermes support is early access and uses Hermes Agent's local TUI gateway. Install and configure
-Hermes before adding it to Tangent.
+Hermes before adding it to T3 Code.
 
 ## Configure a profile
 
@@ -19,7 +19,7 @@ hermes --profile research model
 
 T3 does not run this interactive setup for you.
 
-## Add it to Tangent
+## Add it to T3 Code
 
 Open Settings, add a provider instance, and choose Hermes. Set:
 

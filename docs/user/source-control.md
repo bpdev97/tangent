@@ -118,7 +118,7 @@ Control settings**.
 
 ### Open GitHub PRs in Linear
 
-Tangent can add Linear destinations to the pull request number shown in the default desktop and web
+T3 Code can add Linear destinations to the pull request number shown in the default desktop and web
 sidebar. Open **Settings → Source Control → Linear**, save a Linear personal API key, and choose what
 clicking a PR number should do:
 
@@ -132,15 +132,15 @@ Enter each GitHub repository where your workspace has Linear Review enabled as
 ticket without being available in Linear Review. Linked tickets are found automatically from
 Linear's PR attachment and appear separately in the destination menu.
 
-Use **Open Linear in** to choose where both Review and ticket destinations go. **Tangent side
-panel** opens Review and the primary linked ticket as two separate, addressless tabs, with Review
+Use **Open Linear in** to choose where both Review and ticket destinations go. **Side panel** opens
+Review and the primary linked ticket as two separate, addressless tabs, with Review
 active. **Linear app** uses Linear's desktop-app deep link and opens only Review from the primary PR
 action so destinations do not compete for focus. Choosing an individual Review or ticket from the
-menu follows the same setting. Linear must be installed on the computer running the Tangent client
+menu follows the same setting. Linear must be installed on the computer running the T3 Code client
 for the app option.
 
-Returning to an existing Tangent destination reactivates its tab instead of navigating another
-one. After you settle and leave a thread, Tangent unloads its embedded pages to release resources
+Returning to an existing side-panel destination reactivates its tab instead of navigating another
+one. After you settle and leave a thread, T3 Code unloads its embedded pages to release resources
 but retains their tabs and URLs. Returning reloads them with the same Linear sign-in and browser
 cache.
 

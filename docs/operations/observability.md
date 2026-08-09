@@ -1,8 +1,8 @@
 # Observability
 
-> For maintainers. Using Tangent? See [docs/user](../user/).
+> For maintainers. Using T3 Code? See [docs/user](../user/).
 
-Tangent has one server-side observability model:
+T3 Code has one server-side observability model:
 
 - pretty logs go to stdout for humans
 - completed spans go to a local NDJSON trace file

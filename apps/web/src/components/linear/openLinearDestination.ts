@@ -4,11 +4,11 @@ import { linearAppUrl } from "@t3tools/shared/linear";
 export async function openLinearDestination(input: {
   readonly behavior: LinearDestinationOpenBehavior;
   readonly destinationUrl: string;
-  readonly openInTangent: (url: string) => Promise<void> | void;
+  readonly openInSidePanel: (url: string) => Promise<void> | void;
   readonly openExternal: (url: string) => Promise<void>;
 }): Promise<void> {
   if (input.behavior === "tangent") {
-    await input.openInTangent(input.destinationUrl);
+    await input.openInSidePanel(input.destinationUrl);
     return;
   }
 
