@@ -42,11 +42,12 @@ stored there. Cache state does not cross server restarts.
 
 ## Presentation
 
-With no Linear key, the badge remains a direct GitHub link. With Linear configured, the saved
-behavior is GitHub, Linear, or Choose each time. Direct modes retain a small destination menu for
-linked tickets and manual fallback. Linear opens directly only after positive Review allowlist
-eligibility; otherwise the menu explains the missing or failed resolution and keeps GitHub
-available.
+With no Linear key, the badge retains upstream's GitHub behavior: it opens the in-app pull-request
+viewer when the current environment supports it and otherwise falls back to the external link. With
+Linear configured, the saved behavior is GitHub, Linear, or Choose each time. Direct modes retain a
+small destination menu for linked tickets and manual fallback. Linear opens directly only after
+positive Review allowlist eligibility; otherwise the menu explains the missing or failed resolution
+and keeps GitHub available through that same upstream path.
 
 The direct Linear action is intentionally destination-aware. In Tangent mode it opens the primary
 linked ticket first, when one exists, followed by Review so Review is the active surface. Those are
@@ -83,8 +84,10 @@ that environment. The page/tab remains thread-scoped; only browser session stora
 The browser-shaped user agent is applied on the webview itself so Electron and distribution product
 tokens cannot reappear after the session is created.
 
-Hosted web clients, where the right-panel browser is unavailable, open a new external browser tab.
-GitHub uses the existing external-link behavior on every surface.
+Hosted web clients, where the Linear right-panel browser is unavailable, open Linear destinations in
+a new external browser tab. GitHub remains upstream-owned: supported environments use the
+pull-request page or a thread's pull-request panel, and other runtimes use the existing external-link
+fallback.
 
 ## Verification
 

@@ -17,6 +17,20 @@ export default Effect.gen(function* () {
     `;
   }
 
+  // Released Tangent databases already used migration 39 for the repair
+  // above. Upstream later assigned that ID to the project-level thread
+  // environment default, so those databases skip upstream migration 39 and
+  // need its additive column repaired here.
+  const projectColumns = yield* sql<{ readonly name: string }>`
+    PRAGMA table_info(projection_projects)
+  `;
+  if (!projectColumns.some((column) => column.name === "default_thread_env_mode")) {
+    yield* sql`
+      ALTER TABLE projection_projects
+      ADD COLUMN default_thread_env_mode TEXT
+    `;
+  }
+
   yield* sql`
     INSERT OR IGNORE INTO projection_thread_activities (
       activity_id,

@@ -51,6 +51,18 @@ it("renders the fork-owned Tangent service identity", () => {
   expect(unit).toContain("Environment=T3_BOOT_SERVICE_UNIT=tangent.service");
 });
 
+it("survives the kernel OOM-killing a greedy agent child", () => {
+  const unit = BootService.renderBootServiceUnit({
+    nodePath: "/usr/bin/node",
+    launcherPath: "/home/theo/.t3/runtime/service-launcher.mjs",
+    baseDir: "/home/theo/.t3",
+    logPath: "/home/theo/.t3/userdata/logs/boot-service.log",
+    unitPath: "/home/theo/.config/systemd/user/t3code.service",
+  });
+
+  expect(unit).toContain("OOMPolicy=continue");
+});
+
 const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
   options: {
     readonly platform?: NodeJS.Platform;
@@ -96,6 +108,8 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
           timedOut: false,
           stdoutTruncated: false,
           stderrTruncated: false,
+          stdoutInvalidUtf8: false,
+          stderrInvalidUtf8: false,
         };
       }),
   });

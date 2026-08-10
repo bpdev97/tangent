@@ -65,6 +65,7 @@ export function LinearPrBadge(props: {
   readonly pr: NonNullable<ThreadPr>;
   readonly status: PrStatusIndicator;
   readonly threadRef: ScopedThreadRef;
+  readonly openPullRequestsInRightPanel: boolean;
   readonly onThreadActivate: (threadRef: ScopedThreadRef) => void;
   readonly className?: string;
 }) {
@@ -91,6 +92,26 @@ export function LinearPrBadge(props: {
     setResolution(null);
     setTransportFailed(false);
   }, [props.pr.url, linear.apiKeyRedacted, linear.reviewRepositories]);
+
+  const handleGitHubClick = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      const openedInRightPanel = openPrLink(
+        event,
+        props.pr.url,
+        props.openPullRequestsInRightPanel ? props.threadRef : undefined,
+      );
+      if (openedInRightPanel && props.openPullRequestsInRightPanel) {
+        props.onThreadActivate(props.threadRef);
+      }
+    },
+    [
+      openPrLink,
+      props.onThreadActivate,
+      props.openPullRequestsInRightPanel,
+      props.pr.url,
+      props.threadRef,
+    ],
+  );
 
   const load = useCallback(
     async (refresh = false): Promise<LinearPrDestinationResolution | null> => {
@@ -219,7 +240,7 @@ export function LinearPrBadge(props: {
     return (
       <button
         type="button"
-        onClick={(event) => openPrLink(event, props.pr.url)}
+        onClick={handleGitHubClick}
         className={badgeButtonClassName}
         aria-label={props.status.tooltip}
       >
@@ -232,7 +253,7 @@ export function LinearPrBadge(props: {
     <MenuPopup align="end" className="w-72">
       <MenuGroup>
         <MenuGroupLabel>Open pull request</MenuGroupLabel>
-        <MenuItem onClick={(event) => openPrLink(event, props.pr.url)}>
+        <MenuItem onClick={handleGitHubClick}>
           <ExternalLinkIcon />
           GitHub
         </MenuItem>
@@ -298,11 +319,7 @@ export function LinearPrBadge(props: {
     <span className="inline-flex shrink-0 items-center">
       <button
         type="button"
-        onClick={
-          linear.prBadgeBehavior === "linear-review"
-            ? handleLinearClick
-            : (event) => openPrLink(event, props.pr.url)
-        }
+        onClick={linear.prBadgeBehavior === "linear-review" ? handleLinearClick : handleGitHubClick}
         className={badgeButtonClassName}
         aria-label={props.status.tooltip}
       >

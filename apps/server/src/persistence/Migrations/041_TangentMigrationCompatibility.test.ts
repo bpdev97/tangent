@@ -8,7 +8,7 @@ import * as NodeSqliteClient from "../NodeSqliteClient.ts";
 
 const layer = it.layer(Layer.mergeAll(NodeSqliteClient.layerMemory()));
 
-layer("039_TangentMigrationCompatibility", (it) => {
+layer("041_TangentMigrationCompatibility", (it) => {
   it.effect("closes only orphaned Hermes prompts whose turns are terminal", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -116,7 +116,7 @@ layer("039_TangentMigrationCompatibility", (it) => {
         `;
       }
 
-      yield* runMigrations({ toMigrationInclusive: 39 });
+      yield* runMigrations({ toMigrationInclusive: 41 });
 
       const resolved = yield* sql<{
         readonly threadId: string;
@@ -160,8 +160,8 @@ layer("039_TangentMigrationCompatibility", (it) => {
 
 const compatibilityLayer = it.layer(Layer.mergeAll(NodeSqliteClient.layerMemory()));
 
-compatibilityLayer("039_TangentMigrationCompatibility legacy ledger", (it) => {
-  it.effect("repairs databases that already used migration 36 for Hermes", () =>
+compatibilityLayer("041_TangentMigrationCompatibility legacy ledger", (it) => {
+  it.effect("repairs databases that already used Tangent migration IDs 36 and 39", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
 
@@ -169,6 +169,11 @@ compatibilityLayer("039_TangentMigrationCompatibility legacy ledger", (it) => {
       yield* sql`
         INSERT INTO effect_sql_migrations (migration_id, name)
         VALUES (36, 'CloseInterruptedHermesUserInputs')
+      `;
+      yield* runMigrations({ toMigrationInclusive: 38 });
+      yield* sql`
+        INSERT INTO effect_sql_migrations (migration_id, name)
+        VALUES (39, 'TangentMigrationCompatibility')
       `;
 
       yield* runMigrations();
@@ -178,6 +183,12 @@ compatibilityLayer("039_TangentMigrationCompatibility legacy ledger", (it) => {
       `;
       assert.ok(columns.some((column) => column.name === "pinned_at"));
       assert.ok(columns.some((column) => column.name === "pin_order_key"));
+
+      const projectColumns = yield* sql<{ readonly name: string }>`
+        PRAGMA table_info(projection_projects)
+      `;
+      assert.ok(projectColumns.some((column) => column.name === "default_thread_env_mode"));
+      assert.ok(projectColumns.some((column) => column.name === "favicon_path"));
 
       const migrations = yield* sql<{ readonly migration_id: number; readonly name: string }>`
         SELECT migration_id, name
@@ -190,6 +201,8 @@ compatibilityLayer("039_TangentMigrationCompatibility legacy ledger", (it) => {
         { migration_id: 37, name: "ProjectionTurnsKeysetIndex" },
         { migration_id: 38, name: "ProjectionThreadsPinOrderKey" },
         { migration_id: 39, name: "TangentMigrationCompatibility" },
+        { migration_id: 40, name: "ProjectionProjectFaviconPath" },
+        { migration_id: 41, name: "TangentMigrationCompatibility" },
       ]);
     }),
   );
