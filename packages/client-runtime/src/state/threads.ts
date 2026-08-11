@@ -27,7 +27,7 @@ import { subscribeDynamic } from "../rpc/client.ts";
 import { ThreadSnapshotLoader, type ThreadSnapshotWindow } from "./threadSnapshotHttp.ts";
 import { parseThreadKey, threadKey } from "./entities.ts";
 import { applyThreadDetailEvent } from "./threadReducer.ts";
-import { THREAD_STATE_IDLE_TTL_MS } from "./threadRetention.ts";
+import { THREAD_STATE_IDLE_TTL_MS, type ThreadStateRetentionOptions } from "./threadRetention.ts";
 import { followStreamInEnvironment } from "./runtime.ts";
 import {
   EMPTY_ENVIRONMENT_THREAD_STATE,
@@ -705,17 +705,16 @@ export function createEnvironmentThreadStateAtoms<R, E>(
     EnvironmentRegistry | EnvironmentCacheStore | ThreadSnapshotLoader | R,
     E
   >,
+  options?: ThreadStateRetentionOptions,
 ) {
+  const idleTtlMs = options?.idleTtlMs ?? THREAD_STATE_IDLE_TTL_MS;
   const family = Atom.family((key: string) => {
     const { environmentId, threadId } = parseThreadKey(key);
     return runtime
       .atom(threadStateChanges(environmentId, threadId), {
         initialValue: EMPTY_ENVIRONMENT_THREAD_STATE,
       })
-      .pipe(
-        Atom.setIdleTTL(THREAD_STATE_IDLE_TTL_MS),
-        Atom.withLabel(`environment-thread-state:${key}`),
-      );
+      .pipe(Atom.setIdleTTL(idleTtlMs), Atom.withLabel(`environment-thread-state:${key}`));
   });
 
   return {
