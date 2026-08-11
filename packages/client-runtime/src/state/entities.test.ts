@@ -197,6 +197,32 @@ function makeHarness() {
 }
 
 describe("environment entity projections", () => {
+  it("applies a client-specific retention window to every detail projection", () => {
+    const threadStateAtoms = Atom.family((_key: string) =>
+      Atom.make(AsyncResult.success(EMPTY_ENVIRONMENT_THREAD_STATE)),
+    );
+    const threadDetails = createEnvironmentThreadDetailAtoms(
+      (environmentId, threadId) => threadStateAtoms(`${environmentId}\u0000${threadId}`),
+      { idleTtlMs: 1_000 },
+    );
+    const ref = { environmentId: ENVIRONMENT_ID, threadId: THREAD_ID };
+
+    expect(
+      [
+        threadDetails.stateAtom(ref),
+        threadDetails.detailAtom(ref),
+        threadDetails.statusAtom(ref),
+        threadDetails.errorAtom(ref),
+        threadDetails.messagesAtom(ref),
+        threadDetails.activitiesAtom(ref),
+        threadDetails.proposedPlansAtom(ref),
+        threadDetails.checkpointsAtom(ref),
+        threadDetails.sessionAtom(ref),
+        threadDetails.latestTurnAtom(ref),
+      ].every((atom) => atom.idleTTL === 1_000),
+    ).toBe(true);
+  });
+
   it("composes detail collections with authoritative shell workspace metadata", () => {
     const messages: OrchestrationThread["messages"] = [];
     const detail = {

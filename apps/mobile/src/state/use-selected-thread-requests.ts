@@ -11,7 +11,7 @@ import {
   derivePendingApprovals,
   derivePendingUserInputs,
   setPendingUserInputCustomAnswer,
-  sortThreadActivities,
+  sortPendingRequestActivities,
   type PendingUserInputDraftAnswer,
 } from "../lib/threadActivity";
 import { appAtomRegistry } from "./atom-registry";
@@ -71,9 +71,10 @@ export function useSelectedThreadRequests() {
     null,
   );
 
-  // Sort once; both derivations expect the same lifecycle ordering.
+  // Request state depends on only six lifecycle event kinds. Filtering before
+  // sorting avoids copying and comparing a large tool history on thread open.
   const sortedActivities = useMemo(
-    () => (selectedThread ? sortThreadActivities(selectedThread.activities) : []),
+    () => (selectedThread ? sortPendingRequestActivities(selectedThread.activities) : []),
     [selectedThread],
   );
   const activePendingApprovals = useMemo(
