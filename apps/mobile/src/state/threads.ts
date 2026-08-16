@@ -11,23 +11,14 @@ import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
 
-import { PERSONAL_MOBILE_RUNTIME } from "../../../../downstream/mobile-runtime-config";
 import { environmentCatalog } from "../connection/catalog";
 import { connectionAtomRuntime } from "../connection/runtime";
 import { environmentSnapshotAtom } from "./shell";
 
 export const threadEnvironment = createThreadEnvironmentAtoms(connectionAtomRuntime);
-const threadRetentionOptions = {
-  idleTtlMs: PERSONAL_MOBILE_RUNTIME.threadStateIdleTtlMs,
-};
-
-export const environmentThreads = createEnvironmentThreadStateAtoms(
-  connectionAtomRuntime,
-  threadRetentionOptions,
-);
+export const environmentThreads = createEnvironmentThreadStateAtoms(connectionAtomRuntime);
 export const environmentThreadDetails = createEnvironmentThreadDetailAtoms(
   environmentThreads.stateAtom,
-  threadRetentionOptions,
 );
 export const environmentThreadShells = createEnvironmentThreadShellAtoms({
   catalogValueAtom: environmentCatalog.catalogValueAtom,

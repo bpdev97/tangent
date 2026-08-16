@@ -298,22 +298,18 @@ function isAgentInternalActivity(activity: OrchestrationThreadActivity): boolean
 function deriveWorkLogEntries(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
 ): DerivedWorkLogEntry[] {
-  const ordered = activities
-    .filter((activity) => {
-      if (activity.kind === "tool.started") return false;
-      if (activity.kind === "task.started") return false;
-      // Terminal bypassed updates pass: Codex children's only terminal signal.
-      if (activity.kind === "task.updated" && !isTerminalBypassUpdate(activity)) return false;
-      if (activity.kind === "tool.progress") return false;
-      if (activity.kind === "context-window.updated") return false;
-      if (activity.summary === "Checkpoint captured") return false;
-      if (isPlanBoundaryToolActivity(activity)) return false;
-      if (isAgentInternalActivity(activity)) return false;
-      return true;
-    })
-    .sort(activityOrder);
+  const ordered = Arr.sort(activities, activityOrder);
   const entries: DerivedWorkLogEntry[] = [];
   for (const activity of ordered) {
+    if (activity.kind === "tool.started") continue;
+    if (activity.kind === "task.started") continue;
+    // Terminal bypassed updates pass: Codex children's only terminal signal.
+    if (activity.kind === "task.updated" && !isTerminalBypassUpdate(activity)) continue;
+    if (activity.kind === "tool.progress") continue;
+    if (activity.kind === "context-window.updated") continue;
+    if (activity.summary === "Checkpoint captured") continue;
+    if (isPlanBoundaryToolActivity(activity)) continue;
+    if (isAgentInternalActivity(activity)) continue;
     entries.push(toDerivedWorkLogEntry(activity));
   }
   return collapseDerivedWorkLogEntries(entries);
@@ -1340,23 +1336,6 @@ export function sortThreadActivities(
   return Arr.sort(activities, activityOrder);
 }
 
-const PENDING_REQUEST_ACTIVITY_KINDS = new Set<OrchestrationThreadActivity["kind"]>([
-  "approval.requested",
-  "approval.resolved",
-  "provider.approval.respond.failed",
-  "user-input.requested",
-  "user-input.resolved",
-  "provider.user-input.respond.failed",
-]);
-
-export function sortPendingRequestActivities(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
-): ReadonlyArray<OrchestrationThreadActivity> {
-  return sortThreadActivities(
-    activities.filter((activity) => PENDING_REQUEST_ACTIVITY_KINDS.has(activity.kind)),
-  );
-}
-
 export function derivePendingApprovals(
   sortedActivities: ReadonlyArray<OrchestrationThreadActivity>,
 ): PendingApproval[] {
@@ -1540,8 +1519,8 @@ export function buildThreadFeed(
           };
         }),
     ],
-    (entry) => Date.parse(entry.createdAt),
-    Order.Number,
+    (s) => new Date(s.createdAt),
+    Order.Date,
   );
 
   return groupAdjacentActivities(entries);

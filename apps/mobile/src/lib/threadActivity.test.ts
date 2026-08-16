@@ -16,7 +16,6 @@ import {
   derivePendingApprovals,
   deriveThreadFeedPresentation,
   derivePendingUserInputs,
-  sortPendingRequestActivities,
   type ThreadFeedActivity,
   type ThreadFeedEntry,
 } from "./threadActivity";
@@ -128,121 +127,7 @@ describe("derivePendingUserInputs", () => {
   });
 });
 
-describe("sortPendingRequestActivities", () => {
-  it("sorts only request lifecycle events", () => {
-    const activities = [
-      makeActivity({
-        id: EventId.make("approval-resolved"),
-        sequence: 4,
-        createdAt: "2026-04-01T00:00:04.000Z",
-        kind: "approval.resolved",
-        summary: "Approval resolved",
-      }),
-      makeActivity({
-        id: EventId.make("tool-completed"),
-        sequence: 1,
-        createdAt: "2026-04-01T00:00:01.000Z",
-        kind: "tool.completed",
-        summary: "Tool completed",
-      }),
-      makeActivity({
-        id: EventId.make("user-input-requested"),
-        sequence: 2,
-        createdAt: "2026-04-01T00:00:02.000Z",
-        kind: "user-input.requested",
-        summary: "User input requested",
-      }),
-      makeActivity({
-        id: EventId.make("approval-requested"),
-        sequence: 3,
-        createdAt: "2026-04-01T00:00:03.000Z",
-        kind: "approval.requested",
-        summary: "Approval requested",
-      }),
-    ];
-
-    expect(sortPendingRequestActivities(activities).map((activity) => activity.id)).toEqual([
-      "user-input-requested",
-      "approval-requested",
-      "approval-resolved",
-    ]);
-  });
-});
-
 describe("buildThreadFeed", () => {
-  it("omits non-rendered lifecycle rows while preserving terminal work", () => {
-    const thread = makeThread({
-      id: ThreadId.make("thread-lifecycle-filter"),
-      projectId: ProjectId.make("project-1"),
-      title: "Lifecycle filter",
-      activities: [
-        makeActivity({
-          id: EventId.make("tool-started"),
-          kind: "tool.started",
-          summary: "Tool started",
-          createdAt: "2026-04-01T00:00:01.000Z",
-        }),
-        makeActivity({
-          id: EventId.make("tool-progress"),
-          kind: "tool.progress",
-          summary: "Tool progress",
-          createdAt: "2026-04-01T00:00:02.000Z",
-        }),
-        makeActivity({
-          id: EventId.make("tool-completed"),
-          kind: "tool.completed",
-          summary: "Tool completed",
-          createdAt: "2026-04-01T00:00:03.000Z",
-        }),
-        makeActivity({
-          id: EventId.make("context-window"),
-          kind: "context-window.updated",
-          summary: "Context window updated",
-          createdAt: "2026-04-01T00:00:04.000Z",
-        }),
-      ],
-    });
-
-    const feed = buildThreadFeed(thread);
-    expect(feed).toHaveLength(1);
-    expect(feed[0]).toMatchObject({
-      type: "activity-group",
-      activities: [{ id: "tool-completed" }],
-    });
-  });
-
-  it("orders offset timestamps by instant without allocating Date objects", () => {
-    const thread = makeThread({
-      id: ThreadId.make("thread-offset-order"),
-      projectId: ProjectId.make("project-1"),
-      title: "Offset order",
-      messages: [
-        {
-          id: MessageId.make("message-offset"),
-          role: "user",
-          text: "Earlier instant",
-          turnId: null,
-          streaming: false,
-          createdAt: "2026-04-01T01:30:00.000+01:00",
-          updatedAt: "2026-04-01T01:30:00.000+01:00",
-        },
-      ],
-      activities: [
-        makeActivity({
-          id: EventId.make("activity-later"),
-          kind: "runtime.warning",
-          summary: "Later instant",
-          createdAt: "2026-04-01T00:45:00.000Z",
-        }),
-      ],
-    });
-
-    expect(buildThreadFeed(thread).map((entry) => entry.id)).toEqual([
-      "message-offset",
-      "activity-later",
-    ]);
-  });
-
   it("keeps historic work entries attributed to their turns", () => {
     const thread = makeThread({
       id: ThreadId.make("thread-1"),

@@ -56,7 +56,6 @@ latest upstream merge, compatibility decisions, and verification.
 | `FORK-PUSH-001`    | Personal APNs notifications and Live Activities                                              | Active               | [Personal push relay](docs/fork/personal-push-relay.md)               | `vp test apps/push-relay/src apps/server/src/personalPush apps/server/src/relay/AgentAwarenessRelay.test.ts apps/mobile/src/features/agent-awareness/remoteRegistration.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `FORK-IMAGE-001`   | Shared HEIC/HEIF-to-JPEG upload normalization                                                | Active               | [Image normalization](docs/fork/image-normalization.md)               | `vp test apps/server/src/imageNormalization.test.ts apps/server/src/orchestration/Normalizer.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `FORK-CODEX-001`   | Codex MCP tool-call approval elicitations                                                    | Active, temporary    | [Codex MCP approvals](docs/fork/codex-mcp-tool-approvals.md)          | `vp test apps/server/src/provider/CodexMcpApproval.test.ts apps/server/src/provider/Layers/CodexAdapter.test.ts apps/server/src/provider/Layers/CodexSessionRuntime.test.ts apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.test.ts apps/web/src/session-logic.test.ts apps/mobile/src/lib/threadActivity.test.ts`                                                                                                                                                                                                                                                                                                                                                           |
-| `FORK-PERF-001`    | Bounded mobile thread retention and lower-allocation thread opening                          | Active, temporary    | [Mobile thread performance](docs/fork/mobile-thread-retention.md)     | `vp test packages/client-runtime/src/state/threads-atoms.test.ts packages/client-runtime/src/state/entities.test.ts apps/mobile/src/lib/threadActivity.test.ts` plus iOS Release retention and large-thread feed profiles                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `FORK-PALETTE-001` | Control-N/Control-P command-palette navigation                                               | Active, temporary    | [Ownership map](#fork-palette-001)                                    | `vp test apps/web/src/components/CommandPalette.logic.test.ts` plus a web keyboard smoke test                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `FORK-LINEAR-001`  | Linear ticket and Review destinations from new-sidebar GitHub PR badges                      | Active               | [Linear PR destinations](docs/fork/linear-pr-destinations.md)         | `vp test packages/shared/src/linear.test.ts packages/contracts/src/settings.test.ts apps/server/src/linear/LinearIntegration.test.ts apps/server/src/serverSettings.test.ts apps/desktop/src/electron/ElectronShell.test.ts apps/desktop/src/preview/BrowserSession.test.ts apps/web/src/browser/openFileInPreview.test.ts apps/web/src/components/linear/linearPreviewPresentation.test.ts apps/web/src/components/linear/linearPrPrimaryDestinations.test.ts apps/web/src/components/linear/openLinearDestination.test.ts apps/web/src/components/linear/openLinearPreviewDestination.test.ts apps/web/src/rightPanelStore.test.ts apps/web/src/components/preview/PreviewView.test.tsx` |
 | `FORK-MERMAID-001` | Secure, streaming-aware Mermaid diagrams in web and desktop Markdown                         | Active, temporary    | [Mermaid diagrams](docs/fork/mermaid.md)                              | `vp test apps/web/src/components/MermaidDiagram.test.tsx` plus a web light/dark smoke test                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -256,41 +255,6 @@ Invariants:
 - Label the request as an MCP tool call, not as a guaranteed computer-use call.
 - Remove this extension when the upstream Codex adapter handles the same tagged request and
   persistence contract end to end.
-
-### FORK-PERF-001
-
-Fork-owned paths:
-
-- `downstream/mobile-runtime-config.ts`
-- `docs/fork/mobile-thread-retention.md`
-
-Shared upstream touchpoints:
-
-- `apps/mobile/src/state/threads.ts`
-- `apps/mobile/src/lib/threadActivity.ts`
-- `apps/mobile/src/lib/threadActivity.test.ts`
-- `apps/mobile/src/state/use-selected-thread-requests.ts`
-- `packages/client-runtime/src/state/threadRetention.ts`
-- `packages/client-runtime/src/state/threads.ts`
-- `packages/client-runtime/src/state/threadDetail.ts`
-- `packages/client-runtime/src/state/threads-atoms.test.ts`
-- `packages/client-runtime/src/state/entities.test.ts`
-
-Invariants:
-
-- The shared atom factories default to upstream's five-minute inactive retention window.
-- Tangent mobile applies the shorter window to the stream-backed state atom and every derived
-  detail projection. Active subscriptions are never expired.
-- The override changes only inactive client memory retention. It does not change persistence,
-  pagination, transport contracts, server state, or web/desktop retention.
-- Keep the Tangent value in the fork-owned runtime config. Do not scatter mobile-specific timings
-  through shared atom factories.
-- Feed construction preserves upstream presentation behavior while filtering already-hidden work
-  rows before sorting and comparing timestamps without allocating `Date` objects.
-- Pending approval/input projection sorts only its six relevant lifecycle event kinds. Do not add
-  caches or retained per-thread indexes for these hot-path reductions.
-- Each optimization is independently removable when upstream provides equivalent behavior. Remove
-  this inventory entry only after both retention and thread-open allocation deltas are gone.
 
 ### FORK-PALETTE-001
 
