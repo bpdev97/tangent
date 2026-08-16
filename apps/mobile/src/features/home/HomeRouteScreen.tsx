@@ -147,20 +147,22 @@ export function HomeRouteScreen() {
       onStartNewTask={() => navigation.navigate("NewTaskSheet", { screen: "NewTask" })}
     >
       <>
-        {/* Restore the compact title after the split branch blanks the detail
-            header. The brand slot doubles as the connection status surface:
-            while an environment reconnects, the lockup fades to a status label
-            in place (no layout shift in the list below). */}
-        <NativeStackScreenOptions
-          options={getConnectionAwareBrandHeaderOptions({
-            onOpenEnvironments: () =>
-              navigation.navigate("SettingsSheet", {
-                screen: "SettingsContent",
-                params: { screen: "SettingsEnvironments" },
-              }),
-          })}
-        />
+        {/* iOS HomeHeader owns its compact title so all three fork actions fit.
+            On Android, the brand slot doubles as the connection status surface
+            without shifting the list below. */}
+        {Platform.OS === "ios" ? null : (
+          <NativeStackScreenOptions
+            options={getConnectionAwareBrandHeaderOptions({
+              onOpenEnvironments: () =>
+                navigation.navigate("SettingsSheet", {
+                  screen: "SettingsContent",
+                  params: { screen: "SettingsEnvironments" },
+                }),
+            })}
+          />
+        )}
         <HomeHeader
+          bottomComposerPresent={Platform.OS === "ios"}
           environments={environments}
           projects={projectFilterOptions}
           searchQuery={searchQuery}

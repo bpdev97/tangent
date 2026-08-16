@@ -45,7 +45,9 @@ On desktop and web, Chats sits above project scoping and shows the selected host
 active/settled thread model remains shared with the rest of the sidebar. On iOS, the home screen has
 a persistent new-chat field at the bottom; tapping it presents the existing full new-task composer
 already scoped to the managed chat project. Search, New Thread, filters, and Settings live in the
-top navigation area. Android retains the upstream mobile layout.
+top navigation area. The upstream Mail-style search toolbar remains available when no persistent
+bottom composer is present, but it must not share the bottom edge with the fork field. Android
+retains the upstream mobile layout.
 
 The macOS build registers the dedicated, fixed action URL `bpdev-code-action://quick-chat`. It is
 not a general navigation scheme. The renderer resumes the most recently viewed, unarchived generic
@@ -93,6 +95,8 @@ review, terminal, and their nested routes cannot be opened through deep links or
   arbitrary in-app URL router.
 - Keep the iOS home field as a launcher for the existing new-task composer. Model selection,
   attachments, draft retention, thread creation, and the offline outbox must remain shared.
+- Keep iOS Home search and project-thread creation in the top navigation while the persistent chat
+  field owns the bottom edge; never stack the native Mail search toolbar over that field.
 - Keep normal project behavior unchanged; shared helpers must branch only on the reserved ID.
 
 ## Revalidation procedure

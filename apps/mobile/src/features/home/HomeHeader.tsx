@@ -1,8 +1,10 @@
 import type { EnvironmentId, SidebarThreadSortOrder } from "@t3tools/contracts";
 import type { MenuAction } from "@react-native-menu/menu";
+import { useHeaderHeight } from "@react-navigation/elements";
+import type { NativeStackHeaderItem } from "@react-navigation/native-stack";
 import Constants from "expo-constants";
 import { NativeHeaderToolbar, NativeStackScreenOptions } from "../../native/StackHeader";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, Text as RNText, TextInput, View } from "react-native";
 import type { SearchBarCommands } from "react-native-screens";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,6 +14,7 @@ import { SymbolView } from "../../components/AppSymbol";
 import { T3Wordmark } from "../../components/T3Wordmark";
 import { HOME_HORIZONTAL_INSET } from "../../lib/layoutMetrics";
 import { resolveMobileStageLabel } from "../../lib/mobileBranding";
+import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
 import { useThemeColor } from "../../lib/useThemeColor";
 import { useThreadListV2Enabled } from "../threads/use-thread-list-v2-enabled";
 import { useHardwareKeyboardCommand } from "../keyboard/hardwareKeyboardCommands";
@@ -32,6 +35,7 @@ import {
   PROJECT_SORT_OPTIONS,
   THREAD_SORT_OPTIONS,
 } from "./home-list-options";
+import { resolveHomeHeaderPlacement } from "./home-header-placement";
 
 export type HomeHeaderEnvironment = HomeListFilterMenuEnvironment;
 
@@ -51,6 +55,7 @@ export function HomeHeader(props: {
   readonly onOpenEnvironments: () => void;
   readonly onOpenSettings: () => void;
   readonly onStartNewTask: () => void;
+  readonly bottomComposerPresent: boolean;
 }) {
   if (Platform.OS === "android") {
     return <AndroidHomeHeader {...props} />;
@@ -299,7 +304,11 @@ function AndroidHomeHeader(props: HomeHeaderProps) {
 
 function IosHomeHeader(props: HomeHeaderProps) {
   const searchBarRef = useRef<SearchBarCommands>(null);
+  const searchInputRef = useRef<TextInput>(null);
+  const [searchActive, setSearchActive] = useState(props.searchQuery.length > 0);
+  const headerHeight = useHeaderHeight();
   const iconColor = useThemeColor("--color-icon");
+  const mutedColor = useThemeColor("--color-foreground-muted");
   // Thread List v2 lays the list out in fixed creation order, so the
   // sort/group filter controls would be silently ignored — hide them and
   // key the "customized" icon state off the environment filter alone.
@@ -307,38 +316,128 @@ function IosHomeHeader(props: HomeHeaderProps) {
   const hasCustomListOptions = threadListV2Enabled
     ? props.selectedEnvironmentId !== null || props.selectedProjectKey !== null
     : hasCustomHomeListOptions(props);
+  const placement = resolveHomeHeaderPlacement({
+    bottomComposerPresent: props.bottomComposerPresent,
+    nativeMailSearchToolbarSupported: NATIVE_MAIL_SEARCH_TOOLBAR_SUPPORTED,
+  });
   const focusSearch = useCallback(() => {
+    if (placement === "top") {
+      setSearchActive(true);
+      return true;
+    }
     searchBarRef.current?.focus();
     return searchBarRef.current !== null;
-  }, []);
+  }, [placement]);
+  useEffect(() => {
+    if (!searchActive || placement !== "top") return;
+    const frame = requestAnimationFrame(() => searchInputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [placement, searchActive]);
   useHardwareKeyboardCommand("focusSearch", focusSearch);
   const filterMenu = buildHomeListFilterMenu({
     ...props,
     listOrganization: !threadListV2Enabled,
   });
+  const overflowIconName: "line.3.horizontal.decrease.circle.fill" | "ellipsis.circle" =
+    hasCustomListOptions ? "line.3.horizontal.decrease.circle.fill" : "ellipsis.circle";
+  // The fork's persistent chat composer owns the bottom edge. Keep the
+  // upstream toolbar presentation for clients without it, and restore the
+  // established top actions when both surfaces would otherwise overlap.
+  const topHeaderItems = useMemo<NativeStackHeaderItem[]>(
+    () =>
+      placement === "top"
+        ? [
+            withNativeGlassHeaderItem({
+              accessibilityLabel: "Search chats and threads",
+              icon: { name: "magnifyingglass" as const, type: "sfSymbol" as const },
+              identifier: "home-search",
+              label: "Search",
+              onPress: focusSearch,
+              type: "button" as const,
+            }),
+            withNativeGlassHeaderItem({
+              accessibilityLabel: "New thread",
+              icon: { name: "square.and.pencil" as const, type: "sfSymbol" as const },
+              identifier: "home-new-thread",
+              label: "New Thread",
+              onPress: props.onStartNewTask,
+              type: "button" as const,
+            }),
+            withNativeGlassHeaderItem({
+              accessibilityLabel: "More",
+              icon: { name: overflowIconName, type: "sfSymbol" as const },
+              identifier: "home-more",
+              label: "More",
+              menu: {
+                title: "Chats and threads",
+                items: [
+                  ...filterMenu.items.map((item) =>
+                    item.type === "action"
+                      ? {
+                          description: item.subtitle,
+                          label: item.title,
+                          onPress: item.onPress,
+                          state: item.state,
+                          type: "action" as const,
+                        }
+                      : {
+                          label: item.title,
+                          items: item.items.map((action) => ({
+                            description: action.subtitle,
+                            label: action.title,
+                            onPress: action.onPress,
+                            state: action.state,
+                            type: "action" as const,
+                          })),
+                          type: "submenu" as const,
+                        },
+                  ),
+                  {
+                    icon: { name: "gearshape" as const, type: "sfSymbol" as const },
+                    label: "Settings",
+                    onPress: props.onOpenSettings,
+                    type: "action" as const,
+                  },
+                ],
+              },
+              type: "menu" as const,
+            }),
+          ].toReversed()
+        : [],
+    [
+      filterMenu.items,
+      focusSearch,
+      overflowIconName,
+      placement,
+      props.onOpenSettings,
+      props.onStartNewTask,
+    ],
+  );
   return (
     <>
       <NativeStackScreenOptions
-        optionsVersion={filterMenu.items}
+        optionsVersion={placement === "top" ? topHeaderItems : filterMenu.items}
         options={{
-          // Static header config (glass, title, fonts) lives in Stack.tsx.
+          ...(placement === "top" ? { headerTitle: "Chats", title: "Chats" } : {}),
           headerTintColor: iconColor,
           unstable_headerRightItems:
-            Platform.OS === "ios"
-              ? () => [
-                  withNativeGlassHeaderItem({
-                    accessibilityLabel: "Open settings",
-                    icon: { name: "ellipsis", type: "sfSymbol" } as const,
-                    identifier: "home-settings",
-                    label: "",
-                    onPress: props.onOpenSettings,
-                    type: "button",
-                  }),
-                ]
-              : undefined,
+            placement === "top"
+              ? () => topHeaderItems
+              : Platform.OS === "ios"
+                ? () => [
+                    withNativeGlassHeaderItem({
+                      accessibilityLabel: "Open settings",
+                      icon: { name: "ellipsis", type: "sfSymbol" } as const,
+                      identifier: "home-settings",
+                      label: "",
+                      onPress: props.onOpenSettings,
+                      type: "button",
+                    }),
+                  ]
+                : undefined,
           // The keys below are set per-branch (not `undefined`) so a later
           // reapply cannot clobber options owned by NativeHeaderToolbar.
-          ...(NATIVE_MAIL_SEARCH_TOOLBAR_SUPPORTED
+          ...(placement === "native-mail-bottom"
             ? {
                 unstable_headerToolbarItems: () => [
                   createNativeMailSearchToolbarItem({
@@ -357,26 +456,64 @@ function IosHomeHeader(props: HomeHeaderProps) {
                   }),
                 ],
               }
-            : {
-                // Pre-Liquid-Glass iOS: standard pull-down search in the nav
-                // bar; create + sort live in the plain bottom toolbar below.
-                headerSearchBarOptions: {
-                  ref: searchBarRef,
-                  autoCapitalize: "none" as const,
-                  hideNavigationBar: false,
-                  placeholder: "Search",
-                  onCancelButtonPress: () => {
-                    props.onSearchQueryChange("");
+            : placement === "legacy-bottom"
+              ? {
+                  headerSearchBarOptions: {
+                    ref: searchBarRef,
+                    autoCapitalize: "none" as const,
+                    hideNavigationBar: false,
+                    placeholder: "Search",
+                    onCancelButtonPress: () => {
+                      props.onSearchQueryChange("");
+                    },
+                    onChangeText: (event) => {
+                      props.onSearchQueryChange(event.nativeEvent.text);
+                    },
                   },
-                  onChangeText: (event) => {
-                    props.onSearchQueryChange(event.nativeEvent.text);
-                  },
-                },
-              }),
+                }
+              : { unstable_headerToolbarItems: () => [] }),
         }}
       />
 
-      {NATIVE_MAIL_SEARCH_TOOLBAR_SUPPORTED ? null : (
+      {placement === "top" && searchActive ? (
+        <View
+          className="mx-3 h-11 flex-row items-center gap-2 rounded-xl bg-sidebar-search px-3"
+          style={{ marginTop: NATIVE_LIQUID_GLASS_SUPPORTED ? headerHeight + 8 : 8 }}
+        >
+          <SymbolView name="magnifyingglass" size={17} tintColor={mutedColor} type="monochrome" />
+          <TextInput
+            ref={searchInputRef}
+            accessibilityLabel="Search chats and threads"
+            autoCapitalize="none"
+            autoCorrect={false}
+            className="min-w-0 flex-1 self-stretch text-base text-foreground"
+            onChangeText={props.onSearchQueryChange}
+            placeholder="Search chats and threads"
+            placeholderTextColor={mutedColor}
+            returnKeyType="search"
+            style={{ lineHeight: 20, paddingVertical: 0 }}
+            value={props.searchQuery}
+          />
+          <Pressable
+            accessibilityLabel="Close search"
+            hitSlop={10}
+            onPress={() => {
+              searchInputRef.current?.blur();
+              props.onSearchQueryChange("");
+              setSearchActive(false);
+            }}
+          >
+            <SymbolView
+              name="xmark.circle.fill"
+              size={18}
+              tintColor={mutedColor}
+              type="monochrome"
+            />
+          </Pressable>
+        </View>
+      ) : null}
+
+      {placement === "legacy-bottom" ? (
         <NativeHeaderToolbar placement="bottom">
           <NativeHeaderToolbar.Menu
             accessibilityLabel="Filter and sort threads"
@@ -468,7 +605,7 @@ function IosHomeHeader(props: HomeHeaderProps) {
             separateBackground
           />
         </NativeHeaderToolbar>
-      )}
+      ) : null}
     </>
   );
 }
