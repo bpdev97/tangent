@@ -821,7 +821,6 @@ function ThreadRouteContent(
           connectionStateLabel={routeConnectionState}
           threadSyncStatus={selectedThreadDetailState.status}
           loadEarlier={loadEarlierTurns}
-          activeThreadBusy={composer.activeThreadBusy}
           environmentId={selectedThread.environmentId}
           projectWorkspaceRoot={
             selectedThreadCwd === null ? null : (selectedThreadProject?.workspaceRoot ?? null)

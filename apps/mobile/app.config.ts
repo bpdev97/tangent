@@ -163,7 +163,7 @@ const config: ExpoConfig = {
   slug: personalMobile.expoSlug,
   platforms: ["ios"],
   scheme: variant.scheme,
-  version: "1.0.3",
+  version: "1.0.4",
   runtimeVersion: {
     // Fingerprint (not appVersion) so an OTA only reaches binaries whose native
     // project — native deps, config plugins, AND patches/ — matches the update.

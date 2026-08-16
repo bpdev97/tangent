@@ -45,10 +45,10 @@ export function resolveNewThreadRuntimeMode(
 export function resolveThreadActionProjectRef(
   context: ChatThreadActionContext,
 ): ScopedProjectRef | null {
-  if (context.activeThread) {
+  if (context.activeThread && !isGenericChatProjectId(context.activeThread.projectId)) {
     return scopeProjectRef(context.activeThread.environmentId, context.activeThread.projectId);
   }
-  if (context.activeDraftThread) {
+  if (context.activeDraftThread && !isGenericChatProjectId(context.activeDraftThread.projectId)) {
     return scopeProjectRef(
       context.activeDraftThread.environmentId,
       context.activeDraftThread.projectId,

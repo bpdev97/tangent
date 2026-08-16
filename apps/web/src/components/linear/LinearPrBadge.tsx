@@ -238,14 +238,17 @@ export function LinearPrBadge(props: {
 
   if (!configured) {
     return (
-      <button
-        type="button"
+      <a
+        href={props.pr.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onPointerDown={(event) => event.stopPropagation()}
         onClick={handleGitHubClick}
         className={badgeButtonClassName}
         aria-label={props.status.tooltip}
       >
         #{props.pr.number}
-      </button>
+      </a>
     );
   }
 

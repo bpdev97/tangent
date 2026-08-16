@@ -13,6 +13,7 @@ import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopClientSettings from "./DesktopClientSettings.ts";
 
 const clientSettings: ClientSettings = {
+  confirmQuit: true,
   confirmThreadArchive: true,
   confirmThreadDelete: false,
   dismissedProviderUpdateNotificationKeys: [],
@@ -34,6 +35,7 @@ const clientSettings: ClientSettings = {
   providerModelPreferences: {},
   quickChatResumeMinutes: 5,
   sidebarAutoSettleAfterDays: 3,
+  sidebarAutoSettleOnMerge: true,
   sidebarProjectGroupingMode: "repository_path",
   sidebarProjectGroupingOverrides: {
     "environment-1:/tmp/project-a": "separate",

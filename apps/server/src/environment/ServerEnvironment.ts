@@ -9,10 +9,14 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import packageJson from "../../package.json" with { type: "json" };
+import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
+import { readAgentActivityPublishingActive } from "../cloud/config.ts";
 import { resolveServerSelfUpdateCapability } from "../cloud/selfUpdate.ts";
 import { resolveServiceLauncherMode } from "../cloud/serviceLauncherClient.ts";
 import * as ServerConfig from "../config.ts";
+import * as PersonalPushRelay from "../personalPush/PersonalPushRelayClient.ts";
 import * as ProcessRunner from "../processRunner.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import { resolveServerEnvironmentLabel } from "./ServerEnvironmentLabel.ts";
 
 export class ServerEnvironmentIdPersistenceError extends Schema.TaggedErrorClass<ServerEnvironmentIdPersistenceError>()(
@@ -66,6 +70,8 @@ export const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const serverConfig = yield* ServerConfig.ServerConfig;
+  const secrets = yield* ServerSecretStore.ServerSecretStore;
+  const serverSettings = yield* ServerSettings.ServerSettingsService;
   const crypto = yield* Crypto.Crypto;
   const hostPlatform = yield* HostProcessPlatform;
   const hostArchitecture = yield* HostProcessArchitecture;
@@ -156,13 +162,30 @@ export const make = Effect.gen(function* () {
 
   return ServerEnvironment.of({
     getEnvironmentId: Effect.succeed(environmentId),
-    getDescriptor: Effect.succeed(descriptor),
+    // Hosted-link secrets and personal-relay settings both change at runtime,
+    // so advertise their shared publisher truth per descriptor request.
+    getDescriptor: Effect.all([
+      readAgentActivityPublishingActive(secrets),
+      PersonalPushRelay.makeFromRuntime(serverConfig, serverSettings).pipe(
+        Effect.map((relay) => relay.configured),
+        Effect.orElseSucceed(() => false),
+      ),
+    ]).pipe(
+      Effect.map(([hostedPublishingActive, personalPublishingActive]) => ({
+        ...descriptor,
+        capabilities: {
+          ...descriptor.capabilities,
+          agentActivityPublishing: hostedPublishingActive || personalPublishingActive,
+        },
+      })),
+    ),
   });
 });
 
 /**
  * ServerEnvironment is acquired from persisted filesystem and host-process
  * state. It intentionally has no fallback Layer.succeed value: callers must
- * provide the external platform services and a ServerConfig.
+ * provide the external platform services, a ServerConfig, and the
+ * ServerSecretStore backing the descriptor's publishing capability.
  */
 export const layer = Layer.effect(ServerEnvironment, make).pipe(Layer.provide(ProcessRunner.layer));

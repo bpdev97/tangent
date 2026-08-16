@@ -33,6 +33,7 @@
     "effect": "catalog:",
     "heic-decode": "2.1.0",
     "jpeg-js": "0.4.4",
+    "msgpackr-extract": "3.0.4",
     "node-pty": "^1.1.0",
     "yaml": "catalog:"
   },

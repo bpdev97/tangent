@@ -32,6 +32,12 @@ Windows, Linux desktop, Homebrew, Winget, or Arch packages.
 The iOS build is distributed through TestFlight. It uses the `personal` EAS channel, so JavaScript
 updates are delivered only to a compatible Tangent binary.
 
+Nightly:
+
+```bash
+yay -S t3code-nightly-bin
+```
+
 ## Providers
 
 Tangent drives provider CLIs; it does not ship them. Install the CLI for each provider you want

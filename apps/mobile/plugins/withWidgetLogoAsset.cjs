@@ -40,6 +40,16 @@ const IMAGE_SET_CONTENTS =
     2,
   ) + "\n";
 
+function stripComments(section) {
+  return Object.fromEntries(
+    Object.entries(section ?? {}).filter(([key]) => !key.endsWith("_comment")),
+  );
+}
+
+function findByName(section, name) {
+  return Object.entries(stripComments(section)).find(([, value]) => value?.name === name) ?? null;
+}
+
 function withAssetFiles(config) {
   return withDangerousMod(config, [
     "ios",
@@ -59,6 +69,34 @@ function withAssetFiles(config) {
 function withAssetWiring(config) {
   return withXcodeProject(config, (cfg) => {
     addWidgetAssetCatalog(cfg.modResults, { targetName: TARGET_NAME });
+
+    const version = cfg.version;
+    if (!version) {
+      throw new Error(`Cannot align ${TARGET_NAME} without an app version.`);
+    }
+
+    const objects = cfg.modResults.hash.project.objects;
+    const targetEntry = findByName(objects.PBXNativeTarget, TARGET_NAME);
+    if (!targetEntry) {
+      throw new Error(
+        `${TARGET_NAME} Xcode target was not generated. Register withWidgetLogoAsset before expo-widgets.`,
+      );
+    }
+
+    const configurationList = stripComments(objects.XCConfigurationList)[
+      targetEntry[1].buildConfigurationList
+    ];
+    if (!configurationList) {
+      throw new Error(`Could not find build configurations for ${TARGET_NAME}.`);
+    }
+
+    const buildConfigurations = stripComments(objects.XCBuildConfiguration);
+    for (const reference of configurationList.buildConfigurations ?? []) {
+      const buildConfiguration = buildConfigurations[reference.value];
+      if (buildConfiguration?.buildSettings) {
+        buildConfiguration.buildSettings.MARKETING_VERSION = `"${version}"`;
+      }
+    }
     return cfg;
   });
 }

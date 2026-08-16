@@ -2,7 +2,7 @@ import * as Schema from "effect/Schema";
 import { create } from "zustand";
 
 import { PersistedComposerImageAttachment } from "./composerDraftStore";
-import { createMemoryStorage, type StateStorage } from "./lib/storage";
+import { createMemoryStorage, isStateStorage, type StateStorage } from "./lib/storage";
 
 export const PROMPT_STASH_STORAGE_KEY = "t3code:prompt-stash:v2";
 /**
@@ -130,7 +130,7 @@ export function partitionStashAttachments(
  */
 function resolveBaseStorage(): { storage: StateStorage; durable: boolean } {
   try {
-    if (typeof localStorage !== "undefined") {
+    if (typeof localStorage !== "undefined" && isStateStorage(localStorage)) {
       return { storage: localStorage, durable: true };
     }
   } catch {

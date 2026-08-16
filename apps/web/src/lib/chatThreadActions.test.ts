@@ -83,6 +83,25 @@ describe("chatThreadActions", () => {
     expect(projectRef).toEqual(scopeProjectRef(ENVIRONMENT_ID, PROJECT_ID));
   });
 
+  it("does not turn the regular new-thread action into a generic chat", () => {
+    const fallback = scopeProjectRef(ENVIRONMENT_ID, PROJECT_ID);
+    const projectRef = resolveThreadActionProjectRef(
+      createContext({
+        activeThread: {
+          environmentId: ENVIRONMENT_ID,
+          projectId: GENERIC_CHAT_PROJECT_ID,
+        },
+        activeDraftThread: {
+          environmentId: ENVIRONMENT_ID,
+          projectId: GENERIC_CHAT_PROJECT_ID,
+        },
+        defaultProjectRef: fallback,
+      }),
+    );
+
+    expect(projectRef).toEqual(fallback);
+  });
+
   it("inherits only the project from context, never branch or worktree state", async () => {
     const handleNewThread = vi.fn<ChatThreadActionContext["handleNewThread"]>(async () => {});
 

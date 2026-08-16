@@ -189,11 +189,14 @@ function HostCard(props: {
   const openEditor = useCallback(
     (automationId?: string) => {
       navigation.navigate("SettingsSheet", {
-        screen: "SettingsAutomationEditor",
+        screen: "SettingsContent",
         params: {
-          environmentId: String(props.environmentId),
-          instanceId: String(props.host.instanceId),
-          ...(automationId ? { automationId } : {}),
+          screen: "SettingsAutomationEditor",
+          params: {
+            environmentId: String(props.environmentId),
+            instanceId: String(props.host.instanceId),
+            ...(automationId ? { automationId } : {}),
+          },
         },
       });
     },
