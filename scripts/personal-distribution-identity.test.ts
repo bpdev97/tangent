@@ -13,7 +13,11 @@ describe("personal distribution identity", () => {
     const { connect, mobile, macos, repository, serverRelease } = PERSONAL_DISTRIBUTION;
 
     expect(repository).toEqual({ owner: "bpdev97", name: "tangent" });
-    expect(connect).toEqual({ bootServiceName: "tangent", displayName: "Tangent" });
+    expect(connect).toEqual({
+      bootServiceName: "tangent",
+      launchdLabel: "com.bpdev97.tangent.service",
+      displayName: "Tangent",
+    });
     expect(serverRelease).toEqual({
       tagPrefix: "personal-v",
       artifactNamePrefix: "tangent-server",

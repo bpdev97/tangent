@@ -5,6 +5,7 @@ import {
   type RelayClientInstallProgressStage,
 } from "@t3tools/contracts";
 import { RelayOkResponse } from "@t3tools/contracts/relay";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as RelayClient from "@t3tools/shared/relayClient";
 import { withRelayClientTracing } from "@t3tools/shared/relayTracing";
 import * as Cause from "effect/Cause";
@@ -29,6 +30,7 @@ import {
 } from "effect/unstable/http";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 
+import { PERSONAL_DISTRIBUTION } from "../../../../downstream/config.ts";
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as BootService from "../cloud/bootService.ts";
@@ -699,8 +701,11 @@ export const connectCommand = Command.make("connect", {
         // fail the command, just tell the user what happened and move on.
         const background = yield* recoverServiceOnboardingOffer(offerServiceDuringOnboarding);
         if (background) {
+          const platform = yield* HostProcessPlatform;
           yield* Console.log(
-            "\n✓ Background service ready\n\nTangent will stay reachable after you log out.",
+            platform === "darwin"
+              ? `\n✓ Background service ready\n\n${PERSONAL_DISTRIBUTION.connect.displayName} will stay reachable while you are logged in to this Mac.`
+              : `\n✓ Background service ready\n\n${PERSONAL_DISTRIBUTION.connect.displayName} will stay reachable after you log out.`,
           );
           return;
         }

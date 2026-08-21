@@ -13,7 +13,7 @@
 - [Remote access](./user/remote-access.md)
 - [Keeping app and server in sync](./user/updating.md)
 - [Source control integrations](./user/source-control.md)
-- [Background service (Linux)](./user/background-service.md)
+- [Background service (Linux and macOS)](./user/background-service.md)
 - Providers: [Codex](./user/providers-codex.md) · [Claude](./user/providers-claude.md) · [Hermes](./user/hermes.md)
 
 Mobile app: [apps/mobile/README.md](../apps/mobile/README.md)
@@ -37,12 +37,14 @@ policy in [CONTRIBUTING.md](../CONTRIBUTING.md); agent rules in [AGENTS.md](../A
 - [Environment auth](./internals/environment-auth.md)
 - [T3 Connect](./internals/t3-connect.md)
 - [CI gates](./internals/ci.md)
+- [Engineering work artifacts](./internals/work-artifacts.md)
 
 ### Fork maintenance
 
 - [Authoritative fork registry](../FORK.md)
 - [2026-08-01 fork audit and reduction](./fork/audit-2026-08-01.md)
 - [2026-08-07 upstream sync audit](./fork/audit-2026-08-07.md)
+- [2026-08-21 upstream sync audit](./fork/audit-2026-08-21.md)
 - [Tangent distribution](./personal-distribution.md)
 - [Hermes provider](./fork/hermes.md)
 - [Generic chat](./fork/generic-chat.md)

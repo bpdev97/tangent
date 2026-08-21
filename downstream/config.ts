@@ -9,6 +9,7 @@ export const PERSONAL_DISTRIBUTION = {
   },
   connect: {
     bootServiceName: "tangent",
+    launchdLabel: "com.bpdev97.tangent.service",
     displayName: "Tangent",
   },
   serverRelease: {

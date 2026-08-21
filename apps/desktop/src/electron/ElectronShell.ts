@@ -8,14 +8,21 @@ import * as Electron from "electron";
 
 // Remote open-in-editor deep links (`vscode://vscode-remote/ssh-remote+…`)
 // must reach the OS handler; every other non-web scheme stays blocked.
-const SAFE_EXTERNAL_PROTOCOLS = new Set([
-  "http:",
-  "https:",
-  ...REMOTE_CAPABLE_EDITOR_IDS.flatMap((id) => {
+const SAFE_WEB_PROTOCOLS = new Set(["http:", "https:"]);
+const REMOTE_EDITOR_PROTOCOLS = new Set(
+  REMOTE_CAPABLE_EDITOR_IDS.flatMap((id) => {
     const scheme = remoteSchemeForEditor(id);
     return scheme === undefined ? [] : [`${scheme}:`];
   }),
-]);
+);
+
+const isRemoteEditorUrl = (url: URL) =>
+  REMOTE_EDITOR_PROTOCOLS.has(url.protocol) &&
+  url.username.length === 0 &&
+  url.password.length === 0 &&
+  url.host === "vscode-remote" &&
+  url.pathname.startsWith("/ssh-remote+") &&
+  url.pathname.length > "/ssh-remote+".length;
 
 function isSafeLinearAppUrl(url: URL): boolean {
   const hostname = url.hostname.toLowerCase();
@@ -35,7 +42,7 @@ export function parseSafeExternalUrl(rawUrl: unknown): Option.Option<string> {
 
   try {
     const url = new URL(rawUrl);
-    return SAFE_EXTERNAL_PROTOCOLS.has(url.protocol) || isSafeLinearAppUrl(url)
+    return SAFE_WEB_PROTOCOLS.has(url.protocol) || isRemoteEditorUrl(url) || isSafeLinearAppUrl(url)
       ? Option.some(url.href)
       : Option.none();
   } catch {

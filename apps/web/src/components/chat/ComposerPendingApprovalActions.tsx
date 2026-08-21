@@ -14,6 +14,8 @@ interface ComposerPendingApprovalActionsProps {
   ) => Promise<unknown>;
 }
 
+const APPROVAL_ACTION_CLASS_NAME = "font-normal";
+
 export const ComposerPendingApprovalActions = memo(function ComposerPendingApprovalActions({
   requestId,
   requestKind,
@@ -24,17 +26,19 @@ export const ComposerPendingApprovalActions = memo(function ComposerPendingAppro
   return (
     <>
       <Button
-        size="sm"
-        variant="ghost"
+        size="micro"
+        variant="ghost-muted"
+        className={APPROVAL_ACTION_CLASS_NAME}
         disabled={isResponding}
         onClick={() => void onRespondToApproval(requestId, "cancel")}
       >
-        {requestKind === "mcp-tool-call" ? "Cancel tool call" : "Cancel turn"}
+        Cancel
       </Button>
       {requestKind === "mcp-tool-call" ? null : (
         <Button
-          size="sm"
-          variant="destructive-outline"
+          size="micro"
+          variant="ghost-muted"
+          className={`${APPROVAL_ACTION_CLASS_NAME} text-destructive-foreground [:hover,[data-pressed]]:text-destructive-foreground`}
           disabled={isResponding}
           onClick={() => void onRespondToApproval(requestId, "decline")}
         >
@@ -43,8 +47,9 @@ export const ComposerPendingApprovalActions = memo(function ComposerPendingAppro
       )}
       {requestKind !== "mcp-tool-call" || supportsSessionPersistence ? (
         <Button
-          size="sm"
-          variant="outline"
+          size="micro"
+          variant="ghost-muted"
+          className={APPROVAL_ACTION_CLASS_NAME}
           disabled={isResponding}
           onClick={() => void onRespondToApproval(requestId, "acceptForSession")}
         >
@@ -52,12 +57,13 @@ export const ComposerPendingApprovalActions = memo(function ComposerPendingAppro
         </Button>
       ) : null}
       <Button
-        size="sm"
-        variant="default"
+        size="micro"
+        variant="ghost-muted"
+        className={`${APPROVAL_ACTION_CLASS_NAME} text-foreground`}
         disabled={isResponding}
         onClick={() => void onRespondToApproval(requestId, "accept")}
       >
-        Approve once
+        Approve
       </Button>
     </>
   );

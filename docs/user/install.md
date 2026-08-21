@@ -52,6 +52,9 @@ to use, then authenticate it.
 | OpenCode   | [OpenCode](https://opencode.ai)                              | `opencode`     | `opencode auth login` |
 | Hermes     | [Hermes Agent](https://github.com/NousResearch/hermes-agent) | `hermes`       | `hermes model`        |
 
+Codex, Claude, Cursor, and Hermes are on by default. Grok Build and OpenCode are off by default;
+turn them on in **Settings** → the provider's card when you want to use them.
+
 Cursor is the one to watch: install Cursor CLI, which provides the `cursor-agent` binary that
 T3 Code looks for, but authenticate with `agent login`, not `cursor-agent login`.
 
@@ -79,4 +82,4 @@ For multi-account setups, see [Codex](./providers-codex.md) and [Claude](./provi
 - [Permission modes](./permission-modes.md): how much T3 Code asks before acting
 - [Remote access](./remote-access.md): connect from a phone, tablet, or another desktop
 - [Keeping Tangent in sync](./updating.md): client and server version skew
-- [Running in the background](./background-service.md): Linux background service
+- [Running in the background](./background-service.md): Linux and macOS background service
