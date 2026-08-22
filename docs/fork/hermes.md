@@ -64,6 +64,12 @@ chat transcript.
   segments. Hermes subagents use upstream `task.started`, `task.progress`, and `task.completed`,
   keyed by a required `subagent_id`; Tangent does not maintain a separate provider-neutral `agent.*`
   contract. Per-session queues preserve Hermes event order before ingestion.
+- `tool.start` immediately publishes a canonical activity update so in-progress tools remain visible.
+  Tool projection carries Hermes's bounded context for older gateways and normalizes structured
+  arguments when available: commands, changed-file paths, search queries, page URLs, image prompts,
+  MCP identities, and delegated tasks receive the same activity shapes used by other providers.
+  Raw arguments are retained only for MCP calls, whose expanded activity view requires them; other
+  tools expose bounded display fields rather than copying file contents or typed browser input.
 - `image.attach` stages T3 image attachments before the next prompt. Shared server ingestion
   normalizes HEIC/HEIF uploads to JPEG first because Hermes 0.19 rejects those container
   extensions at the gateway boundary.

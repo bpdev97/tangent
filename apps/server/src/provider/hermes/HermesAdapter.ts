@@ -10,6 +10,7 @@ import {
   RuntimeRequestId,
   RuntimeTaskId,
   ThreadId,
+  type ToolLifecycleItemType,
   TurnId,
 } from "@t3tools/contracts";
 import {
@@ -72,7 +73,7 @@ interface HermesSessionContext {
   readonly client: HermesGatewayConnection;
   readonly liveSessionId: string;
   readonly pendingInteractions: Map<ApprovalRequestId, PendingInteraction>;
-  readonly toolItems: Map<string, RuntimeItemId>;
+  readonly toolItems: Map<string, HermesToolState>;
   readonly eventQueue: Queue.Queue<HermesGatewayEvent>;
   session: ProviderSession;
   turns: Array<{ id: TurnId; items: Array<unknown> }>;
@@ -84,6 +85,19 @@ interface HermesSessionContext {
   reasoningItemId: RuntimeItemId | undefined;
   currentModelId: string | undefined;
   stopped: boolean;
+}
+
+interface HermesToolProjection {
+  readonly name: string | undefined;
+  readonly itemType: ToolLifecycleItemType;
+  readonly title: string;
+  readonly detail: string | undefined;
+  readonly data: Readonly<Record<string, unknown>>;
+}
+
+interface HermesToolState {
+  readonly itemId: RuntimeItemId;
+  readonly projection: HermesToolProjection;
 }
 
 interface SessionStartResponse {
@@ -198,27 +212,198 @@ function gatewayRequestError(
   });
 }
 
-function toolItemType(name: string | undefined) {
+function toolItemType(name: string | undefined): ToolLifecycleItemType {
   const normalized = name?.toLowerCase() ?? "";
+  if (normalized.startsWith("mcp__") || normalized.startsWith("mcp_")) {
+    return "mcp_tool_call";
+  }
+  if (normalized.includes("delegate") || normalized.includes("subagent")) {
+    return "collab_agent_tool_call";
+  }
   if (
     normalized.includes("terminal") ||
     normalized.includes("exec") ||
     normalized.includes("shell")
   ) {
-    return "command_execution" as const;
+    return "command_execution";
   }
   if (normalized.includes("write") || normalized.includes("edit") || normalized.includes("patch")) {
-    return "file_change" as const;
+    return "file_change";
   }
-  if (
-    normalized.includes("search") ||
-    normalized.includes("browser") ||
-    normalized.includes("web")
-  ) {
-    return "web_search" as const;
+  if (normalized === "web_search" || normalized === "x_search" || normalized === "search_files") {
+    return "web_search";
   }
-  if (normalized.includes("image") || normalized.includes("vision")) return "image_view" as const;
-  return "dynamic_tool_call" as const;
+  if (normalized === "vision_analyze" || normalized === "image_view") return "image_view";
+  return "dynamic_tool_call";
+}
+
+function humanizeToolName(name: string): string {
+  return name
+    .split(/[_\s-]+/u)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+}
+
+function mcpToolIdentity(name: string | undefined) {
+  const match = /^mcp__(.+?)__(.+)$/u.exec(name ?? "");
+  return match?.[1] && match[2] ? { server: match[1], tool: match[2] } : undefined;
+}
+
+function toolTitle(name: string | undefined, itemType: ToolLifecycleItemType): string {
+  const normalized = name?.toLowerCase() ?? "";
+  const mcp = mcpToolIdentity(name);
+  if (mcp) return `${mcp.server} · ${mcp.tool}`;
+  if (normalized === "search_files") return "Grep";
+  if (normalized === "read_file") return "Read File";
+  if (normalized === "web_extract") return "Read Page";
+  if (normalized === "session_search") return "Search Sessions";
+  if (normalized === "image_generate") return "Generate Image";
+  switch (itemType) {
+    case "command_execution":
+      return "Ran command";
+    case "file_change":
+      return "File change";
+    case "mcp_tool_call":
+      return "MCP tool call";
+    case "collab_agent_tool_call":
+      return "Subagent task";
+    case "web_search":
+      return "Web search";
+    case "image_view":
+      return "Image view";
+    case "dynamic_tool_call":
+      return name ? humanizeToolName(name) : "Tool call";
+  }
+}
+
+function firstText(value: unknown): string | undefined {
+  if (!Array.isArray(value)) return text(value);
+  for (const entry of value) {
+    const candidate = text(entry);
+    if (candidate) return candidate;
+  }
+  return undefined;
+}
+
+function patchFilePaths(value: unknown): ReadonlyArray<string> {
+  const patch = text(value);
+  if (!patch) return [];
+  return [...patch.matchAll(/^\*\*\* (?:Add|Delete|Update) File:\s*(.+)$/gmu)]
+    .map((match) => match[1]?.trim())
+    .filter((path): path is string => !!path);
+}
+
+function toolFilePaths(
+  itemType: ToolLifecycleItemType,
+  args: Readonly<Record<string, unknown>>,
+): ReadonlyArray<string> {
+  if (itemType !== "file_change") return [];
+  const directPath = text(args.path);
+  return [...new Set([...(directPath ? [directPath] : []), ...patchFilePaths(args.patch)])];
+}
+
+function toolCommand(
+  itemType: ToolLifecycleItemType,
+  args: Readonly<Record<string, unknown>>,
+): string | undefined {
+  if (itemType !== "command_execution") return undefined;
+  return text(args.command) ?? text(args.cmd) ?? text(args.code);
+}
+
+function toolCommandFromContext(
+  itemType: ToolLifecycleItemType,
+  value: unknown,
+): string | undefined {
+  if (itemType !== "command_execution") return undefined;
+  const context = text(value);
+  if (!context) return undefined;
+  return /^Running(?: (?:code|command))?:?\s+(.+)$/isu.exec(context)?.[1]?.trim();
+}
+
+function toolArgumentDetail(
+  name: string | undefined,
+  args: Readonly<Record<string, unknown>>,
+  filePaths: ReadonlyArray<string>,
+): string | undefined {
+  switch (name?.toLowerCase()) {
+    case "web_search":
+    case "x_search":
+    case "session_search":
+      return text(args.query);
+    case "search_files":
+      return text(args.pattern);
+    case "web_extract":
+      return firstText(args.urls) ?? text(args.url);
+    case "read_file":
+    case "write_file":
+    case "patch":
+      return filePaths[0] ?? text(args.path);
+    case "browser_navigate":
+      return text(args.url);
+    case "vision_analyze":
+      return text(args.question);
+    case "image_generate":
+    case "video_generate":
+      return text(args.prompt);
+    default:
+      return undefined;
+  }
+}
+
+function projectHermesTool(
+  payload: Readonly<Record<string, unknown>>,
+  fallback?: HermesToolProjection,
+  status: "inProgress" | "completed" = "inProgress",
+): HermesToolProjection {
+  const name = text(payload.name) ?? fallback?.name;
+  const itemType = name ? toolItemType(name) : (fallback?.itemType ?? "dynamic_tool_call");
+  const args = record(payload.args);
+  const command =
+    toolCommand(itemType, args) ??
+    text(fallback?.data.command) ??
+    toolCommandFromContext(itemType, payload.context);
+  const filePaths = toolFilePaths(itemType, args);
+  const semanticDetail = toolArgumentDetail(name, args, filePaths);
+  const failure = text(payload.error);
+  const detail =
+    itemType === "command_execution" && command
+      ? (failure ?? text(payload.summary) ?? text(payload.result_text))
+      : (failure ??
+        semanticDetail ??
+        text(payload.context) ??
+        fallback?.detail ??
+        text(payload.summary) ??
+        text(payload.result_text));
+  const data: Record<string, unknown> = {
+    ...(text(payload.tool_id) ? { toolCallId: text(payload.tool_id) } : {}),
+    ...(name ? { toolName: name } : {}),
+    ...(command ? { command } : {}),
+    ...(filePaths.length > 0 ? { files: filePaths.map((path) => ({ path })) } : {}),
+  };
+  const mcp = mcpToolIdentity(name);
+  if (itemType === "mcp_tool_call") {
+    const result = payload.result ?? payload.result_text;
+    data.item = {
+      type: "mcpToolCall",
+      ...(text(payload.tool_id) ? { id: text(payload.tool_id) } : {}),
+      ...(mcp ? { server: mcp.server, tool: mcp.tool } : {}),
+      ...(Object.keys(args).length > 0 ? { arguments: args } : {}),
+      ...(result !== undefined ? { result } : {}),
+      status: failure ? "failed" : status,
+      ...(failure ? { error: failure } : {}),
+    };
+  } else {
+    const rawOutput = payload.result ?? payload.result_text;
+    if (rawOutput !== undefined) data.rawOutput = rawOutput;
+  }
+  return {
+    name,
+    itemType,
+    title: toolTitle(name, itemType),
+    detail,
+    data,
+  };
 }
 
 export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
@@ -744,7 +929,8 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
       case "tool.start": {
         const toolId = text(payload.tool_id) ?? (yield* uuid);
         const itemId = makeItemId(context, `tool:${toolId}`);
-        context.toolItems.set(toolId, itemId);
+        const projection = projectHermesTool(payload);
+        context.toolItems.set(toolId, { itemId, projection });
         yield* publish({
           type: "item.started",
           ...(yield* stamp()),
@@ -752,10 +938,23 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
           itemId,
           providerRefs: { providerItemId: ProviderItemId.make(toolId) },
           payload: {
-            itemType: toolItemType(text(payload.name)),
+            itemType: projection.itemType,
             status: "inProgress",
-            ...(text(payload.name) ? { title: text(payload.name) } : {}),
-            data: payload,
+            title: projection.title,
+          },
+        });
+        yield* publish({
+          type: "item.updated",
+          ...(yield* stamp()),
+          ...base(context, event),
+          itemId,
+          providerRefs: { providerItemId: ProviderItemId.make(toolId) },
+          payload: {
+            itemType: projection.itemType,
+            status: "inProgress",
+            title: projection.title,
+            ...(projection.detail ? { detail: projection.detail } : {}),
+            data: projection.data,
           },
         });
         return;
@@ -774,21 +973,20 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
       }
       case "tool.complete": {
         const toolId = text(payload.tool_id);
-        const itemId = toolId ? context.toolItems.get(toolId) : undefined;
+        const startedTool = toolId ? context.toolItems.get(toolId) : undefined;
+        const projection = projectHermesTool(payload, startedTool?.projection, "completed");
         const failure = text(payload.error);
         yield* publish({
           type: "item.completed",
           ...(yield* stamp()),
           ...base(context, event),
-          ...(itemId ? { itemId } : {}),
+          ...(startedTool ? { itemId: startedTool.itemId } : {}),
           payload: {
-            itemType: toolItemType(text(payload.name)),
+            itemType: projection.itemType,
             status: failure ? "failed" : "completed",
-            ...(text(payload.name) ? { title: text(payload.name) } : {}),
-            ...((failure ?? text(payload.summary) ?? text(payload.result_text))
-              ? { detail: failure ?? text(payload.summary) ?? text(payload.result_text) }
-              : {}),
-            data: payload,
+            title: projection.title,
+            ...(projection.detail ? { detail: projection.detail } : {}),
+            data: projection.data,
           },
         });
         if (toolId) context.toolItems.delete(toolId);
@@ -896,6 +1094,8 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
           (event.type === "subagent.tool"
             ? `Hermes subagent used ${text(payload.tool_name) ?? "a tool"}`
             : "Hermes subagent");
+        const progressSummary =
+          text(payload.summary) ?? text(payload.text) ?? text(payload.tool_preview);
         if (event.type === "subagent.complete") {
           yield* publish({
             type: "task.completed",
@@ -931,9 +1131,7 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
             payload: {
               taskId,
               description,
-              ...((text(payload.summary) ?? text(payload.text))
-                ? { summary: text(payload.summary) ?? text(payload.text) }
-                : {}),
+              ...(progressSummary ? { summary: progressSummary } : {}),
               ...(text(payload.tool_name) ? { lastToolName: text(payload.tool_name) } : {}),
             },
           });
