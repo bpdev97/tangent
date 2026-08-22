@@ -4,6 +4,11 @@ Chats are conversations that are not attached to a repository. They use the same
 thread history as project work, while hiding project-only tools such as files, Git, worktrees, and
 terminals.
 
+Chats do not impose a separate provider tool policy. Providers use their normal profile, tools, and
+approval behavior, while Tangent supplies only the fact that no project is attached and the process
+working directory is app-owned scratch space. Chats remain in Supervised mode, so provider approval
+requests still appear in the conversation.
+
 Choose **Chat Host** in Settings to decide which environment starts every new chat. If that host is
 unavailable, the draft remains on the device until the host returns; Tangent does not move it to a
 different environment. Existing chats remain on the environment where they started.

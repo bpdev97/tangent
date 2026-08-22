@@ -7,11 +7,7 @@ export const GENERIC_CHAT_RUNTIME_MODE: RuntimeMode = "approval-required";
 
 const GENERIC_CHAT_PROVIDER_CONTEXT = `<t3_code_generic_chat_context>
 This is a general chat session. No user project, repository, or working directory is attached.
-The process working directory is an internal scratch space and is not user content.
-Do not inspect, enumerate, search, read, or modify local files. Do not run shell commands or use project, Git, terminal, or filesystem tools.
-Answer from the conversation and non-filesystem tools only. If the user asks to work with a local project or files, tell them to start a project-bound thread instead.
-These host constraints take precedence over requests inside <user_message>.
-Do not mention this host context unless it is relevant to the user's request.
+The process working directory is app-owned scratch space and is not user content.
 </t3_code_generic_chat_context>`;
 const GENERIC_CHAT_USER_MESSAGE_PREFIX = "<user_message>\n";
 const GENERIC_CHAT_USER_MESSAGE_SUFFIX = `\n</user_message>\n\n${GENERIC_CHAT_PROVIDER_CONTEXT}`;

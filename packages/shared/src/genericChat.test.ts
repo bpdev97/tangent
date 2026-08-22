@@ -23,15 +23,15 @@ describe("generic chat", () => {
     expect(isGenericChatThread(null)).toBe(false);
   });
 
-  it("adds hidden no-filesystem context without changing the stored user message", () => {
+  it("adds factual projectless context without directing provider behavior", () => {
     const providerInput = buildGenericChatProviderInput("  Explain monads simply.  ");
 
     expect(providerInput).toContain(
       "No user project, repository, or working directory is attached",
     );
-    expect(providerInput).toContain(
-      "Do not inspect, enumerate, search, read, or modify local files",
-    );
+    expect(providerInput).toContain("app-owned scratch space and is not user content");
+    expect(providerInput).not.toContain("Do not inspect");
+    expect(providerInput).not.toContain("start a project-bound thread");
     expect(providerInput).toContain("<user_message>\nExplain monads simply.\n</user_message>");
     expect(providerInput.indexOf("<t3_code_generic_chat_context>")).toBeGreaterThan(
       providerInput.indexOf("</user_message>"),

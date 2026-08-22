@@ -9,10 +9,13 @@ import {
 } from "./ProviderCommandReactor.ts";
 
 describe("generic chat provider context", () => {
-  it("wraps generic chat messages with the no-filesystem host context", () => {
+  it("wraps generic chat messages with factual projectless context", () => {
     const input = prepareProviderMessageInput(GENERIC_CHAT_PROJECT_ID, "What is a monad?");
 
-    expect(input).toContain("Do not inspect, enumerate, search, read, or modify local files");
+    expect(input).toContain("No user project, repository, or working directory is attached");
+    expect(input).toContain("app-owned scratch space and is not user content");
+    expect(input).not.toContain("Do not inspect");
+    expect(input).not.toContain("start a project-bound thread");
     expect(input).toContain("<user_message>\nWhat is a monad?\n</user_message>");
   });
 
