@@ -144,11 +144,12 @@ Invariants:
   path, and never create per-device IDs.
 - Startup creates or repairs the managed project without replacing its model preference or
   deleting threads.
-- Every turn receives the generic-chat provider context, uses `approval-required`, and is pinned to
-  the app-owned scratch cwd even when stale thread metadata contains a worktree.
+- Every turn receives only factual no-project and scratch-cwd context, uses `approval-required`, and
+  is pinned to the app-owned scratch cwd even when stale thread metadata contains a worktree. Do not
+  add a separate generic-chat tool policy on top of the provider's native behavior.
 - Web and mobile hide files, Git, worktrees, terminals, diffs, scripts, and related deep links.
-- The prompt and cwd are best-effort behavior, not a provider-independent filesystem jail. Do not
-  document them as containment.
+- The context and cwd are not a provider-independent filesystem jail. Do not document them as
+  containment.
 - Conversation folding, activities, and tool calls stay upstream-owned.
 - An explicitly selected chat host is strict. If it is unavailable, retain the draft and show the
   failure; never choose a different environment silently.

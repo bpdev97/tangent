@@ -14,10 +14,11 @@ the same logical `Chats` entry across servers.
 
 ## Provider behavior
 
-Before every generic-chat turn, the server adds host context telling the provider that no user
-project or working directory is attached and that it must not inspect files, run shell or Git
-commands, or use project tools. The stored user message remains unchanged. Attachment-only turns
-still receive the host context.
+Before every generic-chat turn, the server adds minimal factual host context: no user project or
+working directory is attached, and the process cwd is app-owned scratch space rather than user
+content. The context deliberately does not direct tool use or substitute a Tangent-specific policy
+for the provider's native instructions, profile, and approval behavior. The stored user message
+remains unchanged. Attachment-only turns still receive the context.
 
 Generic sessions are always started in `approval-required` mode regardless of thread metadata.
 For Codex this maps to a read-only sandbox. Providers still require a real process cwd, so the
@@ -77,14 +78,14 @@ review, terminal, and their nested routes cannot be opened through deep links or
 - Keep `GENERIC_CHAT_PROJECT_ID` stable; changing it or creating per-device IDs strands old chats.
 - Provisioning must remain idempotent and repair the managed title/path without deleting threads.
 - Do not infer generic-chat behavior from `Chats` or a `generic-chat` path.
-- Provider context must be applied on every turn, including resumed sessions and attachment-only
-  turns.
+- The minimal projectless provider context must be applied on every turn, including resumed sessions
+  and attachment-only turns. Keep it factual; do not add a separate generic-chat tool policy.
 - Compare an active provider session against the effective forced runtime mode, not mutable thread
   metadata, when deciding whether to restart it.
 - Resolve a generic provider session cwd from the managed project only; never honor its thread
   branch or worktree metadata. Do not describe that cwd as a security boundary.
-- Treat the no-files rule as best-effort until every provider has an enforceable filesystem-denial
-  mode. UI capability guards prevent accidental entry points but do not constrain provider tools.
+- UI capability guards prevent accidental project-tool entry points but do not constrain provider
+  tools. The provider's native policy and the runtime mode govern tool behavior.
 - Never expose the managed scratch directory as a user workspace in web or mobile UI.
 - Derive existing-thread capability from `thread.projectId`; project catalog objects may arrive a
   render later and must not temporarily enable project tools.
