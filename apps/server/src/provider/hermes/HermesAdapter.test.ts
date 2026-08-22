@@ -27,6 +27,12 @@ const settleEvents = Effect.gen(function* () {
   for (let index = 0; index < 20; index += 1) yield* Effect.yieldNow;
 });
 
+function asRecord(value: unknown): Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Readonly<Record<string, unknown>>)
+    : {};
+}
+
 class FakeGateway implements HermesGatewayConnection {
   readonly requests: Array<{ method: string; params: Readonly<Record<string, unknown>> }> = [];
   promptSubmit: Promise<unknown> | undefined;
@@ -128,12 +134,17 @@ it.layer(testLayer)("HermesAdapter gateway", (it) => {
         emitter.current?.({
           type: "tool.start",
           session_id: "live-1",
-          payload: { tool_id: "tool-1", name: "terminal", args_text: "pwd" },
+          payload: { tool_id: "tool-1", name: "terminal", context: "Running pwd" },
         });
         emitter.current?.({
           type: "tool.complete",
           session_id: "live-1",
-          payload: { tool_id: "tool-1", name: "terminal", result_text: process.cwd() },
+          payload: {
+            tool_id: "tool-1",
+            name: "terminal",
+            args: { command: "pwd" },
+            result_text: process.cwd(),
+          },
         });
         emitter.current?.({
           type: "message.delta",
@@ -148,7 +159,11 @@ it.layer(testLayer)("HermesAdapter gateway", (it) => {
         emitter.current?.({
           type: "subagent.tool",
           session_id: "live-1",
-          payload: { subagent_id: "research-1", tool_name: "terminal", text: "Reading files" },
+          payload: {
+            subagent_id: "research-1",
+            tool_name: "terminal",
+            tool_preview: "Reading files",
+          },
         });
         emitter.current?.({
           type: "subagent.complete",
@@ -178,7 +193,9 @@ it.layer(testLayer)("HermesAdapter gateway", (it) => {
         assert.isTrue(
           events.some(
             (event) =>
-              event.type === "item.completed" && event.payload.itemType === "command_execution",
+              event.type === "item.updated" &&
+              event.payload.itemType === "command_execution" &&
+              asRecord(event.payload.data).command === "pwd",
           ),
         );
         assert.isTrue(
@@ -191,7 +208,8 @@ it.layer(testLayer)("HermesAdapter gateway", (it) => {
             (event) =>
               event.type === "task.progress" &&
               event.payload.taskId === "research-1" &&
-              event.payload.lastToolName === "terminal",
+              event.payload.lastToolName === "terminal" &&
+              event.payload.summary === "Reading files",
           ),
         );
         assert.isTrue(
@@ -204,6 +222,252 @@ it.layer(testLayer)("HermesAdapter gateway", (it) => {
             (event) => event.type === "turn.completed" && event.turnId === started.turnId,
           ),
         );
+        yield* Fiber.interrupt(eventFiber);
+      }),
+    ),
+  );
+
+  it.effect("projects Hermes tool details into canonical activity items", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const gateway = new FakeGateway();
+        const emitter: { current?: (event: HermesGatewayEvent) => void } = {};
+        const adapter = yield* makeHermesAdapter(decodeSettings({ profile: "default" }), {
+          gatewayRuntime: fakeRuntime(gateway, emitter),
+        });
+        const events: ProviderRuntimeEvent[] = [];
+        const eventFiber = yield* Stream.runForEach(adapter.streamEvents, (event) =>
+          Effect.sync(() => events.push(event)),
+        ).pipe(Effect.forkChild);
+        yield* Effect.yieldNow;
+        const threadId = ThreadId.make("hermes-gateway-tools");
+        yield* adapter.startSession({ threadId, runtimeMode: "approval-required" });
+        yield* adapter.sendTurn({ threadId, input: "exercise tools" });
+        emitter.current?.({ type: "message.start", session_id: "live-1" });
+
+        const tools = [
+          {
+            id: "terminal-1",
+            name: "terminal",
+            start: { context: "Running pwd" },
+            complete: { args: { command: "pwd" }, result: { stdout: process.cwd() } },
+          },
+          {
+            id: "read-1",
+            name: "read_file",
+            start: { args: { path: "src/index.ts" }, context: "Reading src/index.ts" },
+            complete: { args: { path: "src/index.ts" }, result_text: "file contents" },
+          },
+          {
+            id: "write-1",
+            name: "write_file",
+            start: {
+              args: { path: "src/new.ts", content: "do not copy file contents into activity" },
+            },
+            complete: {
+              args: { path: "src/new.ts", content: "do not copy file contents into activity" },
+              result: { success: true },
+            },
+          },
+          {
+            id: "patch-1",
+            name: "patch",
+            start: {
+              args: {
+                patch:
+                  "*** Begin Patch\n*** Update File: src/a.ts\n*** Add File: src/b.ts\n*** End Patch",
+              },
+            },
+            complete: {
+              args: {
+                patch:
+                  "*** Begin Patch\n*** Update File: src/a.ts\n*** Add File: src/b.ts\n*** End Patch",
+              },
+              result: { success: true },
+            },
+          },
+          {
+            id: "grep-1",
+            name: "search_files",
+            start: { args: { pattern: "projectHermesTool", path: "apps/server" } },
+            complete: {
+              args: { pattern: "projectHermesTool", path: "apps/server" },
+              result: { matches: [] },
+            },
+          },
+          {
+            id: "web-1",
+            name: "web_search",
+            start: { context: "Searching the web for Hermes Agent" },
+            complete: { args: { query: "Hermes Agent" }, result: { results: [] } },
+          },
+          {
+            id: "browser-1",
+            name: "browser_navigate",
+            start: { args: { url: "https://example.com" } },
+            complete: { args: { url: "https://example.com" }, result: { title: "Example" } },
+          },
+          {
+            id: "browser-type-1",
+            name: "browser_type",
+            start: { args: { text: "secret-value" }, context: "Typing [REDACTED]" },
+            complete: { args: { text: "secret-value" }, result: { success: true } },
+          },
+          {
+            id: "image-1",
+            name: "image_generate",
+            start: { args: { prompt: "A blue circle" } },
+            complete: { args: { prompt: "A blue circle" }, result: { path: "circle.png" } },
+          },
+          {
+            id: "vision-1",
+            name: "vision_analyze",
+            start: { args: { question: "What is shown?" } },
+            complete: { args: { question: "What is shown?" }, result: { answer: "A circle" } },
+          },
+          {
+            id: "mcp-1",
+            name: "mcp__github__search_issues",
+            start: { args: { query: "Hermes" }, context: "Searching GitHub issues" },
+            complete: {
+              args: { query: "Hermes" },
+              result: { content: [{ type: "text", text: "No issues" }] },
+            },
+          },
+          {
+            id: "delegate-1",
+            name: "delegate_task",
+            start: { args: { task: "Inspect the adapter" }, context: "Delegating adapter review" },
+            complete: {
+              args: { task: "Inspect the adapter" },
+              result: { summary: "Reviewed" },
+            },
+          },
+        ] satisfies ReadonlyArray<{
+          readonly id: string;
+          readonly name: string;
+          readonly start: Readonly<Record<string, unknown>>;
+          readonly complete: Readonly<Record<string, unknown>>;
+        }>;
+
+        for (const tool of tools) {
+          emitter.current?.({
+            type: "tool.start",
+            session_id: "live-1",
+            payload: { tool_id: tool.id, name: tool.name, ...tool.start },
+          });
+          emitter.current?.({
+            type: "tool.complete",
+            session_id: "live-1",
+            payload: { tool_id: tool.id, name: tool.name, ...tool.complete },
+          });
+          yield* settleEvents;
+        }
+
+        function updatedTool(id: string) {
+          const event = events.find(
+            (candidate) =>
+              candidate.type === "item.updated" && candidate.itemId === `hermes:live-1:tool:${id}`,
+          );
+          if (!event || event.type !== "item.updated") {
+            throw new Error(`Missing tool update ${id}`);
+          }
+          return event;
+        }
+
+        function completedTool(id: string) {
+          const event = events.find(
+            (candidate) =>
+              candidate.type === "item.completed" &&
+              candidate.itemId === `hermes:live-1:tool:${id}`,
+          );
+          if (!event || event.type !== "item.completed") {
+            throw new Error(
+              `Missing completed tool ${id}; received ${events
+                .filter((candidate) => candidate.type === "item.completed")
+                .map((candidate) => candidate.itemId)
+                .join(", ")}`,
+            );
+          }
+          return event;
+        }
+
+        const terminalStart = updatedTool("terminal-1");
+        assert.equal(terminalStart.payload.itemType, "command_execution");
+        assert.equal(terminalStart.payload.title, "Ran command");
+        assert.deepEqual(terminalStart.payload.data, {
+          toolCallId: "terminal-1",
+          toolName: "terminal",
+          command: "pwd",
+        });
+
+        const read = completedTool("read-1");
+        assert.equal(read.payload.itemType, "dynamic_tool_call");
+        assert.equal(read.payload.title, "Read File");
+        assert.equal(read.payload.detail, "src/index.ts");
+
+        const write = updatedTool("write-1");
+        assert.equal(write.payload.itemType, "file_change");
+        assert.deepEqual(write.payload.data, {
+          toolCallId: "write-1",
+          toolName: "write_file",
+          files: [{ path: "src/new.ts" }],
+        });
+
+        const patch = completedTool("patch-1");
+        assert.deepEqual(asRecord(patch.payload.data).files, [
+          { path: "src/a.ts" },
+          { path: "src/b.ts" },
+        ]);
+
+        const grep = completedTool("grep-1");
+        assert.equal(grep.payload.itemType, "web_search");
+        assert.equal(grep.payload.title, "Grep");
+        assert.equal(grep.payload.detail, "projectHermesTool");
+
+        const webStart = updatedTool("web-1");
+        assert.equal(webStart.payload.detail, "Searching the web for Hermes Agent");
+        assert.equal(completedTool("web-1").payload.detail, "Hermes Agent");
+
+        const browser = completedTool("browser-1");
+        assert.equal(browser.payload.itemType, "dynamic_tool_call");
+        assert.equal(browser.payload.title, "Browser Navigate");
+        assert.equal(browser.payload.detail, "https://example.com");
+
+        const browserType = updatedTool("browser-type-1");
+        assert.equal(browserType.payload.detail, "Typing [REDACTED]");
+        assert.deepEqual(browserType.payload.data, {
+          toolCallId: "browser-type-1",
+          toolName: "browser_type",
+        });
+
+        const image = completedTool("image-1");
+        assert.equal(image.payload.itemType, "dynamic_tool_call");
+        assert.equal(image.payload.title, "Generate Image");
+        assert.equal(image.payload.detail, "A blue circle");
+
+        const vision = completedTool("vision-1");
+        assert.equal(vision.payload.itemType, "image_view");
+        assert.equal(vision.payload.detail, "What is shown?");
+
+        const mcp = completedTool("mcp-1");
+        assert.equal(mcp.payload.itemType, "mcp_tool_call");
+        assert.equal(mcp.payload.title, "github · search_issues");
+        assert.deepEqual(asRecord(mcp.payload.data).item, {
+          type: "mcpToolCall",
+          id: "mcp-1",
+          server: "github",
+          tool: "search_issues",
+          arguments: { query: "Hermes" },
+          result: { content: [{ type: "text", text: "No issues" }] },
+          status: "completed",
+        });
+
+        const delegated = completedTool("delegate-1");
+        assert.equal(delegated.payload.itemType, "collab_agent_tool_call");
+        assert.equal(delegated.payload.title, "Subagent task");
+        assert.equal(delegated.payload.detail, "Delegating adapter review");
+
         yield* Fiber.interrupt(eventFiber);
       }),
     ),
