@@ -9,8 +9,6 @@ describe("ComposerPendingApprovalActions", () => {
     const markup = renderToStaticMarkup(
       <ComposerPendingApprovalActions
         requestId={ApprovalRequestId.make("approval-1")}
-        requestKind="command"
-        supportsSessionPersistence
         isResponding={false}
         onRespondToApproval={async () => undefined}
       />,
@@ -24,20 +22,37 @@ describe("ComposerPendingApprovalActions", () => {
     expect(markup).not.toContain("sm:h-6");
   });
 
-  it("hides decisions an MCP tool call does not support", () => {
+  it("shows only the approval choices advertised by an MCP server", () => {
     const markup = renderToStaticMarkup(
       <ComposerPendingApprovalActions
-        requestId={ApprovalRequestId.make("approval-1")}
-        requestKind="mcp-tool-call"
-        supportsSessionPersistence={false}
+        requestId={ApprovalRequestId.make("approval-safari")}
         isResponding={false}
+        options={[
+          { decision: "decline", label: "Decline" },
+          { decision: "acceptAlways", label: "Always allow Safari" },
+          { decision: "accept", label: "Approve" },
+        ]}
         onRespondToApproval={async () => undefined}
       />,
     );
 
-    expect(markup).toContain(">Cancel<");
+    expect(markup).toContain("Always allow Safari");
     expect(markup).toContain(">Approve<");
-    expect(markup).not.toContain(">Decline<");
     expect(markup).not.toContain("Always allow this session");
+  });
+
+  it("limits provider-supplied approval labels so narrow rows can wrap", () => {
+    const label = "Allow ".repeat(40).trim();
+    const markup = renderToStaticMarkup(
+      <ComposerPendingApprovalActions
+        requestId={ApprovalRequestId.make("approval-long-label")}
+        isResponding={false}
+        options={[{ decision: "acceptAlways", label }]}
+        onRespondToApproval={async () => undefined}
+      />,
+    );
+
+    expect(markup).toContain('class="max-w-40 truncate"');
+    expect(markup).toContain(label);
   });
 });

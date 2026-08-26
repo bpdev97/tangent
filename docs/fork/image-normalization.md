@@ -5,8 +5,10 @@ adapter about Apple image containers.
 
 ## Decision
 
-Normalize HEIC/HEIF once in shared server ingestion, before attachment metadata, persistence paths,
-asset URLs, or provider dispatch are created. The canonical stored attachment is JPEG.
+Modern web clients use upstream's client-side HEIC conversion before the attachment upload queue.
+Keep server normalization for inline attachments from mobile and older clients, before attachment
+metadata, persistence paths, asset URLs, or provider dispatch are created. The canonical stored
+attachment is JPEG in either path.
 
 This is a fork-level compatibility boundary rather than a Hermes adapter workaround. Hermes Agent
 0.19.0 rejects `.heic` and `.heif` in `image.attach` before its later image-routing code can inspect
@@ -15,7 +17,7 @@ widely supported persisted format.
 
 ## Architecture
 
-The upload path is:
+The compatibility upload path is:
 
 ```text
 client data URL
@@ -27,9 +29,10 @@ client data URL
   -> serve assets and dispatch to any provider
 ```
 
-`apps/server/src/imageNormalization.ts` owns format detection and conversion.
-`apps/server/src/orchestration/Normalizer.ts` owns when conversion occurs. Provider adapters must
-remain consumers of the canonical attachment and must not add their own HEIC conversion.
+`apps/server/src/imageNormalization.ts` owns server-side format detection and conversion.
+`apps/server/src/orchestration/Normalizer.ts` owns when conversion occurs for inline data URLs.
+Upstream's web compressor and attachment queue own the current web path. Provider adapters remain
+consumers of canonical attachments and must not add their own HEIC conversion.
 
 Files that are not HEIC/HEIF remain byte-for-byte pass-through. Detection accepts a declared
 HEIC/HEIF MIME type or a valid ISO-BMFF `ftyp` box containing a known HEIC major or compatible brand:
@@ -74,14 +77,15 @@ that a packaged installation can resolve both direct dependencies before shippin
 
 ## Upstream sync and removal criteria
 
-During an upstream sync, review changes to upload schemas, data URL parsing, image MIME inference,
-the shared orchestration normalizer, attachment paths, asset serving, and provider image APIs. Keep
-conversion before persistence and provider dispatch. Preserve pass-through behavior for JPEG, PNG,
-GIF, WebP, and AVIF.
+During an upstream sync, review changes to upload schemas, web conversion and upload queuing, data
+URL parsing, image MIME inference, the shared orchestration normalizer, attachment paths, asset
+serving, and provider image APIs. Keep conversion before persistence and provider dispatch.
+Preserve pass-through behavior for JPEG, PNG, GIF, WebP, and AVIF.
 
-Remove `FORK-IMAGE-001` only when upstream supports HEIC/HEIF end to end across persistence, browser
-assets, and providers that reject HEIC/HEIF paths or MIME types. Client-side preview support or a
-single provider's native decoder is not equivalent.
+Remove `FORK-IMAGE-001` only when every supported client normalizes before upload, or upstream adds
+equivalent server ingestion for inline clients, and HEIC/HEIF works end to end across persistence,
+browser assets, and providers that reject HEIC/HEIF paths or MIME types. Upstream's web-only
+conversion does not cover mobile or older clients and is not yet an equivalent replacement.
 
 ## Compatibility baseline
 

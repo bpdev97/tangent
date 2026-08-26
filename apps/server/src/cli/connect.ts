@@ -46,6 +46,7 @@ import { relayUrlConfig } from "../cloud/publicConfig.ts";
 import { headlessRelayClientTracingLayer } from "../cloud/relayTracing.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import { layerConfig as SqlitePersistenceLayerLive } from "../persistence/Layers/Sqlite.ts";
 import * as ExternalLauncher from "../process/externalLauncher.ts";
 import { readPersistedServerRuntimeState } from "../serverRuntimeState.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -443,6 +444,10 @@ const runCloudCommand = Effect.fn("cloud.cli.run_cloud_command")(function* <A, E
   const logLevel = yield* GlobalFlag.LogLevel;
   const config = yield* resolveCliAuthConfig(flags, logLevel);
   const minimumLogLevel = options?.quietLogs ? "Error" : config.logLevel;
+  const serverSettingsLayer = ServerSettings.layer.pipe(
+    Layer.provide(ServerSecretStore.layer),
+    Layer.provideMerge(SqlitePersistenceLayerLive),
+  );
   const runtimeLayer = Layer.mergeAll(
     ServerSecretStore.layer,
     CliTokenManager.layer.pipe(
@@ -453,7 +458,7 @@ const runCloudCommand = Effect.fn("cloud.cli.run_cloud_command")(function* <A, E
     EnvironmentAuth.runtimeLayer,
     ServerEnvironment.layer.pipe(
       Layer.provide(ServerSecretStore.layer),
-      Layer.provide(ServerSettings.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+      Layer.provide(serverSettingsLayer),
     ),
     bootServiceLayer(config),
     headlessRelayClientTracingLayer,

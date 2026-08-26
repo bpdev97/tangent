@@ -82,6 +82,7 @@ export function hermesApprovalChoice(decision: ProviderApprovalDecision): string
     case "accept":
       return "once";
     case "acceptForSession":
+    case "acceptAlways":
       return "session";
     case "decline":
     case "cancel":

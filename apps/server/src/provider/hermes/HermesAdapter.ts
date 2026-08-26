@@ -1014,10 +1014,6 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
             requestType: "command_execution_approval",
             detail: text(payload.description) ?? "Hermes requested approval to run a command.",
             args: payload,
-            supportsSessionPersistence:
-              Array.isArray(payload.choices) && payload.choices.length > 0
-                ? payload.choices.includes("session")
-                : payload.smart_denied !== true,
           },
         });
         return;

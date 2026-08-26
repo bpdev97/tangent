@@ -46,6 +46,7 @@ describe("HermesGatewaySupport", () => {
       model: "x-ai/grok-4.5:free",
     });
     expect(hermesApprovalChoice("acceptForSession")).toBe("session");
+    expect(hermesApprovalChoice("acceptAlways")).toBe("session");
     expect(hermesApprovalChoice("decline")).toBe("deny");
     expect(shouldAutoApproveHermes("full-access")).toBe(true);
     expect(shouldAutoApproveHermes("auto-accept-edits")).toBe(false);

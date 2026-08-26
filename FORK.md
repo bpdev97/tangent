@@ -47,17 +47,17 @@ The dated [2026-08-01 audit](docs/fork/audit-2026-08-01.md) records the complete
 ledger and keep/restore review. The [2026-08-08 sync audit](docs/fork/audit-2026-08-08.md) records
 the previous upstream merge. The [2026-08-10 sync audit](docs/fork/audit-2026-08-10.md) records the
 next merge, the [2026-08-16 sync audit](docs/fork/audit-2026-08-16.md) records the following merge,
-and the [2026-08-21 sync audit](docs/fork/audit-2026-08-21.md) records the latest upstream merge,
+the [2026-08-21 sync audit](docs/fork/audit-2026-08-21.md) records the next merge, and the
+[2026-08-26 sync audit](docs/fork/audit-2026-08-26.md) records the latest upstream merge,
 compatibility decisions, and verification.
 
 | ID                 | Kept behavior                                                                                | Status               | Maintenance record                                                    | Focused verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ------------------ | -------------------------------------------------------------------------------------------- | -------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `FORK-DIST-001`    | Tangent distribution identity, macOS/iOS release, server self-update, and service boundaries | Active               | [Personal distribution](docs/personal-distribution.md)                | `vp test scripts/personal-distribution-identity.test.ts scripts/build-desktop-artifact.test.ts apps/server/src/cloud/bootService.test.ts apps/server/src/cloud/serverRelease.test.ts apps/server/src/cloud/pinnedRuntime.test.ts apps/server/src/cloud/selfUpdate.test.ts apps/server/src/cli/service.test.ts apps/desktop/src/app/DesktopEnvironment.test.ts packages/ssh/src/command.test.ts`                                                                                                                                                                                                                                                                                            |
 | `FORK-CHAT-001`    | Managed generic chats, preferred hosts, iOS composer, and macOS Quick Chat                   | Active               | [Generic chat](docs/fork/generic-chat.md)                             | `vp test packages/shared/src/genericChat.test.ts packages/contracts/src/settings.test.ts packages/client-runtime/src/state/projectGrouping.genericChat.test.ts apps/server/src/genericChat.test.ts apps/server/src/orchestration/Layers/ProviderCommandReactor.genericChat.test.ts apps/web/src/lib/chatThreadActions.test.ts apps/web/src/lib/quickChat.test.ts apps/desktop/src/app/DesktopQuickChat.test.ts apps/desktop/src/app/DesktopLifecycle.test.ts apps/desktop/src/window/DesktopWindow.test.ts`                                                                                                                                                                                |
-| `FORK-HERMES-001`  | Hermes TUI-gateway provider and automation management                                        | Active, early access | [Hermes](docs/fork/hermes.md)                                         | `vp test apps/server/src/provider/hermes apps/server/src/persistence/Migrations/041_TangentMigrationCompatibility.test.ts packages/client-runtime/src/operations/hermesAutomations.test.ts apps/web/src/components/settings/SettingsPanels.logic.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `FORK-HERMES-001`  | Hermes TUI-gateway provider and automation management                                        | Active, early access | [Hermes](docs/fork/hermes.md)                                         | `vp test apps/server/src/provider/hermes apps/server/src/persistence/Migrations/044_TangentMigrationCompatibility.test.ts packages/client-runtime/src/operations/hermesAutomations.test.ts apps/web/src/components/settings/SettingsPanels.logic.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `FORK-PUSH-001`    | Personal APNs notifications and Live Activities                                              | Active               | [Personal push relay](docs/fork/personal-push-relay.md)               | `vp test apps/push-relay/src apps/server/src/personalPush apps/server/src/relay/AgentAwarenessRelay.test.ts apps/server/src/environment/ServerEnvironment.test.ts apps/mobile/src/features/agent-awareness/remoteRegistration.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `FORK-IMAGE-001`   | Shared HEIC/HEIF-to-JPEG upload normalization                                                | Active               | [Image normalization](docs/fork/image-normalization.md)               | `vp test packages/contracts/src/orchestration.test.ts apps/server/src/imageNormalization.test.ts apps/server/src/orchestration/Normalizer.test.ts apps/mobile/src/lib/composerImages.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `FORK-CODEX-001`   | Codex MCP tool-call approval elicitations                                                    | Active, temporary    | [Codex MCP approvals](docs/fork/codex-mcp-tool-approvals.md)          | `vp test apps/server/src/provider/CodexMcpApproval.test.ts apps/server/src/provider/Layers/CodexAdapter.test.ts apps/server/src/provider/Layers/CodexSessionRuntime.test.ts apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.test.ts apps/web/src/session-logic.test.ts apps/mobile/src/lib/threadActivity.test.ts`                                                                                                                                                                                                                                                                                                                                                           |
 | `FORK-PALETTE-001` | Control-N/Control-P command-palette navigation                                               | Active, temporary    | [Ownership map](#fork-palette-001)                                    | `vp test apps/web/src/components/CommandPalette.logic.test.ts` plus a web keyboard smoke test                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `FORK-LINEAR-001`  | Linear ticket and Review destinations from new-sidebar GitHub PR badges                      | Active               | [Linear PR destinations](docs/fork/linear-pr-destinations.md)         | `vp test packages/shared/src/linear.test.ts packages/contracts/src/settings.test.ts apps/server/src/linear/LinearIntegration.test.ts apps/server/src/serverSettings.test.ts apps/desktop/src/electron/ElectronShell.test.ts apps/desktop/src/preview/BrowserSession.test.ts apps/web/src/browser/openFileInPreview.test.ts apps/web/src/components/linear/linearPreviewPresentation.test.ts apps/web/src/components/linear/linearPrPrimaryDestinations.test.ts apps/web/src/components/linear/openLinearDestination.test.ts apps/web/src/components/linear/openLinearPreviewDestination.test.ts apps/web/src/rightPanelStore.test.ts apps/web/src/components/preview/PreviewView.test.tsx` |
 | `FORK-MERMAID-001` | Secure, streaming-aware Mermaid diagrams in web and desktop Markdown                         | Active, temporary    | [Mermaid diagrams](docs/fork/mermaid.md)                              | `vp test apps/web/src/components/MermaidDiagram.test.tsx` plus a web light/dark smoke test                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -83,6 +83,12 @@ they are separately reviewed and registered again.
 The historical Claude, Cursor, activity-retention, mobile-reliability, tool-presentation, and
 provider-neutral-agent maintenance files were removed with their code so they cannot be mistaken
 for active requirements.
+
+## Restored to upstream on 2026-08-26
+
+| Former delta                                     | Restored behavior                                                                                                                                                                                                                             |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Codex MCP tool-call approvals (`FORK-CODEX-001`) | Upstream now owns Codex MCP elicitation and app-access approval choices, runtime ingestion, activity projection, and web/mobile approval presentation. Tangent's parser, request kind, UI branch, tests, and maintenance record were removed. |
 
 ## Ownership and sync rules
 
@@ -238,27 +244,6 @@ Invariants:
 - Decode in a resource-limited worker, enforce pixel/time/output bounds, and preserve byte-for-byte
   pass-through for supported non-HEIC images.
 
-### FORK-CODEX-001
-
-Fork-owned paths:
-
-- `apps/server/src/provider/CodexMcpApproval.ts` and its tests
-- `docs/fork/codex-mcp-tool-approvals.md`
-
-Shared touchpoints include Codex session/adapter mapping, request contracts, orchestration activity
-projection, and web/mobile approval derivation/actions.
-
-Invariants:
-
-- Handle `mcpServer/elicitation/request` only when it is an empty form explicitly tagged
-  `_meta.codex_approval_kind: "mcp_tool_call"`. Cancel rich forms, URLs, and unknown elicitations;
-  Tangent does not implement arbitrary MCP elicitation UI.
-- Preserve `accept`, `decline`, and `cancel` semantics. Advertise session approval only when Codex
-  includes `session` in `_meta.persist`.
-- Label the request as an MCP tool call, not as a guaranteed computer-use call.
-- Remove this extension when the upstream Codex adapter handles the same tagged request and
-  persistence contract end to end.
-
 ### FORK-PALETTE-001
 
 Shared touchpoints:
@@ -380,7 +365,7 @@ pipelines.
 
 ## Merged upstream baseline
 
-The most recently merged upstream comparison baseline is `592c5983c`, integrated on 2026-08-21.
+The most recently merged upstream comparison baseline is `a3a8cbd60`, integrated on 2026-08-26.
 Update this line and the dated sync audit whenever Tangent merges a newer upstream baseline.
 
 ## Required verification

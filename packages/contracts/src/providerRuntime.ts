@@ -14,6 +14,7 @@ import {
   TurnId,
 } from "./baseSchemas.ts";
 import { ProviderInstanceId, ProviderDriverKind } from "./providerInstance.ts";
+import { ProviderApprovalOption } from "./orchestration.ts";
 
 const TrimmedNonEmptyStringSchema = TrimmedNonEmptyString;
 const UnknownRecordSchema = Schema.Record(Schema.String, Schema.Unknown);
@@ -137,9 +138,9 @@ export const CanonicalRequestType = Schema.Literals([
   "command_execution_approval",
   "file_read_approval",
   "file_change_approval",
-  "mcp_tool_call_approval",
   "apply_patch_approval",
   "exec_command_approval",
+  "mcp_elicitation_approval",
   "tool_user_input",
   "dynamic_tool_call",
   "auth_tokens_refresh",
@@ -324,6 +325,7 @@ export const ThreadTokenUsageSnapshot = Schema.Struct({
   toolUses: Schema.optional(NonNegativeInt),
   durationMs: Schema.optional(NonNegativeInt),
   compactsAutomatically: Schema.optional(Schema.Boolean),
+  autoCompactThreshold: Schema.optional(PositiveInt),
 });
 export type ThreadTokenUsageSnapshot = typeof ThreadTokenUsageSnapshot.Type;
 
@@ -432,8 +434,9 @@ export type ContentDeltaPayload = typeof ContentDeltaPayload.Type;
 const RequestOpenedPayload = Schema.Struct({
   requestType: CanonicalRequestType,
   detail: Schema.optional(TrimmedNonEmptyStringSchema),
+  appName: Schema.optional(TrimmedNonEmptyStringSchema),
+  options: Schema.optional(Schema.Array(ProviderApprovalOption)),
   args: Schema.optional(Schema.Unknown),
-  supportsSessionPersistence: Schema.optional(Schema.Boolean),
 });
 export type RequestOpenedPayload = typeof RequestOpenedPayload.Type;
 

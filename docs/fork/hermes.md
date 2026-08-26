@@ -129,9 +129,11 @@ interrupting the turn cleared Hermes's callback without resolving T3's projected
 clients now retain open-ended prompts, terminal Hermes lifecycles publish matching resolution
 events, and the Tangent compatibility migration closes orphaned projected prompts from older builds
 when their Hermes turn is already terminal. That repair originally shipped as migration 39. After
-upstream assigned migrations 39 and 40, Tangent moved the idempotent repair forward to migration 41
-so released Tangent databases can retain their ledger while still receiving the upstream project
-columns.
+upstream assigned migrations 39 and 40, Tangent moved the idempotent repair forward to migration 41.
+When upstream later assigned migrations 41 through 43, Tangent moved the repair to migration 44 and
+made it backfill the upstream migration-41 columns for databases that had already recorded Tangent's
+old migration 41. This preserves released Tangent ledgers while applying every upstream schema
+addition.
 
 On 2026-08-01, the external-reference check confirmed that Hermes's current "Gateway Internals"
 page documents the separate multi-platform messaging gateway rather than the TUI JSON-RPC gateway,

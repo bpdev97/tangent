@@ -72,17 +72,26 @@ const macPlan = {
   logPath: "/Users/theo/.t3/userdata/logs/boot-service.log",
   unitPath: "/Users/theo/Library/LaunchAgents/com.t3tools.t3code.service.plist",
 };
+const macInstallerPath =
+  "/opt/homebrew/bin:/Users/theo/.npm-global/bin:/Users/theo/.nvm/versions/node/v22.16.0/bin:/usr/bin:/bin";
+const macRenderOptions = { homeDir: "/Users/theo", environmentPath: macInstallerPath };
 
 it("keeps launchd pinned to the stable launcher rather than a versioned server", () => {
-  const plist = BootService.renderBootServicePlist(macPlan, { homeDir: "/Users/theo" });
+  const plist = BootService.renderBootServicePlist(macPlan, macRenderOptions);
 
   expect(plist).toContain("<string>/opt/homebrew/bin/node</string>");
   expect(plist).toContain("<string>/Users/theo/.t3/runtime/service-launcher.mjs</string>");
   expect(plist).not.toContain("versions/1.2.3");
 });
 
+it("preserves the installer's provider search path in the launch agent", () => {
+  const plist = BootService.renderBootServicePlist(macPlan, macRenderOptions);
+
+  expect(plist).toContain(`    <key>PATH</key>\n    <string>${macInstallerPath}</string>`);
+});
+
 it("restarts the launch agent on the systemd cadence", () => {
-  const plist = BootService.renderBootServicePlist(macPlan, { homeDir: "/Users/theo" });
+  const plist = BootService.renderBootServicePlist(macPlan, macRenderOptions);
 
   expect(plist).toContain("<key>RunAtLoad</key>\n  <true/>");
   expect(plist).toContain("<key>KeepAlive</key>\n  <true/>");
@@ -91,7 +100,7 @@ it("restarts the launch agent on the systemd cadence", () => {
 });
 
 it("appends both stdio streams to the boot service log", () => {
-  const plist = BootService.renderBootServicePlist(macPlan, { homeDir: "/Users/theo" });
+  const plist = BootService.renderBootServicePlist(macPlan, macRenderOptions);
 
   expect(plist).toContain(
     "<key>StandardOutPath</key>\n  <string>/Users/theo/.t3/userdata/logs/boot-service.log</string>",
@@ -104,10 +113,11 @@ it("appends both stdio streams to the boot service log", () => {
 it("escapes XML in host paths", () => {
   const plist = BootService.renderBootServicePlist(
     { ...macPlan, baseDir: "/Users/theo/T3 & <Co>" },
-    { homeDir: "/Users/theo" },
+    { homeDir: "/Users/theo", environmentPath: "/Users/theo/Tools & <Scripts>:/usr/bin" },
   );
 
   expect(plist).toContain("<string>/Users/theo/T3 &amp; &lt;Co&gt;</string>");
+  expect(plist).toContain("<string>/Users/theo/Tools &amp; &lt;Scripts&gt;:/usr/bin</string>");
 });
 
 const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
@@ -115,6 +125,7 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
     readonly platform?: NodeJS.Platform;
     readonly identity?: BootService.BootServiceIdentity;
     readonly usePinnedLauncher?: boolean;
+    readonly installerPath?: string;
   } = {},
 ) {
   const platform = options.platform ?? "linux";
@@ -163,29 +174,35 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
         };
       }),
   });
-  const service = yield* BootService.make({
-    baseDir,
-    logsDir: path.join(baseDir, "userdata", "logs"),
-    cliVersion: "1.2.3",
-    host: {
-      execPath: "/usr/bin/node",
-      cliEntryPath: path.join(home, "node_modules", "t3", "dist", "bin.mjs"),
-      ...(options.usePinnedLauncher ? {} : { launcherSourcePath: sourceLauncher }),
-    },
-    identity,
-  }).pipe(
-    Effect.provideService(ProcessRunner.ProcessRunner, runner),
-    Effect.provide(
-      Layer.mergeAll(
-        Layer.succeed(HostProcessPlatform, platform),
-        Layer.succeed(HostProcessUserId, 501),
-        Layer.succeed(HostProcessExecutablePath, "/usr/bin/node"),
-        Layer.succeed(HostProcessArguments, ["/usr/bin/node", path.join(home, "bin.mjs")]),
-        ConfigProvider.layer(ConfigProvider.fromEnv({ env: { HOME: home } })),
+  const makeService = (environmentPath = options.installerPath ?? macInstallerPath) =>
+    BootService.make({
+      baseDir,
+      logsDir: path.join(baseDir, "userdata", "logs"),
+      cliVersion: "1.2.3",
+      host: {
+        execPath: "/usr/bin/node",
+        cliEntryPath: path.join(home, "node_modules", "t3", "dist", "bin.mjs"),
+        ...(options.usePinnedLauncher ? {} : { launcherSourcePath: sourceLauncher }),
+      },
+      identity,
+    }).pipe(
+      Effect.provideService(ProcessRunner.ProcessRunner, runner),
+      Effect.provide(
+        Layer.mergeAll(
+          Layer.succeed(HostProcessPlatform, platform),
+          Layer.succeed(HostProcessUserId, 501),
+          Layer.succeed(HostProcessExecutablePath, "/usr/bin/node"),
+          Layer.succeed(HostProcessArguments, ["/usr/bin/node", path.join(home, "bin.mjs")]),
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: { HOME: home, ...(environmentPath === "" ? {} : { PATH: environmentPath }) },
+            }),
+          ),
+        ),
       ),
-    ),
-  );
-  return { service, fs, statePath, commands, timeouts, control };
+    );
+  const service = yield* makeService();
+  return { service, makeService, fs, statePath, commands, timeouts, control };
 });
 
 it.layer(NodeServices.layer)("boot service install", (it) => {
@@ -316,6 +333,9 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
       expect(plan.unitPath.endsWith("Library/LaunchAgents/com.t3tools.t3code.service.plist")).toBe(
         true,
       );
+      expect(yield* fs.readFileString(plan.unitPath)).toContain(
+        `    <key>PATH</key>\n    <string>${macInstallerPath}:/usr/local/bin:/usr/sbin:/sbin</string>`,
+      );
       expect(parseServiceState(yield* fs.readFileString(statePath))).toEqual({
         protocol: SERVICE_LAUNCHER_PROTOCOL,
         activeVersion: "1.2.3",
@@ -371,6 +391,60 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
         `launchctl bootstrap gui/501 ${plistPath}`,
         `launchctl bootstrap gui/501 ${plistPath}`,
       ]);
+    }),
+  );
+
+  it.effect("reconstructs a launch agent search path when the installer has no PATH", () =>
+    Effect.gen(function* () {
+      const { service, fs } = yield* makeHarness({ platform: "darwin", installerPath: "" });
+      const plan = yield* service.install;
+
+      expect(yield* fs.readFileString(plan.unitPath)).toContain(
+        "    <key>PATH</key>\n    <string>/usr/bin:/opt/homebrew/bin:/usr/local/bin:/bin:/usr/sbin:/sbin</string>",
+      );
+      expect((yield* service.status).current).toBe(true);
+    }),
+  );
+
+  it.effect("adds missing provider directories to a minimal installer PATH", () =>
+    Effect.gen(function* () {
+      const { service, fs } = yield* makeHarness({
+        platform: "darwin",
+        installerPath: "/usr/bin:/bin",
+      });
+      const plan = yield* service.install;
+
+      expect(yield* fs.readFileString(plan.unitPath)).toContain(
+        "    <key>PATH</key>\n    <string>/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin:/usr/sbin:/sbin</string>",
+      );
+      expect((yield* service.status).current).toBe(true);
+    }),
+  );
+
+  it.effect("keeps an installed launch agent current when the process PATH changes", () =>
+    Effect.gen(function* () {
+      const { service, makeService } = yield* makeHarness({ platform: "darwin" });
+      yield* service.install;
+
+      const restartedService = yield* makeService("/usr/local/bin:/usr/bin:/bin");
+      expect((yield* restartedService.status).current).toBe(true);
+    }),
+  );
+
+  it.effect("drops PATH directories that cannot be represented in a launch agent plist", () =>
+    Effect.gen(function* () {
+      const { service, fs } = yield* makeHarness({
+        platform: "darwin",
+        installerPath: "/opt/homebrew/bin:/Users/theo/\u0001invalid:/usr/bin",
+      });
+      const plan = yield* service.install;
+      const plist = yield* fs.readFileString(plan.unitPath);
+
+      expect(plist).toContain(
+        "    <key>PATH</key>\n    <string>/opt/homebrew/bin:/usr/bin:/usr/local/bin:/bin:/usr/sbin:/sbin</string>",
+      );
+      expect(plist).not.toContain("\u0001");
+      expect((yield* service.status).current).toBe(true);
     }),
   );
 

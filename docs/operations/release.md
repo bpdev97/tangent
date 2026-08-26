@@ -11,7 +11,7 @@ This document covers the unified release workflow for stable and nightly desktop
   - push tag matching `v*.*.*` for stable releases
   - scheduled nightly check every three hours
   - manual `workflow_dispatch` for either channel
-- Runs quality gates first: lint, typecheck, test.
+- Runs lint, typecheck, and tests alongside artifact builds. Publishing waits for every check.
 - Reads the shared production T3 Connect relay URL and Clerk client configuration before packaging clients.
 - Builds four artifacts in parallel for both channels:
   - macOS `arm64` DMG
@@ -191,10 +191,11 @@ self-update, manual relaunch, desktop SSH launch, and background-service documen
 For a personal release smoke test, download both server assets, verify the recorded SHA-256, inspect
 the archive for `package/dist/bin.mjs` and `package/dist/service-launcher.mjs`, and run its
 `t3 --version`. Then connect the new client to a server on the previous version and verify that the
-update action reconnects to the matching server. Use releases with identical migration manifests
-for the automatic path. When the manifest changed, verify that the remote action stops before
-restart and shows the exact local Tangent GitHub Release service-update command. Also test the
-manual and desktop-managed guidance.
+update action reconnects to the matching server. When the release adds database migrations, verify
+that the remote update applies them and reconnects; a failed trial must restore the database
+snapshot and restart the previous server. If the installed launcher does not support the target
+protocol, verify that the update stops before restart and shows the exact local Tangent GitHub
+Release service-update command. Also test the manual and desktop-managed guidance.
 
 ## Desktop auto-update notes
 
@@ -368,6 +369,7 @@ Checklist:
 4. Push tag.
 5. Verify workflow steps:
    - preflight passes
+   - release quality checks pass
    - all matrix builds pass
    - `publish_cli` publishes the exact release version before the release job
    - release job uploads expected files

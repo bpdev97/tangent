@@ -1,5 +1,5 @@
 import { SymbolView } from "../../components/AppSymbol";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { useThemeColor } from "../../lib/useThemeColor";
 
@@ -7,42 +7,27 @@ export interface SidebarHeaderActionsProps {
   readonly genericChatAvailable: boolean;
   readonly onOpenSettings: () => void;
   readonly onStartNewChat: () => void;
-  /** Rendered inside a shared capsule group — buttons drop their own chrome. */
-  readonly grouped?: boolean;
 }
 
 function FallbackHeaderButton(props: {
   readonly accessibilityLabel: string;
   readonly disabled?: boolean;
   readonly icon: "bubble.left.and.bubble.right" | "gearshape" | "square.and.pencil";
-  readonly grouped?: boolean;
   readonly onPress: () => void;
 }) {
   const iconColor = useThemeColor("--color-foreground");
-  const pressedBackgroundColor = useThemeColor("--color-subtle");
-  const idleBackgroundColor = useThemeColor("--color-glass-surface");
-  const borderColor = useThemeColor("--color-header-border");
 
   return (
     <Pressable
-      className="h-11 w-[50px] items-center justify-center rounded-[22px]"
+      className="size-11 items-center justify-center rounded-full bg-subtle active:opacity-70"
       accessibilityLabel={props.accessibilityLabel}
       accessibilityRole="button"
       accessibilityState={{ disabled: props.disabled ?? false }}
       disabled={props.disabled}
       hitSlop={4}
       onPress={props.onPress}
-      style={({ pressed }) => [
-        props.grouped
-          ? { backgroundColor: pressed ? pressedBackgroundColor : "transparent", borderWidth: 0 }
-          : {
-              backgroundColor: pressed ? pressedBackgroundColor : idleBackgroundColor,
-              borderColor,
-              borderWidth: StyleSheet.hairlineWidth,
-            },
-      ]}
     >
-      <SymbolView name={props.icon} size={20} tintColor={iconColor} type="monochrome" />
+      <SymbolView name={props.icon} size={18} tintColor={iconColor} type="monochrome" />
     </Pressable>
   );
 }
@@ -53,13 +38,11 @@ export function SidebarHeaderActions(props: SidebarHeaderActionsProps) {
       <FallbackHeaderButton
         accessibilityLabel="New chat"
         disabled={!props.genericChatAvailable}
-        grouped={props.grouped}
         icon="bubble.left.and.bubble.right"
         onPress={props.onStartNewChat}
       />
       <FallbackHeaderButton
         accessibilityLabel="Open settings"
-        grouped={props.grouped}
         icon="gearshape"
         onPress={props.onOpenSettings}
       />

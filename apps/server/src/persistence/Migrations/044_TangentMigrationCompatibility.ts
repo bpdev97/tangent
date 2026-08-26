@@ -31,6 +31,24 @@ export default Effect.gen(function* () {
     `;
   }
 
+  // Released Tangent databases used migration 41 for this compatibility
+  // repair before upstream assigned it to client connection metadata.
+  const authSessionColumns = yield* sql<{ readonly name: string }>`
+    PRAGMA table_info(auth_sessions)
+  `;
+  if (!authSessionColumns.some((column) => column.name === "client_surface")) {
+    yield* sql`
+      ALTER TABLE auth_sessions
+      ADD COLUMN client_surface TEXT
+    `;
+  }
+  if (!authSessionColumns.some((column) => column.name === "client_app_version")) {
+    yield* sql`
+      ALTER TABLE auth_sessions
+      ADD COLUMN client_app_version TEXT
+    `;
+  }
+
   yield* sql`
     INSERT OR IGNORE INTO projection_thread_activities (
       activity_id,

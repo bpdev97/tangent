@@ -1,9 +1,13 @@
-import { ApprovalRequestId, isToolLifecycleItemType } from "@t3tools/contracts";
+import {
+  ApprovalRequestId,
+  isToolLifecycleItemType,
+  ProviderApprovalOption,
+  ProviderRequestKind,
+} from "@t3tools/contracts";
 import type {
   OrchestrationLatestTurn,
   OrchestrationThread,
   OrchestrationThreadActivity,
-  ProviderRequestKind,
   ToolLifecycleItemType,
   TurnId,
   UserInputQuestion,
@@ -12,14 +16,19 @@ import { formatDuration } from "@t3tools/shared/orchestrationTiming";
 
 import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
+import * as Schema from "effect/Schema";
 
 export interface PendingApproval {
   readonly requestId: ApprovalRequestId;
   readonly requestKind: ProviderRequestKind;
   readonly createdAt: string;
   readonly detail?: string;
-  readonly supportsSessionPersistence?: boolean;
+  readonly appName?: string;
+  readonly options?: ReadonlyArray<ProviderApprovalOption>;
 }
+
+const isProviderRequestKind = Schema.is(ProviderRequestKind);
+const isProviderApprovalOption = Schema.is(ProviderApprovalOption);
 
 export interface PendingUserInput {
   readonly requestId: ApprovalRequestId;
@@ -149,8 +158,8 @@ function requestKindFromRequestType(requestType: unknown): PendingApproval["requ
     case "file_change_approval":
     case "apply_patch_approval":
       return "file-change";
-    case "mcp_tool_call_approval":
-      return "mcp-tool-call";
+    case "mcp_elicitation_approval":
+      return "mcp-elicitation";
     default:
       return null;
   }
@@ -207,6 +216,9 @@ function parseUserInputQuestions(
           };
         })
         .filter((option): option is UserInputQuestion["options"][number] => option !== null);
+      if (options.length === 0) {
+        return null;
+      }
       return {
         id: question.id,
         header: question.header,
@@ -1145,9 +1157,13 @@ function deriveThreadFeedTurnFolds(
   feed: ReadonlyArray<ThreadFeedEntry>,
   latestTurn: ThreadFeedLatestTurn | null,
 ): ReadonlyMap<string, ThreadFeedTurnFold> {
+  const firstAssistantMessageIdByTurn = new Map<TurnId, string>();
   const terminalAssistantMessageIdByTurn = new Map<TurnId, string>();
   for (const entry of feed) {
     if (entry.type === "message" && entry.message.role === "assistant" && entry.message.turnId) {
+      if (!firstAssistantMessageIdByTurn.has(entry.message.turnId)) {
+        firstAssistantMessageIdByTurn.set(entry.message.turnId, entry.id);
+      }
       terminalAssistantMessageIdByTurn.set(entry.message.turnId, entry.id);
     }
   }
@@ -1195,17 +1211,24 @@ function deriveThreadFeedTurnFolds(
       continue;
     }
 
+    const firstAssistantMessageId = firstAssistantMessageIdByTurn.get(turnId);
     const terminalAssistantMessageId = terminalAssistantMessageIdByTurn.get(turnId);
     const hiddenEntryIds = new Set(
-      entries.filter((entry) => entry.id !== terminalAssistantMessageId).map((entry) => entry.id),
+      entries
+        .filter(
+          (entry) =>
+            entry.id !== firstAssistantMessageId && entry.id !== terminalAssistantMessageId,
+        )
+        .map((entry) => entry.id),
     );
     if (hiddenEntryIds.size === 0) {
       continue;
     }
 
     const firstEntry = entries[0];
+    const firstHiddenEntry = entries.find((entry) => hiddenEntryIds.has(entry.id));
     const lastEntry = entries.at(-1);
-    if (!firstEntry || !lastEntry) {
+    if (!firstEntry || !firstHiddenEntry || !lastEntry) {
       continue;
     }
     const terminalEntry = terminalAssistantMessageId
@@ -1234,9 +1257,9 @@ function deriveThreadFeedTurnFolds(
         ? `Worked for ${duration}`
         : "Worked";
 
-    foldsByAnchorId.set(firstEntry.id, {
+    foldsByAnchorId.set(firstHiddenEntry.id, {
       turnId,
-      createdAt: firstEntry.createdAt,
+      createdAt: firstHiddenEntry.createdAt,
       hiddenEntryIds,
       label,
     });
@@ -1365,18 +1388,14 @@ export function derivePendingApprovals(
         ? (activity.payload as Record<string, unknown>)
         : null;
     const requestId = parseApprovalRequestId(payload?.requestId);
-    const requestKind =
-      payload?.requestKind === "command" ||
-      payload?.requestKind === "file-read" ||
-      payload?.requestKind === "file-change" ||
-      payload?.requestKind === "mcp-tool-call"
-        ? payload.requestKind
-        : requestKindFromRequestType(payload?.requestType);
+    const requestKind = isProviderRequestKind(payload?.requestKind)
+      ? payload.requestKind
+      : requestKindFromRequestType(payload?.requestType);
     const detail = typeof payload?.detail === "string" ? payload.detail : undefined;
-    const supportsSessionPersistence =
-      typeof payload?.supportsSessionPersistence === "boolean"
-        ? payload.supportsSessionPersistence
-        : undefined;
+    const appName = typeof payload?.appName === "string" ? payload.appName : undefined;
+    const options = Array.isArray(payload?.options)
+      ? payload.options.filter(isProviderApprovalOption)
+      : undefined;
 
     if (activity.kind === "approval.requested" && requestId && requestKind) {
       openByRequestId.set(requestId, {
@@ -1384,7 +1403,8 @@ export function derivePendingApprovals(
         requestKind,
         createdAt: activity.createdAt,
         ...(detail ? { detail } : {}),
-        ...(supportsSessionPersistence !== undefined ? { supportsSessionPersistence } : {}),
+        ...(appName ? { appName } : {}),
+        ...(options && options.length > 0 ? { options } : {}),
       });
       continue;
     }
@@ -1522,15 +1542,19 @@ export function buildThreadFeed(
   thread: OrchestrationThread,
   options?: {
     readonly loadedMessages?: ReadonlyArray<OrchestrationThread["messages"][number]>;
+    readonly localMessages?: ReadonlyArray<OrchestrationThread["messages"][number]>;
   },
 ): ThreadFeedEntry[] {
   const loadedMessages = options?.loadedMessages ?? thread.messages;
+  const messages = options?.localMessages
+    ? [...loadedMessages, ...options.localMessages]
+    : loadedMessages;
   const oldestLoadedMessageCreatedAt =
     options?.loadedMessages !== undefined ? (loadedMessages[0]?.createdAt ?? null) : null;
   const workLogEntries = deriveWorkLogEntries(thread.activities);
   const entries = Arr.sortWith(
     [
-      ...loadedMessages.map<RawThreadFeedEntry>((message) => ({
+      ...messages.map<RawThreadFeedEntry>((message) => ({
         type: "message",
         id: message.id,
         createdAt: message.createdAt,

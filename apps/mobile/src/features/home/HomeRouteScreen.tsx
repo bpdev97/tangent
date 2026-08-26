@@ -115,7 +115,11 @@ export function HomeRouteScreen() {
     return (
       <>
         <NativeStackScreenOptions
-          options={{ title: "", headerTitle: "", unstable_headerLeftItems: () => [] }}
+          options={
+            Platform.OS === "android"
+              ? { headerShown: false }
+              : { title: "", headerTitle: "", unstable_headerLeftItems: () => [] }
+          }
         />
         <WorkspaceSidebarToolbar
           afterSidebarButton={
@@ -152,13 +156,16 @@ export function HomeRouteScreen() {
             without shifting the list below. */}
         {Platform.OS === "ios" ? null : (
           <NativeStackScreenOptions
-            options={getConnectionAwareBrandHeaderOptions({
-              onOpenEnvironments: () =>
-                navigation.navigate("SettingsSheet", {
-                  screen: "SettingsContent",
-                  params: { screen: "SettingsEnvironments" },
-                }),
-            })}
+            options={{
+              ...getConnectionAwareBrandHeaderOptions({
+                onOpenEnvironments: () =>
+                  navigation.navigate("SettingsSheet", {
+                    screen: "SettingsContent",
+                    params: { screen: "SettingsEnvironments" },
+                  }),
+              }),
+              headerShown: true,
+            }}
           />
         )}
         <HomeHeader
