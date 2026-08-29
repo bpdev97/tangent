@@ -72,6 +72,7 @@ function ThreadBrowserSessions(props: {
         runtimeTabId={runtimeTabId}
         initialUrl={url}
         viewport={snapshot.viewport ?? FILL_PREVIEW_VIEWPORT}
+        pictureInPicture={previewState.desktopByTabId[snapshot.tabId]?.pictureInPicture ?? false}
         zoomFactor={previewState.desktopByTabId[snapshot.tabId]?.zoomFactor ?? 1}
       />
     );

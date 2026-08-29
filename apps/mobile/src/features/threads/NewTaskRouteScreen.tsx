@@ -11,7 +11,6 @@ import { isGenericChatProjectId } from "@t3tools/shared/genericChat";
 import { useEffect, useRef } from "react";
 import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useThemeColor } from "../../lib/useThemeColor";
 import { cn } from "../../lib/cn";
 
 import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
@@ -92,8 +91,6 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
   const isFocused = useIsFocused();
   const { layout } = useAdaptiveWorkspaceLayout();
   const insets = useSafeAreaInsets();
-  const chevronColor = useThemeColor("--color-chevron");
-  const accentColor = useThemeColor("--color-icon-muted");
   const { getShare, releaseShareReservation } = useIncomingShare();
   const routeShareId = Array.isArray(route.params?.incomingShareId)
     ? route.params.incomingShareId[0]
@@ -243,7 +240,9 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
       >
         {projectScopes.length === 0 ? (
           <View collapsable={false} className="items-center gap-3 rounded-[24px] bg-card px-6 py-8">
-            {projectEmptyState.loading ? <ActivityIndicator color={accentColor} /> : null}
+            {projectEmptyState.loading ? (
+              <ActivityIndicator colorClassName={"accent-icon-muted"} />
+            ) : null}
             <Text className="text-center text-lg font-t3-bold text-foreground">
               {projectEmptyState.title}
             </Text>
@@ -291,7 +290,7 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
                         <SymbolView
                           name="bubble.left.and.bubble.right"
                           size={20}
-                          tintColor={accentColor}
+                          tintColorClassName="accent-primary"
                           type="monochrome"
                         />
                       ) : (
@@ -321,7 +320,7 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
                     <SymbolView
                       name="chevron.right"
                       size={14}
-                      tintColor={chevronColor}
+                      tintColorClassName={"accent-chevron"}
                       type="monochrome"
                     />
                   </Pressable>

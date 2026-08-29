@@ -24,7 +24,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Platform, Pressable, View } from "react-native";
 import type { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useThemeColor } from "../../lib/useThemeColor";
 
 import { AppText as Text } from "../../components/AppText";
 import { EmptyState } from "../../components/EmptyState";
@@ -77,6 +76,8 @@ import {
 import { SwipeableScrollGateProvider, useSwipeableScrollGate } from "./thread-swipe-actions";
 
 /* ─── Types ──────────────────────────────────────────────────────────── */
+
+const PRE_LIQUID_GLASS_BOTTOM_TOOLBAR_HEIGHT = 44;
 
 interface HomeScreenProps {
   readonly projects: ReadonlyArray<EnvironmentProject>;
@@ -217,8 +218,12 @@ export function HomeScreen(props: HomeScreenProps) {
   const openSwipeableRef = useRef<SwipeableMethods | null>(null);
   const listRef = useRef<LegendListRef | null>(null);
   const insets = useSafeAreaInsets();
-  const accentColor = useThemeColor("--color-icon-muted");
   const iosBottomOverlayClearance = Platform.OS === "ios" ? (props.bottomOverlayHeight ?? 0) : 0;
+  const iosBottomToolbarClearance =
+    Platform.OS === "ios" && !NATIVE_LIQUID_GLASS_SUPPORTED
+      ? PRE_LIQUID_GLASS_BOTTOM_TOOLBAR_HEIGHT
+      : 0;
+  const iosBottomControlClearance = Math.max(iosBottomOverlayClearance, iosBottomToolbarClearance);
   const searchEnvironmentIds = useMemo(
     () =>
       props.selectedEnvironmentId === null
@@ -1075,7 +1080,7 @@ export function HomeScreen(props: HomeScreenProps) {
       <View
         className="flex-1 items-center justify-center bg-screen px-8"
         style={{
-          paddingBottom: Math.max(insets.bottom, 24) + iosBottomOverlayClearance,
+          paddingBottom: Math.max(insets.bottom, 24) + iosBottomControlClearance,
           paddingTop: NATIVE_LIQUID_GLASS_SUPPORTED ? insets.top + 72 : 0,
         }}
       >
@@ -1089,7 +1094,7 @@ export function HomeScreen(props: HomeScreenProps) {
           />
           {emptyState.loading ? (
             <View className="mt-4 items-center">
-              <ActivityIndicator color={accentColor} />
+              <ActivityIndicator colorClassName={"accent-icon-muted"} />
             </View>
           ) : null}
         </View>
@@ -1173,7 +1178,10 @@ export function HomeScreen(props: HomeScreenProps) {
             contentContainerStyle={{
               paddingBottom:
                 Platform.OS === "ios"
-                  ? Math.max(insets.bottom, 24) + 24 + iosBottomOverlayClearance
+                  ? Math.max(insets.bottom, 24) +
+                    (iosBottomOverlayClearance > 0
+                      ? 24 + iosBottomOverlayClearance
+                      : 96 + iosBottomToolbarClearance)
                   : Math.max(insets.bottom, 16) + 88,
             }}
           />
@@ -1219,13 +1227,13 @@ export function HomeScreen(props: HomeScreenProps) {
             // "never".
             paddingBottom:
               Platform.OS === "ios"
-                ? Math.max(insets.bottom, 24) + 24 + iosBottomOverlayClearance
+                ? Math.max(insets.bottom, 24) + 24 + iosBottomControlClearance
                 : Math.max(insets.bottom, 16) + 88,
           }}
           scrollIndicatorInsets={
             Platform.OS === "ios"
               ? {
-                  bottom: Math.max(insets.bottom, 16) + 24 + iosBottomOverlayClearance,
+                  bottom: Math.max(insets.bottom, 16) + 24 + iosBottomControlClearance,
                   top: 0,
                 }
               : undefined

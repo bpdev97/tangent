@@ -16,7 +16,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
 import { ErrorBanner } from "../../components/ErrorBanner";
-import { useThemeColor } from "../../lib/useThemeColor";
 import { hermesAutomationEnvironment } from "../../state/hermesAutomations";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -113,7 +112,6 @@ export function AutomationEditorRouteScreen({
     navigation.goBack();
   };
 
-  const foreground = useThemeColor("--color-primary-foreground");
   const loading = query.isPending && !query.data;
   const missingAutomation = Boolean(route.params.automationId && host && !automation);
 
@@ -239,7 +237,7 @@ export function AutomationEditorRouteScreen({
               className="min-h-12 items-center justify-center rounded-full bg-primary px-5 active:opacity-70 disabled:opacity-45"
             >
               {saving ? (
-                <ActivityIndicator color={String(foreground)} />
+                <ActivityIndicator colorClassName="accent-primary-foreground" />
               ) : (
                 <Text className="text-base font-t3-bold text-primary-foreground">
                   {automation ? "Save changes" : "Create automation"}

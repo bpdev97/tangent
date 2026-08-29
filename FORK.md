@@ -49,7 +49,8 @@ the previous upstream merge. The [2026-08-10 sync audit](docs/fork/audit-2026-08
 next merge, the [2026-08-16 sync audit](docs/fork/audit-2026-08-16.md) records the following merge,
 the [2026-08-21 sync audit](docs/fork/audit-2026-08-21.md) records the next merge, the
 [2026-08-26 sync audit](docs/fork/audit-2026-08-26.md) records the previous merge, and the
-[2026-08-27 sync audit](docs/fork/audit-2026-08-27.md) records the latest upstream merge,
+[2026-08-27 sync audit](docs/fork/audit-2026-08-27.md) records the previous merge, and the
+[2026-08-29 sync audit](docs/fork/audit-2026-08-29.md) records the latest upstream merge,
 compatibility decisions, and verification.
 
 | ID                 | Kept behavior                                                                                | Status               | Maintenance record                                                    | Focused verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
@@ -366,7 +367,7 @@ pipelines.
 
 ## Merged upstream baseline
 
-The most recently merged upstream comparison baseline is `a6797b3b9`, integrated on 2026-08-27.
+The most recently merged upstream comparison baseline is `c0e09f323`, integrated on 2026-08-29.
 Update this line and the dated sync audit whenever Tangent merges a newer upstream baseline.
 
 ## Required verification

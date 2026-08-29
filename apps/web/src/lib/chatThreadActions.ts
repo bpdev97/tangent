@@ -1,5 +1,11 @@
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
-import type { EnvironmentId, ProjectId, RuntimeMode, ScopedProjectRef } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  ModelSelection,
+  ProjectId,
+  RuntimeMode,
+  ScopedProjectRef,
+} from "@t3tools/contracts";
 import { GENERIC_CHAT_RUNTIME_MODE, isGenericChatProjectId } from "@t3tools/shared/genericChat";
 import type { DraftThreadEnvMode } from "../composerDraftStore";
 
@@ -40,6 +46,18 @@ export function resolveNewThreadRuntimeMode(
   inheritedRuntimeMode: RuntimeMode | null,
 ): RuntimeMode | null {
   return isGenericChatProjectId(projectId) ? GENERIC_CHAT_RUNTIME_MODE : inheritedRuntimeMode;
+}
+
+export function resolveNewThreadModelSelectionOverride(input: {
+  readonly projectDefaultSelection: ModelSelection | null;
+  readonly carrySelection: ModelSelection | null;
+  readonly carrySourceDraftId: string | null;
+  readonly destinationDraftId: string;
+}): ModelSelection | null {
+  return (
+    input.projectDefaultSelection ??
+    (input.carrySourceDraftId === input.destinationDraftId ? null : input.carrySelection)
+  );
 }
 
 export function resolveThreadActionProjectRef(

@@ -19,7 +19,6 @@ import { EmptyState } from "../../components/EmptyState";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { SymbolView } from "../../components/AppSymbol";
 import { cn } from "../../lib/cn";
-import { useThemeColor } from "../../lib/useThemeColor";
 import { hermesAutomationEnvironment } from "../../state/hermesAutomations";
 import { useEnvironments } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
@@ -51,7 +50,6 @@ function ActionButton(props: {
   readonly disabled?: boolean;
   readonly onPress: () => void;
 }) {
-  const iconColor = useThemeColor(props.destructive ? "--color-danger-foreground" : "--color-icon");
   return (
     <Pressable
       accessibilityRole="button"
@@ -62,7 +60,12 @@ function ActionButton(props: {
         props.disabled && "opacity-45",
       )}
     >
-      <SymbolView name={props.icon} size={14} tintColor={iconColor} type="monochrome" />
+      <SymbolView
+        name={props.icon}
+        size={14}
+        tintColorClassName={props.destructive ? "accent-danger-foreground" : "accent-icon"}
+        type="monochrome"
+      />
       <Text
         className={cn(
           "text-xs font-t3-bold",
@@ -97,15 +100,13 @@ function AutomationCard(props: {
             <View
               className={cn(
                 "rounded-full px-2.5 py-1",
-                props.automation.enabled ? "bg-emerald-500/12" : "bg-amber-500/14",
+                props.automation.enabled ? "bg-subtle-strong" : "bg-subtle",
               )}
             >
               <Text
                 className={cn(
                   "text-2xs font-t3-bold",
-                  props.automation.enabled
-                    ? "text-emerald-700 dark:text-emerald-300"
-                    : "text-amber-700 dark:text-amber-300",
+                  props.automation.enabled ? "text-foreground" : "text-foreground-muted",
                 )}
               >
                 {props.automation.state}
@@ -182,8 +183,6 @@ function HostCard(props: {
   readonly onAction: (automation: HermesAutomation, action: LifecycleAction) => void;
 }) {
   const navigation = useNavigation();
-  const iconColor = useThemeColor("--color-icon");
-  const primaryForeground = useThemeColor("--color-primary-foreground");
   const hostBusyPrefix = `${props.host.instanceId}:`;
   const hostBusy = props.busyKey?.startsWith(hostBusyPrefix) === true;
   const openEditor = useCallback(
@@ -210,7 +209,7 @@ function HostCard(props: {
           <SymbolView
             name="bolt.horizontal.circle"
             size={19}
-            tintColor={iconColor}
+            tintColorClassName="accent-icon"
             type="monochrome"
           />
         </View>
@@ -225,15 +224,13 @@ function HostCard(props: {
         <View
           className={cn(
             "rounded-full px-2.5 py-1",
-            props.host.status === "available" ? "bg-emerald-500/12" : "bg-rose-500/12",
+            props.host.status === "available" ? "bg-subtle-strong" : "bg-danger",
           )}
         >
           <Text
             className={cn(
               "text-2xs font-t3-bold",
-              props.host.status === "available"
-                ? "text-emerald-700 dark:text-emerald-300"
-                : "text-rose-700 dark:text-rose-300",
+              props.host.status === "available" ? "text-foreground" : "text-danger-foreground",
             )}
           >
             {props.host.status}
@@ -249,7 +246,12 @@ function HostCard(props: {
         onPress={() => openEditor()}
         className="min-h-11 flex-row items-center justify-center gap-2 rounded-full bg-primary px-4 active:opacity-70 disabled:opacity-45"
       >
-        <SymbolView name="plus" size={15} tintColor={primaryForeground} type="monochrome" />
+        <SymbolView
+          name="plus"
+          size={15}
+          tintColorClassName="accent-primary-foreground"
+          type="monochrome"
+        />
         <Text className="text-sm font-t3-bold text-primary-foreground">New automation</Text>
       </Pressable>
 
@@ -291,7 +293,6 @@ function EnvironmentSection(props: {
   });
   const [localResult, setLocalResult] = useState<HermesAutomationListResult | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const iconColor = useThemeColor("--color-icon");
   const result = localResult ?? query.data;
   const refresh = query.refresh;
 
@@ -367,7 +368,12 @@ function EnvironmentSection(props: {
           onPress={refresh}
           className="min-h-10 flex-row items-center gap-2 rounded-full bg-subtle px-3.5 active:opacity-70 disabled:opacity-45"
         >
-          <SymbolView name="arrow.clockwise" size={14} tintColor={iconColor} type="monochrome" />
+          <SymbolView
+            name="arrow.clockwise"
+            size={14}
+            tintColorClassName="accent-icon"
+            type="monochrome"
+          />
           <Text className="text-xs font-t3-bold">Refresh</Text>
         </Pressable>
       </View>

@@ -21,7 +21,6 @@ import { RootStack } from "./Stack";
 import { appAtomRegistry } from "./state/atom-registry";
 import { OverlayPortalHost } from "./components/OverlayPortal";
 import { appBlurTargetRef } from "./lib/appBlurTarget";
-import { useThemeColor } from "./lib/useThemeColor";
 import { PERSONAL_MOBILE_DISTRIBUTION } from "../../../downstream/mobile-config";
 import { useSavedRemoteConnections } from "./state/use-remote-environment-registry";
 import {
@@ -95,8 +94,7 @@ export default function App() {
 
 function AppContent() {
   const { themeAppearance } = useAppearancePreferences();
-  const statusBarBg = useThemeColor("--color-status-bar");
-  const navigationTheme = useMobileNavigationTheme(themeAppearance);
+  const navigationTheme = useMobileNavigationTheme();
 
   return (
     <>
@@ -106,7 +104,6 @@ function AppContent() {
           <SafeAreaProvider>
             <StatusBar
               barStyle={themeAppearance === "dark" ? "light-content" : "dark-content"}
-              backgroundColor={statusBarBg}
               translucent
             />
             {/* The navigation theme drives the NATIVE header appearance: native-stack

@@ -1,9 +1,8 @@
-import { Platform, Pressable, useColorScheme, View } from "react-native";
+import { Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText as Text } from "../../components/AppText";
 import { SymbolView } from "../../components/AppSymbol";
-import { useThemeColor } from "../../lib/useThemeColor";
 import { ComposerSurface } from "../threads/ThreadComposer";
 
 export const HOME_CHAT_COMPOSER_CLEARANCE = 104;
@@ -14,30 +13,16 @@ export function HomeChatComposer(props: {
   readonly onPress: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const isDarkMode = useColorScheme() === "dark";
-  const mutedColor = useThemeColor("--color-foreground-muted");
-  const primaryForeground = useThemeColor("--color-primary-foreground");
-  const screenColor = useThemeColor("--color-screen");
-  const subtleColor = useThemeColor("--color-icon-subtle");
-
   if (Platform.OS !== "ios") return null;
 
   return (
-    <View
-      pointerEvents="box-none"
-      style={{ position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: screenColor }}
-    >
+    <View pointerEvents="box-none" className="absolute right-0 bottom-0 left-0 bg-screen">
       <View
         pointerEvents="none"
+        className="absolute right-0 left-0 bg-linear-to-b from-screen/0 via-screen/60 to-screen"
         style={{
-          position: "absolute",
           top: -48,
-          left: 0,
-          right: 0,
           height: 48,
-          experimental_backgroundImage: isDarkMode
-            ? "linear-gradient(to bottom, rgba(10,10,10,0) 0%, rgba(10,10,10,1) 100%)"
-            : "linear-gradient(to bottom, rgba(242,242,247,0) 0%, rgba(242,242,247,1) 100%)",
         }}
       />
       <View
@@ -62,7 +47,6 @@ export function HomeChatComposer(props: {
           className="w-full max-w-[720px] self-center active:opacity-80"
         >
           <ComposerSurface
-            isDarkMode={isDarkMode}
             style={{
               borderRadius: 999,
               overflow: "hidden",
@@ -73,11 +57,7 @@ export function HomeChatComposer(props: {
               paddingVertical: 5,
             }}
           >
-            <Text
-              className="min-w-0 flex-1 text-base"
-              style={{ color: mutedColor }}
-              numberOfLines={1}
-            >
+            <Text className="min-w-0 flex-1 text-base text-foreground-muted" numberOfLines={1}>
               Ask anything…
             </Text>
             <View
@@ -90,7 +70,9 @@ export function HomeChatComposer(props: {
               <SymbolView
                 name="arrow.up"
                 size={16}
-                tintColor={props.disabled ? subtleColor : primaryForeground}
+                tintColorClassName={
+                  props.disabled ? "accent-icon-subtle" : "accent-primary-foreground"
+                }
                 type="monochrome"
               />
             </View>
