@@ -145,7 +145,7 @@ describe("ServerUpdateAction", () => {
     expect(testState.toast).toHaveBeenCalledWith({
       type: "success",
       title: "Test server updated",
-      description: "Desktop app relaunched on 0.0.34.",
+      description: "Tangent desktop app relaunched on 0.0.34.",
     });
   });
 

@@ -55,6 +55,12 @@ export function toUploadChatImageAttachments(
 
 const OWNED_PASTED_IMAGE_DIRECTORY = "t3-composer-paste";
 const ATTACHMENT_COPY_CHUNK_BYTES = 64 * 1024;
+const IMAGE_PICKER_NATIVE_JPEG_SOURCE_MIME_TYPES = new Set([
+  "image/heic",
+  "image/heic-sequence",
+  "image/heif",
+  "image/heif-sequence",
+]);
 
 export async function persistComposerAttachmentFile(
   uri: string,
@@ -395,7 +401,8 @@ export async function pickComposerMedia(input: {
       if (
         mimeType &&
         mimeType !== "image/jpeg" &&
-        isProviderSendTurnSupportedImageMimeType(mimeType)
+        isProviderSendTurnSupportedImageMimeType(mimeType) &&
+        !IMAGE_PICKER_NATIVE_JPEG_SOURCE_MIME_TYPES.has(mimeType)
       ) {
         try {
           const { File } = await import("expo-file-system");

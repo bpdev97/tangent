@@ -184,7 +184,7 @@ describe("composer file attachments", () => {
       });
     });
 
-    it("does not relabel unconverted HEIC bytes as JPEG", async () => {
+    it("keeps unconverted HEIC metadata for server normalization", async () => {
       mocks.pickMedia.mockResolvedValue({
         canceled: false,
         assets: [{ ...photo, base64: "AAAAGGZ0eXBoZWlj" }],
@@ -192,8 +192,14 @@ describe("composer file attachments", () => {
 
       const result = await pickComposerImages({ existingCount: 0 });
 
-      expect(result.images).toEqual([]);
-      expect(result.error).toContain("not a supported image type");
+      expect(result.images).toEqual([
+        expect.objectContaining({
+          name: "photo.HEIC",
+          mimeType: "image/heic",
+          dataUrl: "data:image/heic;base64,AAAAGGZ0eXBoZWlj",
+        }),
+      ]);
+      expect(result.error).toBeNull();
     });
 
     it("retains a converted photo when another original cannot be read", async () => {
