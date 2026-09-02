@@ -22,6 +22,7 @@ function projectionQuery(project: Option.Option<OrchestrationProjectShell>) {
     getArchivedShellSnapshot: () => Effect.die("unused"),
     getSnapshotSequence: () => Effect.die("unused"),
     getCounts: () => Effect.die("unused"),
+    getEventReplayStats: () => Effect.die("unused"),
     getActiveProjectByWorkspaceRoot: () => Effect.die("unused"),
     getProjectShellById: () => Effect.succeed(project),
     getFirstActiveThreadIdByProjectId: () => Effect.die("unused"),
@@ -41,6 +42,7 @@ function orchestrationEngine(commands: Ref.Ref<ReadonlyArray<OrchestrationComman
       Ref.update(commands, (current) => [...current, command]).pipe(Effect.as({ sequence: 1 })),
     latestSequence: Effect.succeed(0),
     streamDomainEvents: Stream.empty,
+    subscribeDomainEvents: Effect.succeed(Stream.empty),
   });
 }
 
@@ -69,6 +71,7 @@ it.effect("creates the managed generic chat workspace and project when missing",
         workspaceRoot: path.join(baseDir, "workspaces", "generic-chat"),
         createWorkspaceRootIfMissing: true,
       });
+      assert.notProperty(dispatched[0], "defaultModelSelection");
     }).pipe(Effect.provide(NodeServices.layer)),
   ),
 );

@@ -123,6 +123,7 @@ An empty database is a bad test. Seed your worktree's `.t3` with a copy of real 
 ## Verifying
 
 - Smallest proof that the change works. `vp test run <files>` for the tests you touched, targeted lint and typecheck for the scope you changed.
+- Test meaningful logic or observable behavior. Do not render components to static markup to assert props or attributes, or add tests that merely assert callback wiring or mirror the implementation.
 - Tangent requires `vp check` and `vp run typecheck` before completion. If native mobile code
   changed, `vp run lint:mobile` must also pass. Do not run a larger recursive test suite unless
   asked; CI owns the exhaustive suite.

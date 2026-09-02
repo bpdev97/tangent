@@ -30,6 +30,14 @@ a newer release manually, install that release asset first and then run `t3 serv
 
 Updating restarts Tangent briefly. Let active agent work and terminal commands finish first.
 
+Install and update refuse to replace a newer service with an older Tangent release. T3 Connect
+setup also leaves a newer service unchanged. To intentionally downgrade, install the exact older
+Tangent release asset and run:
+
+```sh
+t3 service update --allow-downgrade
+```
+
 If a remote update is already in progress, wait for it to finish before retrying a local update.
 
 The service runs a small stable launcher. Exact Tangent versions are installed separately, so

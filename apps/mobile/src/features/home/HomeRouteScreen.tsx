@@ -18,6 +18,7 @@ import { HomeScreen } from "./HomeScreen";
 import { HomeHeader } from "./HomeHeader";
 import { HOME_CHAT_COMPOSER_CLEARANCE, HomeChatComposer } from "./HomeChatComposer";
 import { useHomeListOptions } from "./home-list-options";
+import { useHomeThreadSelection } from "./home-thread-navigation";
 import { buildHomeProjectScopes } from "./homeThreadList";
 import { usePendingTaskListActions } from "./usePendingTaskListActions";
 import { useThreadListActions } from "./useThreadListActions";
@@ -35,6 +36,7 @@ export function HomeRouteScreen() {
   const { savedConnectionsById } = useSavedRemoteConnections();
   const navigation = useNavigation();
   const [searchQuery, setSearchQuery] = useState("");
+  const handleSelectThread = useHomeThreadSelection();
 
   useEffect(() => {
     void checkForAppUpdateOnLaunch();
@@ -230,14 +232,7 @@ export function HomeRouteScreen() {
           }
           onProjectSortOrderChange={setProjectSortOrder}
           onSearchQueryChange={setSearchQuery}
-          onSelectThread={(thread) => {
-            // Settled threads are live shells: opening one is plain
-            // navigation, and sending a message un-settles server-side.
-            navigation.navigate("Thread", {
-              environmentId: thread.environmentId,
-              threadId: thread.id,
-            });
-          }}
+          onSelectThread={handleSelectThread}
           onSelectPendingTask={openPendingTask}
           onDeletePendingTask={confirmDeletePendingTask}
           onNewThreadInProject={(project) => {

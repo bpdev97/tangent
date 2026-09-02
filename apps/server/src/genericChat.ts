@@ -1,9 +1,4 @@
-import {
-  CommandId,
-  DEFAULT_MODEL,
-  ProviderInstanceId,
-  type ModelSelection,
-} from "@t3tools/contracts";
+import { CommandId } from "@t3tools/contracts";
 import { GENERIC_CHAT_PROJECT_ID, GENERIC_CHAT_PROJECT_TITLE } from "@t3tools/shared/genericChat";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -15,11 +10,6 @@ import * as Path from "effect/Path";
 import { ServerConfig } from "./config.ts";
 import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
-
-export const getGenericChatDefaultModelSelection = (): ModelSelection => ({
-  instanceId: ProviderInstanceId.make("codex"),
-  model: DEFAULT_MODEL,
-});
 
 export const ensureGenericChatProject = Effect.fn("ensureGenericChatProject")(function* () {
   const crypto = yield* Crypto.Crypto;
@@ -41,7 +31,6 @@ export const ensureGenericChatProject = Effect.fn("ensureGenericChatProject")(fu
       title: GENERIC_CHAT_PROJECT_TITLE,
       workspaceRoot,
       createWorkspaceRootIfMissing: true,
-      defaultModelSelection: getGenericChatDefaultModelSelection(),
       createdAt: DateTime.formatIso(yield* DateTime.now),
     });
     return GENERIC_CHAT_PROJECT_ID;

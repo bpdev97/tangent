@@ -1010,6 +1010,14 @@ export function syncAgentAwarenessConnections(
   );
 }
 
+function removeAgentAwarenessConnection(environmentId: EnvironmentId): void {
+  environmentConnections.delete(environmentId);
+}
+
+export function unregisterAgentAwarenessConnection(environmentId: EnvironmentId): void {
+  removeAgentAwarenessConnection(environmentId);
+}
+
 export function unregisterAllAgentAwarenessConnections(): void {
   environmentConnections.clear();
   pushTokenSubscription?.remove();

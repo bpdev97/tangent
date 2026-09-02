@@ -8,17 +8,17 @@ resource management to Linear-specific UI.
 ## Lifecycle
 
 The renderer-wide Electron browser host observes the resolved thread route and the server-backed
-thread shell. An explicitly settled thread remains mounted while it is the active route. Once
+thread shell. A server-settled thread remains mounted while it is the active route. Once
 navigation leaves that thread, the host unmounts its webviews and releases their desktop tab leases.
 
 Suspension does not close the server preview session, remove a right-panel surface, or discard the
-latest preview snapshot. Returning to the thread or explicitly un-settling it mounts the webviews
+latest preview snapshot. Returning to the thread or un-settling it mounts the webviews
 again from the retained URLs. Chromium cookies and HTTP cache remain in the environment-scoped
 persistent partition, so authentication survives even though transient in-page state reloads.
 
-The rule is fail-open: missing thread-shell state keeps the webview mounted. Only the explicit
-`settledOverride: "settled"` lifecycle state suspends an inactive thread. Client-derived automatic
-settling does not destroy a webview without the server-backed signal.
+The rule is fail-open: missing thread-shell state keeps the webview mounted. Only the server-backed
+`settledOverride: "settled"` lifecycle state suspends an inactive thread. Both manual and automatic
+settling use that signal; client-derived guesses never destroy a webview.
 
 ## Ownership and invariants
 

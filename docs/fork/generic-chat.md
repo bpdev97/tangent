@@ -28,11 +28,10 @@ the host context is a behavioral instruction, and a provider may still be able t
 outside it. This feature does not pretend that the provider protocol supports a null cwd or provide
 an operating-system sandbox shared by every provider.
 
-New managed chat project records are seeded with the built-in `codex` instance and `DEFAULT_MODEL`
-for schema compatibility. Web and mobile treat that value as a preference, validate it against the
-environment's enabled providers, and fall back to an available provider before dispatch. A client
-that bypasses those selection helpers must perform the same validation rather than blindly sending
-the stored seed.
+New managed chat project records do not seed a project-level model. Web and mobile preserve the
+user's sticky composer selection, validate it against the environment's enabled providers, and
+fall back to an available provider before dispatch. A client that bypasses those selection helpers
+must perform the same validation rather than blindly sending a stale selection.
 
 ## Client behavior
 
