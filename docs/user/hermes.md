@@ -36,6 +36,9 @@ You can choose a Hermes instance and model for an individual chat or set it as a
 model selection. Existing threads remain bound to the instance and Hermes session that created
 them. Threads created by the older ACP integration start a fresh Hermes session after migration.
 
+Files Hermes creates and delivers in a reply appear as file links. Select one to open it from the
+Hermes host on web, desktop, or mobile; this also works when the file is outside the chat workspace.
+
 ## Manage automations
 
 Open Automations in the desktop sidebar, or Settings → Automations on mobile, to manage scheduled

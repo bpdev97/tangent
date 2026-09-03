@@ -533,6 +533,90 @@ it.layer(testLayer)("HermesAdapter gateway", (it) => {
     ),
   );
 
+  it.effect("turns streamed Hermes MEDIA output into portable file links", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const gateway = new FakeGateway();
+        const emitter: { current?: (event: HermesGatewayEvent) => void } = {};
+        const adapter = yield* makeHermesAdapter(decodeSettings({ profile: "default" }), {
+          environment: { ...process.env, HOME: "/Users/hermes" },
+          gatewayRuntime: fakeRuntime(gateway, emitter),
+        });
+        const events: ProviderRuntimeEvent[] = [];
+        const eventFiber = yield* Stream.runForEach(adapter.streamEvents, (event) =>
+          Effect.sync(() => events.push(event)),
+        ).pipe(Effect.forkChild);
+        yield* Effect.yieldNow;
+        const threadId = ThreadId.make("hermes-gateway-media");
+        yield* adapter.startSession({ threadId, runtimeMode: "approval-required" });
+        yield* adapter.sendTurn({ threadId, input: "create a report" });
+
+        emitter.current?.({ type: "message.start", session_id: "live-1" });
+        emitter.current?.({
+          type: "message.delta",
+          session_id: "live-1",
+          payload: { text: "Report ready.\nME" },
+        });
+        emitter.current?.({
+          type: "message.delta",
+          session_id: "live-1",
+          payload: { text: 'DIA: "~/Exports/Q3 plan ' },
+        });
+        emitter.current?.({
+          type: "message.delta",
+          session_id: "live-1",
+          payload: { text: '#1.pdf"' },
+        });
+        emitter.current?.({
+          type: "session.usage",
+          session_id: "live-1",
+          payload: { usage: { context_used: 37.9, context_max: 100, total: 120.8 } },
+        });
+        emitter.current?.({
+          type: "message.complete",
+          session_id: "live-1",
+          payload: {
+            text: 'Report ready.\nMEDIA: "~/Exports/Q3 plan #1.pdf"',
+            status: "complete",
+          },
+        });
+        yield* settleEvents;
+
+        const rendered =
+          "Report ready.\n[Q3 plan #1.pdf](</Users/hermes/Exports/Q3 plan %231.pdf>)";
+        assert.equal(
+          events
+            .filter(
+              (event) =>
+                event.type === "content.delta" && event.payload.streamKind === "assistant_text",
+            )
+            .map((event) => (event.type === "content.delta" ? event.payload.delta : ""))
+            .join(""),
+          rendered,
+        );
+        assert.isTrue(
+          events.some(
+            (event) =>
+              event.type === "item.completed" &&
+              event.payload.itemType === "assistant_message" &&
+              event.payload.detail === rendered,
+          ),
+        );
+        assert.deepEqual(
+          events.find((event) => event.type === "thread.token-usage.updated")?.payload,
+          {
+            usage: {
+              usedTokens: 37,
+              maxTokens: 100,
+              totalProcessedTokens: 120,
+            },
+          },
+        );
+        yield* Fiber.interrupt(eventFiber);
+      }),
+    ),
+  );
+
   it.effect("does not duplicate an interim response preview at turn completion", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -630,6 +714,104 @@ it.layer(testLayer)("HermesAdapter gateway", (it) => {
           gateway.requests.some(
             (request) => request.method === "clarify.respond" && request.params.answer === "dev",
           ),
+        );
+      }),
+    ),
+  );
+
+  it.effect("routes batched and multi-select clarifications through Hermes", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const gateway = new FakeGateway();
+        const emitter: { current?: (event: HermesGatewayEvent) => void } = {};
+        const adapter = yield* makeHermesAdapter(decodeSettings({ profile: "default" }), {
+          gatewayRuntime: fakeRuntime(gateway, emitter),
+        });
+        const threadId = ThreadId.make("hermes-gateway-batch-clarify");
+        const events: ProviderRuntimeEvent[] = [];
+        yield* Stream.runForEach(adapter.streamEvents, (event) =>
+          Effect.sync(() => events.push(event)),
+        ).pipe(Effect.forkChild);
+        yield* Effect.yieldNow;
+        yield* adapter.startSession({ threadId, runtimeMode: "approval-required" });
+        yield* adapter.sendTurn({ threadId, input: "ask me" });
+        emitter.current?.({
+          type: "clarify.request",
+          session_id: "live-1",
+          payload: {
+            request_id: "clarify-batch-1",
+            questions: [
+              {
+                qid: "target",
+                question: "Which branch?",
+                choices: ["main (Recommended)", "dev"],
+              },
+              {
+                qid: "checks",
+                question: "Which checks?",
+                choices: ["unit", "integration (Recommended)"],
+                multi_select: true,
+              },
+              { qid: "notes", question: "Anything else?" },
+            ],
+          },
+        });
+        yield* settleEvents;
+
+        const clarification = events.find((event) => event.type === "user-input.requested");
+        assert.isDefined(clarification?.requestId);
+        assert.deepEqual(
+          clarification?.type === "user-input.requested"
+            ? clarification.payload.questions.map((question) => ({
+                id: question.id,
+                multiSelect: question.multiSelect === true,
+                options: question.options.map((option) => option.label),
+              }))
+            : undefined,
+          [
+            { id: "target", multiSelect: false, options: ["main (Recommended)", "dev"] },
+            {
+              id: "checks",
+              multiSelect: true,
+              options: ["unit", "integration (Recommended)"],
+            },
+            { id: "notes", multiSelect: false, options: [] },
+          ],
+        );
+
+        yield* adapter.respondToUserInput(
+          threadId,
+          ApprovalRequestId.make(clarification!.requestId!),
+          {
+            target: "main (Recommended)",
+            checks: ["unit", "integration (Recommended)"],
+            notes: "No other constraints.",
+          },
+        );
+        assert.deepEqual(
+          gateway.requests
+            .filter((request) => request.method === "clarify.respond")
+            .map((request) => request.params),
+          [
+            {
+              session_id: "live-1",
+              request_id: "clarify-batch-1",
+              question_id: "target",
+              answer: "main",
+            },
+            {
+              session_id: "live-1",
+              request_id: "clarify-batch-1",
+              question_id: "checks",
+              answer: '["unit","integration"]',
+            },
+            {
+              session_id: "live-1",
+              request_id: "clarify-batch-1",
+              question_id: "notes",
+              answer: "No other constraints.",
+            },
+          ],
         );
       }),
     ),

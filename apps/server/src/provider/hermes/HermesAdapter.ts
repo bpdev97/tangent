@@ -64,8 +64,13 @@ type PendingInteraction =
       readonly kind: "user-input";
       readonly method: "clarify.respond" | "sudo.respond" | "secret.respond";
       readonly gatewayRequestId: string;
-      readonly answerKey: "answer" | "password" | "value";
-      readonly questionId: string;
+      readonly questions: ReadonlyArray<{
+        readonly answerKey: "answer" | "password" | "value";
+        readonly choices?: ReadonlyArray<string>;
+        readonly gatewayQuestionId?: string;
+        readonly multiSelect: boolean;
+        readonly questionId: string;
+      }>;
     };
 
 interface HermesSessionContext {
@@ -80,7 +85,8 @@ interface HermesSessionContext {
   activeTurnId: TurnId | undefined;
   assistantItemId: RuntimeItemId | undefined;
   assistantSegmentIndex: number;
-  assistantText: string;
+  assistantOutputText: string;
+  assistantMediaBuffer: string;
   assistantInterimTexts: Array<string>;
   reasoningItemId: RuntimeItemId | undefined;
   currentModelId: string | undefined;
@@ -107,6 +113,15 @@ interface SessionStartResponse {
   readonly session_key?: string;
   readonly messages?: ReadonlyArray<unknown>;
   readonly info?: Readonly<Record<string, unknown>>;
+}
+
+interface HermesUserInputQuestion {
+  readonly id: string;
+  readonly header: string;
+  readonly question: string;
+  readonly choices?: ReadonlyArray<string>;
+  readonly gatewayQuestionId?: string;
+  readonly multiSelect?: boolean;
 }
 
 type HermesCommandDispatch =
@@ -144,6 +159,16 @@ function number(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function nonNegativeInteger(value: unknown): number | undefined {
+  const parsed = number(value);
+  return parsed === undefined ? undefined : Math.max(0, Math.trunc(parsed));
+}
+
+function positiveInteger(value: unknown): number | undefined {
+  const parsed = nonNegativeInteger(value);
+  return parsed !== undefined && parsed > 0 ? parsed : undefined;
+}
+
 function finalAssistantTail(finalText: string, priorSegments: ReadonlyArray<string>): string {
   let tail = finalText.trimStart();
   for (const segment of priorSegments) {
@@ -158,6 +183,171 @@ function answerText(value: unknown): string {
   if (Array.isArray(value)) return value.map(String).join(", ");
   if (value === undefined || value === null) return "";
   return String(value);
+}
+
+const HERMES_RECOMMENDED_CHOICE_SUFFIX = "(Recommended)";
+const HERMES_MEDIA_PREFIXES = ["MEDIA:", "`MEDIA:", '"MEDIA:', "'MEDIA:"] as const;
+
+function bareHermesChoice(value: string): string {
+  return value.endsWith(HERMES_RECOMMENDED_CHOICE_SUFFIX)
+    ? value.slice(0, -HERMES_RECOMMENDED_CHOICE_SUFFIX.length).trim()
+    : value;
+}
+
+function hermesClarificationAnswer(
+  value: unknown,
+  question: Extract<PendingInteraction, { kind: "user-input" }>["questions"][number],
+): string {
+  if (question.multiSelect && Array.isArray(value)) {
+    return JSON.stringify(value.map(String).map(bareHermesChoice));
+  }
+
+  const answer = answerText(value);
+  return question.choices?.includes(answer) ? bareHermesChoice(answer) : answer;
+}
+
+function markdownLabel(value: string): string {
+  return value.replace(/[\\[\]*_`<&]/g, "\\$&");
+}
+
+function markdownDestination(value: string): string {
+  const isUri = /^[A-Za-z][A-Za-z0-9+.-]*:/u.test(value) && !/^[A-Za-z]:[\\/]/u.test(value);
+  const path = isUri
+    ? value
+    : value.replaceAll("%", "%25").replaceAll("#", "%23").replaceAll("?", "%3F");
+  return path
+    .replaceAll("<", "%3C")
+    .replaceAll(">", "%3E")
+    .replaceAll("\r", "%0D")
+    .replaceAll("\n", "%0A");
+}
+
+function unquoteHermesMediaPath(value: string): string {
+  const trimmed = value.trim();
+  const quote = trimmed[0];
+  return quote && quote === trimmed.at(-1) && ['"', "'", "`"].includes(quote)
+    ? trimmed.slice(1, -1)
+    : trimmed;
+}
+
+function expandHermesMediaPath(value: string, homeDirectory: string | undefined): string {
+  if (!homeDirectory || !value.startsWith("~/")) return value;
+  return `${homeDirectory.replace(/[\\/]+$/u, "")}/${value.slice(2)}`;
+}
+
+function hermesMediaLink(value: string, homeDirectory: string | undefined): string {
+  const path = expandHermesMediaPath(unquoteHermesMediaPath(value), homeDirectory);
+  const normalized = path.replaceAll("\\", "/").replace(/\/+$/u, "");
+  const label = normalized.slice(normalized.lastIndexOf("/") + 1) || normalized || "File";
+  return `[${markdownLabel(label)}](<${markdownDestination(path)}>)`;
+}
+
+function trailingHermesMediaPrefixLength(value: string): number {
+  let retained = 0;
+  for (const prefix of HERMES_MEDIA_PREFIXES) {
+    const maximum = Math.min(value.length, prefix.length - 1);
+    for (let length = maximum; length > retained; length -= 1) {
+      if (value.endsWith(prefix.slice(0, length))) {
+        retained = length;
+        break;
+      }
+    }
+  }
+  return retained;
+}
+
+function consumeHermesMediaText(
+  value: string,
+  final: boolean,
+  homeDirectory: string | undefined,
+): { readonly output: string; readonly pending: string } {
+  let cursor = 0;
+  let output = "";
+
+  while (cursor < value.length) {
+    const mediaIndex = value.indexOf("MEDIA:", cursor);
+    if (mediaIndex < 0) {
+      const retained = final ? 0 : trailingHermesMediaPrefixLength(value.slice(cursor));
+      const outputEnd = value.length - retained;
+      output += value.slice(cursor, outputEnd);
+      return { output, pending: value.slice(outputEnd) };
+    }
+
+    const preceding = value[mediaIndex - 1];
+    const hasWrapperQuote =
+      mediaIndex > cursor && preceding !== undefined && ['"', "'", "`"].includes(preceding);
+    const directiveStart = hasWrapperQuote ? mediaIndex - 1 : mediaIndex;
+    output += value.slice(cursor, directiveStart);
+
+    let pathStart = mediaIndex + "MEDIA:".length;
+    while (pathStart < value.length && /\s/u.test(value[pathStart] ?? "")) pathStart += 1;
+    if (pathStart >= value.length) {
+      if (!final) return { output, pending: value.slice(directiveStart) };
+      output += value.slice(directiveStart);
+      return { output, pending: "" };
+    }
+
+    const quote = value[pathStart];
+    let pathEnd: number;
+    if (quote !== undefined && ['"', "'", "`"].includes(quote)) {
+      const closingQuote = value.indexOf(quote, pathStart + 1);
+      if (closingQuote < 0) {
+        if (!final) return { output, pending: value.slice(directiveStart) };
+        output += value.slice(directiveStart);
+        return { output, pending: "" };
+      }
+      pathEnd = closingQuote + 1;
+    } else {
+      pathEnd = pathStart;
+      while (pathEnd < value.length && !/\s/u.test(value[pathEnd] ?? "")) pathEnd += 1;
+      if (pathEnd === value.length && !final) {
+        return { output, pending: value.slice(directiveStart) };
+      }
+    }
+
+    output += hermesMediaLink(value.slice(pathStart, pathEnd), homeDirectory);
+    cursor = pathEnd;
+  }
+
+  return { output, pending: "" };
+}
+
+function renderHermesMediaTags(value: string, homeDirectory: string | undefined): string {
+  return consumeHermesMediaText(value, true, homeDirectory).output;
+}
+
+function normalizeHermesChoices(value: unknown): ReadonlyArray<string> | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const choices = value
+    .filter((choice): choice is string => typeof choice === "string" && !!choice.trim())
+    .map((choice) => choice.trim());
+  return choices.length > 0 ? choices : undefined;
+}
+
+function normalizeHermesClarificationQuestions(
+  value: unknown,
+): ReadonlyArray<HermesUserInputQuestion> {
+  if (!Array.isArray(value)) return [];
+  const questions: Array<HermesUserInputQuestion> = [];
+  const ids = new Set<string>();
+
+  for (const entry of value) {
+    const question = record(entry);
+    const id = text(question.qid);
+    const prompt = text(question.question);
+    if (!id || !prompt || ids.has(id)) continue;
+    ids.add(id);
+    const choices = normalizeHermesChoices(question.choices);
+    questions.push({
+      id,
+      gatewayQuestionId: id,
+      header: `Hermes question ${questions.length + 1}`,
+      question: prompt,
+      ...(choices ? { choices } : {}),
+      ...(question.multi_select === true && choices ? { multiSelect: true } : {}),
+    });
+  }
+  return questions;
 }
 
 function parseHermesSlashCommand(value: string): HermesSlashCommand | undefined {
@@ -415,11 +605,12 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
   ChildProcessSpawner.ChildProcessSpawner | Crypto.Crypto | ServerConfig | Scope.Scope
 > {
   const boundInstanceId = options.instanceId ?? ProviderInstanceId.make("hermes");
+  const runtimeEnvironment = options.environment ?? process.env;
+  const mediaHomeDirectory = runtimeEnvironment.HOME ?? runtimeEnvironment.USERPROFILE;
   const serverConfig = yield* ServerConfig;
   const crypto = yield* Crypto.Crypto;
   const runtime =
-    options.gatewayRuntime ??
-    (yield* makeHermesGatewayRuntime(hermesSettings, options.environment ?? process.env));
+    options.gatewayRuntime ?? (yield* makeHermesGatewayRuntime(hermesSettings, runtimeEnvironment));
   const sessions = new Map<ThreadId, HermesSessionContext>();
   const parentScope = yield* Scope.Scope;
   const locks = yield* SynchronizedRef.make(
@@ -445,6 +636,32 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
       method: event.type,
       payload: event,
     },
+  });
+
+  const publishTokenUsage = Effect.fn("HermesAdapter.publishTokenUsage")(function* (
+    context: HermesSessionContext,
+    event: HermesGatewayEvent,
+    value: unknown,
+  ) {
+    const usage = record(value);
+    const usedTokens = nonNegativeInteger(usage.context_used);
+    if (usedTokens === undefined) return;
+    const maxTokens = positiveInteger(usage.context_max);
+    const totalProcessedTokens = nonNegativeInteger(usage.total);
+    yield* publish({
+      type: "thread.token-usage.updated",
+      ...(yield* stamp()),
+      ...base(context, event),
+      payload: {
+        usage: {
+          usedTokens,
+          ...(maxTokens !== undefined ? { maxTokens } : {}),
+          ...(totalProcessedTokens !== undefined && totalProcessedTokens > usedTokens
+            ? { totalProcessedTokens }
+            : {}),
+        },
+      },
+    });
   });
 
   const request = <T>(
@@ -516,6 +733,59 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
     return itemId;
   });
 
+  const publishAssistantText = Effect.fn("HermesAdapter.publishAssistantText")(function* (
+    context: HermesSessionContext,
+    event: HermesGatewayEvent,
+    delta: string,
+  ) {
+    if (!delta) return;
+    const itemId = yield* ensureAssistantItem(context, event);
+    context.assistantOutputText += delta;
+    yield* publish({
+      type: "content.delta",
+      ...(yield* stamp()),
+      ...base(context, event),
+      itemId,
+      payload: { streamKind: "assistant_text", delta },
+    });
+  });
+
+  const streamAssistantText = Effect.fn("HermesAdapter.streamAssistantText")(function* (
+    context: HermesSessionContext,
+    event: HermesGatewayEvent,
+    delta: string,
+  ) {
+    const consumed = consumeHermesMediaText(
+      `${context.assistantMediaBuffer}${delta}`,
+      false,
+      mediaHomeDirectory,
+    );
+    context.assistantMediaBuffer = consumed.pending;
+    yield* publishAssistantText(context, event, consumed.output);
+  });
+
+  const finalizeAssistantText = Effect.fn("HermesAdapter.finalizeAssistantText")(function* (
+    context: HermesSessionContext,
+    event: HermesGatewayEvent,
+    finalText: string,
+  ) {
+    const consumed = consumeHermesMediaText(context.assistantMediaBuffer, true, mediaHomeDirectory);
+    context.assistantMediaBuffer = "";
+    yield* publishAssistantText(context, event, consumed.output);
+
+    const normalizedFinalText = renderHermesMediaTags(finalText, mediaHomeDirectory);
+    if (normalizedFinalText.startsWith(context.assistantOutputText)) {
+      yield* publishAssistantText(
+        context,
+        event,
+        normalizedFinalText.slice(context.assistantOutputText.length),
+      );
+    } else if (!context.assistantOutputText) {
+      yield* publishAssistantText(context, event, normalizedFinalText);
+    }
+    return context.assistantOutputText;
+  });
+
   const abandonPendingInteractions = Effect.fn("HermesAdapter.abandonPendingInteractions")(
     function* (
       context: HermesSessionContext,
@@ -562,7 +832,8 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
     context.activeTurnId = undefined;
     context.assistantItemId = undefined;
     context.assistantSegmentIndex = 0;
-    context.assistantText = "";
+    context.assistantOutputText = "";
+    context.assistantMediaBuffer = "";
     context.assistantInterimTexts = [];
     context.reasoningItemId = undefined;
     const { activeTurnId: _activeTurnId, ...session } = context.session;
@@ -586,7 +857,7 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
     output: string,
     completeTurn: boolean,
   ) {
-    const detail = output.trim() || "(no output)";
+    const detail = renderHermesMediaTags(output.trim() || "(no output)", mediaHomeDirectory);
     const event: HermesGatewayEvent = {
       type: "slash.output",
       session_id: context.liveSessionId,
@@ -719,10 +990,7 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
       readonly gatewayRequestId: string;
       readonly method: "clarify.respond" | "sudo.respond" | "secret.respond";
       readonly answerKey: "answer" | "password" | "value";
-      readonly questionId: string;
-      readonly header: string;
-      readonly question: string;
-      readonly choices?: ReadonlyArray<string>;
+      readonly questions: ReadonlyArray<HermesUserInputQuestion>;
     },
   ) {
     const requestId = ApprovalRequestId.make(yield* uuid);
@@ -730,8 +998,13 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
       kind: "user-input",
       method: input.method,
       gatewayRequestId: input.gatewayRequestId,
-      answerKey: input.answerKey,
-      questionId: input.questionId,
+      questions: input.questions.map((question) => ({
+        answerKey: input.answerKey,
+        questionId: question.id,
+        multiSelect: question.multiSelect === true,
+        ...(question.choices ? { choices: question.choices } : {}),
+        ...(question.gatewayQuestionId ? { gatewayQuestionId: question.gatewayQuestionId } : {}),
+      })),
     });
     yield* publish({
       type: "user-input.requested",
@@ -739,17 +1012,16 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
       ...base(context, event),
       requestId: RuntimeRequestId.make(requestId),
       payload: {
-        questions: [
-          {
-            id: input.questionId,
-            header: input.header,
-            question: input.question,
-            options: (input.choices ?? []).map((choice) => ({
-              label: choice,
-              description: `Respond with ${choice}.`,
-            })),
-          },
-        ],
+        questions: input.questions.map((question) => ({
+          id: question.id,
+          header: question.header,
+          question: question.question,
+          options: (question.choices ?? []).map((choice) => ({
+            label: choice,
+            description: `Respond with ${choice}.`,
+          })),
+          ...(question.multiSelect === true ? { multiSelect: true } : {}),
+        })),
       },
     });
   });
@@ -812,7 +1084,8 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
         }
         context.assistantItemId = undefined;
         context.assistantSegmentIndex = 0;
-        context.assistantText = "";
+        context.assistantOutputText = "";
+        context.assistantMediaBuffer = "";
         context.assistantInterimTexts = [];
         yield* ensureAssistantItem(context, event);
         return;
@@ -820,35 +1093,14 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
       case "message.delta": {
         const delta = typeof payload.text === "string" ? payload.text : "";
         if (!delta) return;
-        const itemId = yield* ensureAssistantItem(context, event);
-        context.assistantText += delta;
-        yield* publish({
-          type: "content.delta",
-          ...(yield* stamp()),
-          ...base(context, event),
-          itemId,
-          payload: { streamKind: "assistant_text", delta },
-        });
+        yield* streamAssistantText(context, event, delta);
         return;
       }
       case "message.interim": {
         const interimText = typeof payload.text === "string" ? payload.text.trimStart() : "";
         if (!interimText) return;
         const itemId = yield* ensureAssistantItem(context, event);
-        if (payload.already_streamed !== true) {
-          const missingText = interimText.startsWith(context.assistantText)
-            ? interimText.slice(context.assistantText.length)
-            : "";
-          if (missingText) {
-            yield* publish({
-              type: "content.delta",
-              ...(yield* stamp()),
-              ...base(context, event),
-              itemId,
-              payload: { streamKind: "assistant_text", delta: missingText },
-            });
-          }
-        }
+        const renderedInterimText = yield* finalizeAssistantText(context, event, interimText);
         yield* publish({
           type: "item.completed",
           ...(yield* stamp()),
@@ -857,14 +1109,15 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
           payload: {
             itemType: "assistant_message",
             status: "completed",
-            detail: interimText,
+            detail: renderedInterimText,
             data: { ...payload, interim: true },
           },
         });
         context.assistantInterimTexts.push(interimText);
         context.assistantItemId = undefined;
         context.assistantSegmentIndex += 1;
-        context.assistantText = "";
+        context.assistantOutputText = "";
+        context.assistantMediaBuffer = "";
         return;
       }
       case "message.complete": {
@@ -874,9 +1127,7 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
           payload.response_previewed === true
             ? finalAssistantTail(finalText, context.assistantInterimTexts)
             : finalText;
-        if (!context.assistantItemId && completionText) {
-          yield* ensureAssistantItem(context, event);
-        }
+        const renderedCompletionText = yield* finalizeAssistantText(context, event, completionText);
         if (context.assistantItemId) {
           yield* publish({
             type: "item.completed",
@@ -886,26 +1137,21 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
             payload: {
               itemType: "assistant_message",
               status: status === "error" ? "failed" : "completed",
-              ...(completionText ? { detail: completionText } : {}),
+              ...(renderedCompletionText ? { detail: renderedCompletionText } : {}),
               data: payload,
             },
           });
         }
-        const usage = record(payload.usage);
-        const usedTokens = number(usage.total_tokens) ?? number(usage.total);
-        if (usedTokens !== undefined) {
-          yield* publish({
-            type: "thread.token-usage.updated",
-            ...(yield* stamp()),
-            ...base(context, event),
-            payload: { usage: { usedTokens: Math.max(0, Math.trunc(usedTokens)) } },
-          });
-        }
+        yield* publishTokenUsage(context, event, payload.usage);
         yield* finishTurn(
           context,
           status === "error" ? "failed" : status === "interrupted" ? "cancelled" : "completed",
           text(payload.warning),
         );
+        return;
+      }
+      case "session.usage": {
+        yield* publishTokenUsage(context, event, payload.usage);
         return;
       }
       case "thinking.delta":
@@ -1021,19 +1267,24 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
       case "clarify.request": {
         const gatewayRequestId = text(payload.request_id);
         if (!gatewayRequestId) return;
-        const choices = Array.isArray(payload.choices)
-          ? payload.choices.filter(
-              (choice): choice is string => typeof choice === "string" && !!choice.trim(),
-            )
-          : undefined;
+        const batchQuestions = normalizeHermesClarificationQuestions(payload.questions);
+        const choices = normalizeHermesChoices(payload.choices);
         yield* openUserInput(context, event, {
           gatewayRequestId,
           method: "clarify.respond",
           answerKey: "answer",
-          questionId: "answer",
-          header: "Hermes question",
-          question: text(payload.question) ?? "Hermes needs more information.",
-          ...(choices ? { choices } : {}),
+          questions:
+            batchQuestions.length > 0
+              ? batchQuestions
+              : [
+                  {
+                    id: "answer",
+                    header: "Hermes question",
+                    question: text(payload.question) ?? "Hermes needs more information.",
+                    ...(choices ? { choices } : {}),
+                    ...(payload.multi_select === true && choices ? { multiSelect: true } : {}),
+                  },
+                ],
         });
         return;
       }
@@ -1044,9 +1295,13 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
           gatewayRequestId,
           method: "sudo.respond",
           answerKey: "password",
-          questionId: "password",
-          header: "Administrator access",
-          question: "Hermes needs the administrator password to continue.",
+          questions: [
+            {
+              id: "password",
+              header: "Administrator access",
+              question: "Hermes needs the administrator password to continue.",
+            },
+          ],
         });
         return;
       }
@@ -1058,9 +1313,13 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
           gatewayRequestId,
           method: "secret.respond",
           answerKey: "value",
-          questionId: envVar ?? "value",
-          header: envVar ?? "Secret required",
-          question: text(payload.prompt) ?? "Hermes needs a secret value to continue.",
+          questions: [
+            {
+              id: envVar ?? "value",
+              header: envVar ?? "Secret required",
+              question: text(payload.prompt) ?? "Hermes needs a secret value to continue.",
+            },
+          ],
         });
         return;
       }
@@ -1279,7 +1538,8 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
           activeTurnId: undefined,
           assistantItemId: undefined,
           assistantSegmentIndex: 0,
-          assistantText: "",
+          assistantOutputText: "",
+          assistantMediaBuffer: "",
           assistantInterimTexts: [],
           reasoningItemId: undefined,
           currentModelId: currentModel,
@@ -1498,11 +1758,20 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
           new Error(`Unknown pending user-input request: ${requestId}`),
         );
       }
-      yield* request(context, pending.method, {
-        session_id: context.liveSessionId,
-        request_id: pending.gatewayRequestId,
-        [pending.answerKey]: answerText(answers[pending.questionId]),
-      });
+      yield* Effect.forEach(
+        pending.questions,
+        (question) =>
+          request(context, pending.method, {
+            session_id: context.liveSessionId,
+            request_id: pending.gatewayRequestId,
+            ...(question.gatewayQuestionId ? { question_id: question.gatewayQuestionId } : {}),
+            [question.answerKey]:
+              pending.method === "clarify.respond"
+                ? hermesClarificationAnswer(answers[question.questionId], question)
+                : answerText(answers[question.questionId]),
+          }),
+        { concurrency: 1 },
+      ).pipe(Effect.asVoid);
       context.pendingInteractions.delete(requestId);
       yield* publish({
         type: "user-input.resolved",
@@ -1514,7 +1783,11 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
         requestId: RuntimeRequestId.make(requestId),
         payload: {
           answers:
-            pending.method === "clarify.respond" ? answers : { [pending.questionId]: "[redacted]" },
+            pending.method === "clarify.respond"
+              ? answers
+              : Object.fromEntries(
+                  pending.questions.map((question) => [question.questionId, "[redacted]"]),
+                ),
         },
       });
     });

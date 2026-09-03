@@ -188,13 +188,17 @@ Invariants:
 - Gateway event order is preserved per session and all client-visible state uses canonical runtime
   events.
 - Open-ended prompts remain valid with an empty options list.
+- Hermes `MEDIA:` delivery directives become ordinary Markdown file links in the adapter so web,
+  desktop, and mobile all use the shared host-file opening path.
+- Single, batched, and multi-select clarifications preserve Hermes question IDs and answer batches
+  sequentially.
 - `subagent.*` events require a stable `subagent_id` and project through upstream task events; there
   is no Tangent `agent.*` contract.
 - Thread lock entries are reference-counted and removed when no operation is using them.
 - Provider setup stays terminal-owned; the app reports the remediation command but does not run it.
 - Automation delivery and the gateway desktop cron ticker remain disabled.
 
-Current compatibility baseline: Hermes Agent 0.20.0, TUI gateway contract 5. Contract 2 remains
+Current compatibility baseline: Hermes Agent 0.21.0, TUI gateway contract 6. Contract 2 remains
 the minimum because the required methods are still compatible and the newer contracts are additive.
 Revalidate the programmatic guide, gateway types/transport/server handlers, focused fixtures, and a
 real binary before raising the baseline. Remove this feature only when upstream can continue or

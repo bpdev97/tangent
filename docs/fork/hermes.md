@@ -58,12 +58,17 @@ chat transcript.
 - `prompt.submit` claims the turn and returns `{ "status": "streaming" }` after starting Hermes's
   background run thread. T3 still forks the request effect from `sendTurn`; streaming events own the
   actual turn lifecycle, and `session.steer` handles text sent during the active turn.
-- `message.*`, `reasoning.*`, `tool.*`, `subagent.*`, and `background.complete` become canonical T3
-  runtime events. `message.interim` seals assistant commentary as a separate message without ending
-  the turn; a terminal response marked `response_previewed` is de-duplicated against those interim
-  segments. Hermes subagents use upstream `task.started`, `task.progress`, and `task.completed`,
-  keyed by a required `subagent_id`; Tangent does not maintain a separate provider-neutral `agent.*`
-  contract. Per-session queues preserve Hermes event order before ingestion.
+- `message.*`, `reasoning.*`, `tool.*`, `subagent.*`, `session.usage`, and `background.complete`
+  become canonical T3 runtime events. `message.interim` seals assistant commentary as a separate
+  message without ending the turn; a terminal response marked `response_previewed` is de-duplicated
+  against those interim segments. Live and terminal usage both update the shared context-window
+  projection. Hermes subagents use upstream `task.started`, `task.progress`, and `task.completed`,
+  keyed by a required `subagent_id`; Tangent does not maintain a separate provider-neutral
+  `agent.*` contract. Per-session queues preserve Hermes event order before ingestion.
+- Hermes's `MEDIA: <path>` output convention becomes an ordinary Markdown file link while assistant
+  text streams. The adapter buffers only a possible partial directive, expands a leading `~/` on the
+  Hermes host, and emits the same canonical assistant text to web, desktop, mobile, persistence, and
+  reconnects.
 - `tool.start` immediately publishes a canonical activity update so in-progress tools remain visible.
   Tool projection carries Hermes's bounded context for older gateways and normalizes structured
   arguments when available: commands, changed-file paths, search queries, page URLs, image prompts,
@@ -84,7 +89,9 @@ chat transcript.
   `session`, and `deny`; T3 never chooses Hermes's permanent `always` scope.
 - `clarify.request`, `sudo.request`, and `secret.request` use T3's structured user-input path and
   retain Hermes request IDs for the corresponding response method. Clarifications without choices
-  remain valid open-ended prompts and use the clients' typed custom-answer controls.
+  remain valid open-ended prompts and use the clients' typed custom-answer controls. Batched
+  clarifications retain each `qid`, expose all questions in one canonical request, and send responses
+  sequentially; multi-select answers use Hermes's JSON-array wire format.
 - Terminal turns, interrupts, session stops, and gateway expiry events resolve any remaining
   Hermes approval or user-input activities so blocked-on-user indicators cannot outlive the
   provider callback they represent.
@@ -149,6 +156,20 @@ cron store wrapper. A disposable editable install of that exact tag passed an au
 smoke for `gateway.ready`, `setup.status`, `model.options`, `session.create`, durable
 `stored_session_id`, contract 5, and `session.close`. No configured-model prompt, tool, attachment,
 or browser/mobile smoke ran in that isolated profile.
+
+On 2026-09-02, Hermes Agent tag `v2026.8.31` at
+`29112bef099274229cadff79cdff7bf7b99c4b77` reported Agent 0.21.0 and desktop contract 6. Source
+review confirmed that the isolated launch, authenticated WebSocket, ready sentinel, durable session
+ID, and all mapped chat RPCs remain compatible. Contract 6 changes `plugins.manage` registry rows,
+which T3 does not consume. The adapter added the relevant additive chat behavior introduced since
+the prior baseline: live `session.usage` events and batched, multi-select `clarify.request` payloads.
+Focused deterministic tests also cover Hermes's `MEDIA:` delivery convention across split streaming
+chunks and the canonical file links consumed by web, desktop, and mobile. The exact release source
+then ran against a disposable `HERMES_HOME` through the locally installed Hermes Python environment;
+an authenticated loopback smoke verified `gateway.ready`, `setup.status`, `model.options`,
+`session.create`, durable `stored_session_id`, contract 6, and `session.close`. No configured-model
+prompt, tool, attachment, or browser/mobile smoke ran for this review. The normally installed
+Hermes command remained Agent 0.19.0 and was not changed.
 
 ## Automations
 
