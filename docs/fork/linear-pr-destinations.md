@@ -26,6 +26,10 @@ that the user, workspace, and repository can open Linear Review.
 
 ## Cache behavior
 
+Each menu opening and destination lookup consults the server again, so its cache lifetime and retry
+policy remain authoritative. Responses from an older request or environment cannot replace the
+current badge result.
+
 Resolution is environment-local and memory-only:
 
 - a result containing a ticket or Review destination lives for one hour;
