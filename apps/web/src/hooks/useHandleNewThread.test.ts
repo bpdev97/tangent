@@ -56,7 +56,10 @@ vi.mock("@t3tools/client-runtime/environment", () => ({
   scopeProjectRef: (environmentId: string, projectId: string) => ({ environmentId, projectId }),
   scopeThreadRef: (environmentId: string, threadId: string) => ({ environmentId, threadId }),
 }));
-vi.mock("@t3tools/contracts", () => ({ DEFAULT_RUNTIME_MODE: "default" }));
+vi.mock("@t3tools/contracts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@t3tools/contracts")>()),
+  DEFAULT_RUNTIME_MODE: "default",
+}));
 vi.mock("@t3tools/shared/threadEnvMode", () => ({
   resolveDefaultThreadEnvMode: (input: {
     readonly projectFile: "local" | "worktree" | null;
@@ -82,7 +85,8 @@ vi.mock("../composerDraftStore", () => {
     useComposerDraftStore,
   };
 });
-vi.mock("../lib/chatThreadActions", () => ({
+vi.mock("../lib/chatThreadActions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/chatThreadActions")>()),
   hasExplicitComposerModelSelection: () => false,
   resolveNewDraftStartFromOrigin: () => false,
   resolveNewThreadModelSelectionOverride: () => null,
@@ -113,6 +117,7 @@ vi.mock("../state/entities", () => ({
   useProjects: () => [],
   useThread: () => null,
 }));
+vi.mock("../state/environments", () => ({ usePrimaryEnvironmentId: () => null }));
 vi.mock("../state/server", () => ({ primaryServerSettingsAtom: {} }));
 vi.mock("../threadRoutes", () => ({ resolveThreadRouteTarget: () => null }));
 vi.mock("../uiStateStore", () => ({
