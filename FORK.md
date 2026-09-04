@@ -363,8 +363,11 @@ pipelines.
 
 ## Merged upstream baseline
 
-The most recently merged upstream comparison baseline is `b7d6e6502`, integrated on 2026-09-04.
-Update this baseline when merging upstream; record validation in the pull request.
+The full upstream comparison commit and exact path ownership live in
+[`downstream/fork.json`](downstream/fork.json). Update its baseline when merging upstream; record
+validation in the pull request. `node scripts/check-fork.ts` rejects unregistered paths and prints
+the focused test commands. See [the maintenance runbook](docs/internals/fork-maintenance.md) for
+conflict handoff and CI. `FORK-MAINT-001` owns these checks, agent instructions, and CI integration.
 
 ## Required verification
 

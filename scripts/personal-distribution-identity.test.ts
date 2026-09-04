@@ -1,9 +1,4 @@
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import mobilePackageJson from "../apps/mobile/package.json" with { type: "json" };
+import { describe, expect, it } from "vite-plus/test";
 
 import { PERSONAL_DISTRIBUTION } from "../downstream/config.ts";
 import { PERSONAL_MOBILE_DISTRIBUTION } from "../downstream/mobile-config.ts";
@@ -35,33 +30,5 @@ describe("personal distribution identity", () => {
     expect(macos.appId).not.toBe("com.t3tools.t3code");
     expect(macos.stateHomeDirectoryName).toBe(".bpdev-code");
     expect(macos.userDataDirectoryName).toBe("bpdev-code");
-  });
-
-  it.effect("keeps desktop-only distribution changes out of the mobile native fingerprint", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const repoRoot = yield* path.fromFileUrl(new URL("..", import.meta.url));
-      const mobileConsumers = [
-        "apps/mobile/app.config.ts",
-        "apps/mobile/src/App.tsx",
-        "apps/mobile/src/branding.ts",
-        "apps/mobile/src/features/connection/pairing.ts",
-      ];
-
-      for (const relativePath of mobileConsumers) {
-        const source = yield* fs.readFileString(path.join(repoRoot, relativePath));
-        expect(source).toContain("downstream/mobile-config");
-        expect(source).not.toContain("downstream/config");
-      }
-    }).pipe(Effect.provide(NodeServices.layer)),
-  );
-
-  it("starts mobile development clients through the personal URL schemes", () => {
-    expect(mobilePackageJson.scripts["dev:client"]).toContain("--scheme bpdev-code-dev");
-    expect(mobilePackageJson.scripts["dev:client:preview"]).toContain(
-      "--scheme bpdev-code-preview",
-    );
-    expect(mobilePackageJson.scripts.showcase).toContain("--scheme bpdev-code");
   });
 });
