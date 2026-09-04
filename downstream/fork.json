@@ -430,6 +430,14 @@
         "apps/server/src/provider/Layers/AntigravityAdapter.ts",
         "apps/server/src/provider/Layers/AntigravityAdapter.test.ts"
       ]
+    },
+    {
+      "features": ["MAINT"],
+      "paths": [
+        "apps/server/src/provider/AntigravityInstallation.test.ts",
+        "apps/server/src/provider/Layers/CursorProvider.test.ts",
+        "apps/server/src/textGeneration/CodexTextGeneration.test.ts"
+      ]
     }
   ]
 }
