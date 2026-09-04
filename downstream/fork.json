@@ -425,14 +425,14 @@
       ]
     },
     {
-      "features": ["MAINT"],
+      "features": ["FORK-MAINT-001"],
       "paths": [
         "apps/server/src/provider/Layers/AntigravityAdapter.ts",
         "apps/server/src/provider/Layers/AntigravityAdapter.test.ts"
       ]
     },
     {
-      "features": ["MAINT"],
+      "features": ["FORK-MAINT-001"],
       "paths": [
         "apps/server/src/provider/AntigravityInstallation.test.ts",
         "apps/server/src/provider/Layers/CursorProvider.test.ts",
