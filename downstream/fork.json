@@ -438,6 +438,13 @@
         "apps/server/src/provider/Layers/CursorProvider.test.ts",
         "apps/server/src/textGeneration/CodexTextGeneration.test.ts"
       ]
+    },
+    {
+      "features": ["FORK-DIST-001"],
+      "paths": [
+        "apps/desktop/scripts/mac-signing.test.mjs",
+        "patches/app-builder-lib@26.15.6.patch"
+      ]
     }
   ]
 }

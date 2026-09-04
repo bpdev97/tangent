@@ -118,6 +118,9 @@ Invariants:
   failures. They stay quiet on launch; a user-initiated check reports the error in the settings UI.
 - A matching upstream package version is not an equivalent update source.
 - Release workflows must not publish unless checks pass and the requested version is absent.
+- The `app-builder-lib@26.15.6` patch keeps certificate import passwords separate from the
+  temporary keychain password. Remove it only when the macOS signing regression passes with
+  an unpatched replacement version.
 - Mobile and Expo consumers import only `downstream/mobile-config.ts`; desktop-only identity changes
   must not alter the iOS runtime fingerprint.
 
