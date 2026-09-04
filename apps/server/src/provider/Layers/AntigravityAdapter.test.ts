@@ -22,6 +22,8 @@ import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawne
 import * as AcpErrors from "effect-acp/errors";
 import type * as AcpSchema from "effect-acp/schema";
 
+import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
+
 import { ServerConfig } from "../../config.ts";
 import { ANTIGRAVITY_SIGN_IN_REQUIRED_MESSAGE } from "../antigravityAuthSupport.ts";
 import type { AcpSessionRuntimeEvent } from "../acp/AcpSessionRuntime.ts";
@@ -1269,6 +1271,61 @@ it.layer(layer)("AntigravityAdapter", (it) => {
       }).pipe(Effect.flip);
       expect(missing._tag).toBe("AcpRequestError");
     }).pipe(Effect.scoped),
+  );
+
+  it.effect.skipIf(!symlinksSupported)(
+    "resolves workspace aliases and rejects file and directory links outside them",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const h = yield* makeHarness();
+        const base = yield* fs.makeTempDirectoryScoped({ prefix: "t3-agy-links-" });
+        const workspace = path.join(base, "workspace");
+        const alias = path.join(base, "alias");
+        const outside = path.join(base, "outside");
+        yield* fs.makeDirectory(workspace);
+        yield* fs.makeDirectory(outside);
+        yield* fs.symlink(workspace, alias);
+        yield* fs.writeFileString(path.join(outside, "existing.txt"), "untouched");
+        yield* fs.symlink(outside, path.join(workspace, "directory-link"));
+        yield* fs.symlink(path.join(outside, "existing.txt"), path.join(workspace, "file-link"));
+        yield* fs.symlink(path.join(outside, "missing.txt"), path.join(workspace, "dangling-link"));
+        yield* h.adapter.startSession({ threadId, cwd: alias, runtimeMode: "approval-required" });
+        const { read, write } = h.fileHandlers;
+        if (!read || !write) return yield* Effect.die("File handlers were not registered.");
+        yield* write({
+          sessionId: nativeSessionId,
+          path: path.join(alias, "nested", "deep", "new.txt"),
+          content: "created",
+        });
+        expect(yield* fs.readFileString(path.join(workspace, "nested", "deep", "new.txt"))).toBe(
+          "created",
+        );
+        yield* write({
+          sessionId: nativeSessionId,
+          path: path.join(alias, "..notes"),
+          content: "valid name",
+        });
+        expect(
+          (yield* read({ sessionId: nativeSessionId, path: path.join(alias, "..notes") })).content,
+        ).toBe("valid name");
+        for (const relative of ["file-link", "dangling-link", "directory-link/nested/new.txt"]) {
+          const error = yield* write({
+            sessionId: nativeSessionId,
+            path: path.join(alias, relative),
+            content: "nope",
+          }).pipe(Effect.flip);
+          expect(error._tag).toBe("AcpRequestError");
+        }
+        const error = yield* read({
+          sessionId: nativeSessionId,
+          path: path.join(alias, "file-link"),
+        }).pipe(Effect.flip);
+        expect(error._tag).toBe("AcpRequestError");
+        expect(yield* fs.readFileString(path.join(outside, "existing.txt"))).toBe("untouched");
+        expect(yield* fs.readDirectory(outside)).toEqual(["existing.txt"]);
+      }).pipe(Effect.scoped),
   );
 
   it.effect("does not launch a process for a disabled instance or invalid resume cursor", () =>
