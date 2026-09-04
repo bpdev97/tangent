@@ -1,60 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import ClearAutomaticProjectModelDefaults from "./044_ClearAutomaticProjectModelDefaults.ts";
-
 export default Effect.gen(function* () {
-  // Released Tangent databases already recorded migration 44 for this
-  // compatibility repair. Run upstream's migration 44 here as well so those
-  // databases receive its model-default cleanup before the ledger advances.
-  yield* ClearAutomaticProjectModelDefaults;
-
   const sql = yield* SqlClient.SqlClient;
-
-  // Tangent previously shipped its Hermes repair as migration 36, before
-  // upstream assigned that ID to the pinned-thread column. Existing Tangent
-  // databases therefore skip upstream migration 36 and need the column here.
-  const columns = yield* sql<{ readonly name: string }>`
-    PRAGMA table_info(projection_threads)
-  `;
-  if (!columns.some((column) => column.name === "pinned_at")) {
-    yield* sql`
-      ALTER TABLE projection_threads
-      ADD COLUMN pinned_at TEXT
-    `;
-  }
-
-  // Released Tangent databases already used migration 39 for the repair
-  // above. Upstream later assigned that ID to the project-level thread
-  // environment default, so those databases skip upstream migration 39 and
-  // need its additive column repaired here.
-  const projectColumns = yield* sql<{ readonly name: string }>`
-    PRAGMA table_info(projection_projects)
-  `;
-  if (!projectColumns.some((column) => column.name === "default_thread_env_mode")) {
-    yield* sql`
-      ALTER TABLE projection_projects
-      ADD COLUMN default_thread_env_mode TEXT
-    `;
-  }
-
-  // Released Tangent databases used migration 41 for this compatibility
-  // repair before upstream assigned it to client connection metadata.
-  const authSessionColumns = yield* sql<{ readonly name: string }>`
-    PRAGMA table_info(auth_sessions)
-  `;
-  if (!authSessionColumns.some((column) => column.name === "client_surface")) {
-    yield* sql`
-      ALTER TABLE auth_sessions
-      ADD COLUMN client_surface TEXT
-    `;
-  }
-  if (!authSessionColumns.some((column) => column.name === "client_app_version")) {
-    yield* sql`
-      ALTER TABLE auth_sessions
-      ADD COLUMN client_app_version TEXT
-    `;
-  }
 
   yield* sql`
     INSERT OR IGNORE INTO projection_thread_activities (

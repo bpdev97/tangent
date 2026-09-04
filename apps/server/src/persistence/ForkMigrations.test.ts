@@ -2,13 +2,46 @@ import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as Migrator from "effect/unstable/sql/Migrator";
 
-import { runMigrations } from "../Migrations.ts";
-import * as NodeSqliteClient from "../NodeSqliteClient.ts";
+import { migrationManifest, runMigrations } from "./Migrations.ts";
+import * as NodeSqliteClient from "./NodeSqliteClient.ts";
+
+for (const id of [36, 39, 41, 44, 45]) {
+  it.effect(`upgrades a release with fork migration ${id} and leaves upstream IDs available`, () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* runMigrations({ toMigrationInclusive: id - 1 });
+      yield* sql`INSERT INTO effect_sql_migrations (migration_id, name) VALUES (${id}, ${id === 36 ? "CloseInterruptedHermesUserInputs" : "TangentMigrationCompatibility"})`;
+      yield* runMigrations();
+      yield* runMigrations();
+      const upstream = yield* sql<{
+        migration_id: number;
+        name: string;
+      }>`SELECT migration_id, name FROM effect_sql_migrations ORDER BY migration_id`;
+      assert.deepEqual(
+        upstream.map(({ migration_id, name }) => [migration_id, name] as const),
+        migrationManifest,
+      );
+      const fork = yield* sql<{
+        migration_id: number;
+        name: string;
+      }>`SELECT migration_id, name FROM tangent_sql_migrations`;
+      assert.deepEqual(fork, [{ migration_id: 1, name: "CloseInterruptedHermesUserInputs" }]);
+      yield* Migrator.make({})({
+        loader: Migrator.fromRecord({
+          [`${migrationManifest.at(-1)![0] + 1}_FutureUpstream`]: sql`CREATE TABLE future_upstream (id TEXT)`,
+        }),
+      });
+      yield* sql`INSERT INTO future_upstream (id) VALUES ('upstream ran')`;
+      assert.deepEqual(yield* sql`SELECT id FROM future_upstream`, [{ id: "upstream ran" }]);
+    }).pipe(Effect.provide(NodeSqliteClient.layerMemory())),
+  );
+}
 
 const layer = it.layer(Layer.mergeAll(NodeSqliteClient.layerMemory()));
 
-layer("045_TangentMigrationCompatibility", (it) => {
+layer("ForkMigrations", (it) => {
   it.effect("closes only orphaned Hermes prompts whose turns are terminal", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -116,7 +149,7 @@ layer("045_TangentMigrationCompatibility", (it) => {
         `;
       }
 
-      yield* runMigrations({ toMigrationInclusive: 45 });
+      yield* runMigrations();
 
       const resolved = yield* sql<{
         readonly threadId: string;
@@ -160,7 +193,7 @@ layer("045_TangentMigrationCompatibility", (it) => {
 
 const compatibilityLayer = it.layer(Layer.mergeAll(NodeSqliteClient.layerMemory()));
 
-compatibilityLayer("045_TangentMigrationCompatibility legacy ledger", (it) => {
+compatibilityLayer("ForkMigrations legacy ledger", (it) => {
   it.effect("repairs databases that already used Tangent migration IDs 36, 39, and 41", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -284,18 +317,12 @@ compatibilityLayer("045_TangentMigrationCompatibility legacy ledger", (it) => {
         WHERE migration_id >= 36
         ORDER BY migration_id
       `;
-      assert.deepStrictEqual(migrations, [
-        { migration_id: 36, name: "CloseInterruptedHermesUserInputs" },
-        { migration_id: 37, name: "ProjectionTurnsKeysetIndex" },
-        { migration_id: 38, name: "ProjectionThreadsPinOrderKey" },
-        { migration_id: 39, name: "TangentMigrationCompatibility" },
-        { migration_id: 40, name: "ProjectionProjectFaviconPath" },
-        { migration_id: 41, name: "TangentMigrationCompatibility" },
-        { migration_id: 42, name: "ProjectionThreadLinkedPullRequest" },
-        { migration_id: 43, name: "ProjectionThreadsUnsettledAt" },
-        { migration_id: 44, name: "TangentMigrationCompatibility" },
-        { migration_id: 45, name: "TangentMigrationCompatibility" },
-      ]);
+      assert.deepStrictEqual(
+        migrations,
+        migrationManifest
+          .filter(([id]) => id >= 36)
+          .map(([migration_id, name]) => ({ migration_id, name })),
+      );
     }),
   );
 });
