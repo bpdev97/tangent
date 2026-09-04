@@ -57,7 +57,8 @@
       "env": {
         "APP_VARIANT": "production",
         "NODE_OPTIONS": "--max-old-space-size=4096"
-      }
+      },
+      "node": "24.13.1"
     }
   },
   "submit": {
