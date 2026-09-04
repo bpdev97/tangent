@@ -1,10 +1,10 @@
-import { createRequire } from "node:module";
+import * as NodeModule from "node:module";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 
-const require = createRequire(import.meta.url);
-const builderRequire = createRequire(require.resolve("electron-builder"));
+const require = NodeModule.createRequire(import.meta.url);
+const builderRequire = NodeModule.createRequire(require.resolve("electron-builder"));
 const signingPath = builderRequire.resolve("app-builder-lib/out/codeSign/macCodeSign");
-const signingRequire = createRequire(signingPath);
+const signingRequire = NodeModule.createRequire(signingPath);
 const { createKeychain } = signingRequire(signingPath);
 const builderUtil = signingRequire("builder-util");
 const builderFs = signingRequire("builder-util/out/fs");
