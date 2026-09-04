@@ -19,6 +19,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: personal-ios-release
+  cancel-in-progress: false
+
 jobs:
   release:
     name: iOS ${{ inputs.mode }}
@@ -33,6 +37,10 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
+          if [[ "$GITHUB_REF" != refs/heads/main ]]; then
+            echo "Personal releases must run from main." >&2
+            exit 1
+          fi
           if [[ -z "$EXPO_TOKEN" ]]; then
             echo "Missing GitHub Actions secret: EXPO_TOKEN" >&2
             exit 1

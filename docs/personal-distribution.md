@@ -54,6 +54,13 @@ continues to show its concrete failure so the user can retry or diagnose the rel
 
 ## macOS signing and notarization
 
+Dispatch personal releases from `main`. The macOS workflow rejects versions already present as a
+tag or release, including drafts, and versions below the highest personal release. Release jobs
+are serialized per platform. macOS publishing creates a draft, uploads all required installer,
+updater, and server assets, and only then publishes it. Repository release immutability must remain
+enabled so published tags and assets cannot be replaced. Use a new patch version to correct a
+published build. If upload fails, the draft remains unpublished for inspection.
+
 Configure these GitHub Actions secrets:
 
 - `CSC_LINK`: base64-encoded Developer ID Application certificate (`.p12`).
