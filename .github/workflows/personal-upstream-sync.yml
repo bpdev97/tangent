@@ -8,6 +8,8 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write
+  actions: write
 
 concurrency:
   group: personal-upstream-sync
@@ -15,12 +17,11 @@ concurrency:
 
 jobs:
   sync:
-    name: Open upstream merge PR
+    name: Prepare upstream review
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      SYNC_BRANCH: sync/upstream-main
-      UPSTREAM_REPOSITORY: pingdotgg/t3code
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout personal main
         uses: actions/checkout@v6
@@ -28,49 +29,91 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Fetch upstream
-        run: |
-          git remote add upstream "https://github.com/$UPSTREAM_REPOSITORY.git"
-          git fetch --prune upstream main
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
 
-      - name: Stop when already current
-        id: freshness
+      - name: Fetch upstream
+        id: target
         run: |
+          upstream_repository="$(node -p "require('./downstream/fork.json').upstream")"
+          git remote add upstream "https://github.com/$upstream_repository.git"
+          git fetch --prune upstream main
+          upstream_sha="$(git rev-parse upstream/main)"
+          branch="sync/upstream-${upstream_sha:0:12}"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "sha=$upstream_sha" >> "$GITHUB_OUTPUT"
           if git merge-base --is-ancestor upstream/main HEAD; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "Personal main already contains upstream/main." >> "$GITHUB_STEP_SUMMARY"
+          elif [[ -n "$(git ls-remote --heads origin "$branch")" ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Existing branch $branch is awaiting review; leaving its work intact." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create upstream merge commit
-        if: steps.freshness.outputs.changed == 'true'
+      - name: Attempt upstream merge
+        id: merge
+        if: steps.target.outputs.changed == 'true'
+        env:
+          SYNC_BRANCH: ${{ steps.target.outputs.branch }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git switch -C "$SYNC_BRANCH"
-          git merge --no-ff upstream/main -m "chore: merge upstream/main"
-
-      - name: Push sync branch
-        if: steps.freshness.outputs.changed == 'true'
-        run: |
-          expected="$(git ls-remote --heads origin "$SYNC_BRANCH" | awk '{print $1}')"
-          git push \
-            --force-with-lease="refs/heads/$SYNC_BRANCH:$expected" \
-            origin "HEAD:refs/heads/$SYNC_BRANCH"
-
-      - name: Open or update pull request
-        if: steps.freshness.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          pr_number="$(gh pr list --base main --head "$SYNC_BRANCH" --state open --json number --jq '.[0].number // empty')"
-          if [[ -z "$pr_number" ]]; then
-            gh pr create \
-              --base main \
-              --head "$SYNC_BRANCH" \
-              --title "chore: merge upstream/main" \
-              --body "Automated upstream merge. Review downstream identity seams and release workflow changes before merging."
+          git switch -c "$SYNC_BRANCH"
+          if git merge --no-ff upstream/main -m "chore: merge upstream/main"; then
+            node scripts/upstream-sync.ts
+            vp fmt downstream/fork.json
+            node scripts/check-fork.ts
+            git add downstream/fork.json
+            git commit -m "chore: advance upstream comparison baseline"
+            echo "conflicts=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Updated existing upstream sync PR #$pr_number." >> "$GITHUB_STEP_SUMMARY"
+            test -n "$(git diff --name-only --diff-filter=U)"
+            node scripts/upstream-sync.ts
+            git merge --abort
+            echo "conflicts=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Record conflict handoff
+        if: steps.merge.outputs.conflicts == 'true'
+        env:
+          UPSTREAM_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          title="chore: resolve upstream merge ${UPSTREAM_SHA:0:12}"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing" ]]; then
+            gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" --body-file upstream-sync-report.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file upstream-sync-report.md
+          fi
+          cat upstream-sync-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload conflict report
+        if: steps.merge.outputs.conflicts == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: upstream-conflicts
+          path: upstream-sync-report.md
+
+      - name: Push and open draft review
+        if: steps.merge.outputs.conflicts == 'false'
+        env:
+          SYNC_BRANCH: ${{ steps.target.outputs.branch }}
+          UPSTREAM_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          git push origin "HEAD:refs/heads/$SYNC_BRANCH"
+          cat > "$RUNNER_TEMP/upstream-pr.md" <<EOF_BODY
+          Merge upstream $UPSTREAM_SHA while retaining the registered Tangent features. Review shared touchpoints using FORK.md and downstream/fork.json.
+
+          Tangent CI is explicitly dispatched on this branch. Require a successful run matching the PR head, affected feature tests, and integrated client verification before merging. Use a merge commit to retain upstream ancestry.
+
+          Harness: GitHub Actions. No model-generated implementation.
+          EOF_BODY
+          gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$SYNC_BRANCH" \
+            --draft --title "chore: merge upstream ${UPSTREAM_SHA:0:12}" \
+            --body-file "$RUNNER_TEMP/upstream-pr.md"
+          gh workflow run personal-ci.yml --repo "$GITHUB_REPOSITORY" --ref "$SYNC_BRANCH"

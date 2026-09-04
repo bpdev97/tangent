@@ -51,15 +51,12 @@ source alone does not explain. Most code changes do not need an internal documen
 ### Fork maintenance
 
 - [Authoritative fork registry](../FORK.md)
-- [2026-08-01 fork audit and reduction](./fork/audit-2026-08-01.md)
-- [2026-08-07 upstream sync audit](./fork/audit-2026-08-07.md)
-- [2026-08-21 upstream sync audit](./fork/audit-2026-08-21.md)
+- [Fork maintenance and upstream sync](./internals/fork-maintenance.md)
 - [Tangent distribution](./personal-distribution.md)
 - [Hermes provider](./fork/hermes.md)
 - [Generic chat](./fork/generic-chat.md)
 - [Personal push relay](./fork/personal-push-relay.md)
 - [HEIC/HEIF image normalization](./fork/image-normalization.md)
-- [Codex MCP tool approvals](./fork/codex-mcp-tool-approvals.md)
 - [Mermaid diagrams](./fork/mermaid.md)
 
 ### Runbooks

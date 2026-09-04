@@ -13,7 +13,7 @@ platform="$1"
 device_id="$2"
 server_port="$3"
 base_dir="$4"
-url_scheme="${5:-t3code-dev}"
+url_scheme="${5:-}"
 
 case "$platform" in
   ios)
@@ -29,6 +29,10 @@ esac
 
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
+
+if [[ -z "$url_scheme" ]]; then
+  url_scheme="$(node --input-type=module -e 'import { PERSONAL_MOBILE_DISTRIBUTION } from "./downstream/mobile-config.ts"; console.log(PERSONAL_MOBILE_DISTRIBUTION.developmentScheme)')"
+fi
 
 if ! pairing_output="$({
   T3CODE_PORT="$server_port" node apps/server/src/bin.ts auth pairing create \

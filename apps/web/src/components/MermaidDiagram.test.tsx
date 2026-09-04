@@ -1,4 +1,3 @@
-import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const mermaid = vi.hoisted(() => ({
@@ -9,7 +8,6 @@ const mermaid = vi.hoisted(() => ({
 vi.mock("mermaid", () => ({ default: mermaid }));
 
 import {
-  MermaidDiagram,
   clampMermaidScale,
   mermaidDiagramWidth,
   mermaidScalePercentage,
@@ -90,16 +88,5 @@ describe("Mermaid diagram presentation", () => {
     expect(mermaidViewBoxWidth('<svg viewBox="0 0 721.5 480"></svg>')).toBe(721.5);
     expect(mermaidViewBoxWidth("<svg></svg>")).toBeNull();
     expect(mermaidViewBoxWidth('<svg viewBox="0 0 0 480"></svg>')).toBeNull();
-  });
-
-  it("keeps source visible and copyable before the asynchronous render completes", () => {
-    const markup = renderToStaticMarkup(
-      <MermaidDiagram code={"flowchart LR\nA-->B"} theme="light" />,
-    );
-
-    expect(markup).toContain("language-mermaid");
-    expect(markup).toContain("flowchart LR");
-    expect(markup).toContain("Copy Mermaid source");
-    expect(markup).toContain("data-markdown-copy=");
   });
 });

@@ -21,7 +21,7 @@ diffs.
   `personal-ios-release.yml`.
 
 The upstream release workflows remain in the tree for mergeability and must stay disabled in this
-repository's Actions settings. Tangent workflows begin with `personal-`.
+repository's Actions settings or explicitly restricted to the upstream repository. Tangent workflows begin with `personal-`.
 
 ## Distribution identity
 
@@ -363,8 +363,11 @@ pipelines.
 
 ## Merged upstream baseline
 
-The most recently merged upstream comparison baseline is `b7d6e6502`, integrated on 2026-09-04.
-Update this baseline when merging upstream; record validation in the pull request.
+The full upstream comparison commit and exact path ownership live in
+[`downstream/fork.json`](downstream/fork.json). Update its baseline when merging upstream; record
+validation in the pull request. `node scripts/check-fork.ts` rejects unregistered paths and prints
+the focused test commands. See [the maintenance runbook](docs/internals/fork-maintenance.md) for
+conflict handoff and CI. `FORK-MAINT-001` owns these checks, agent instructions, and CI integration.
 
 ## Required verification
 
