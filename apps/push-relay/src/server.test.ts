@@ -1,4 +1,7 @@
 import * as NodeHttp from "node:http";
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import type {
   RelayAgentActivityState,
   RelayAgentAwarenessPreferences,
@@ -171,11 +174,15 @@ async function publishState(
 
 describe("personal push relay HTTP integration", () => {
   let server: PushRelayServer | null = null;
+  const directories: string[] = [];
 
   afterEach(async () => {
     await server?.close();
     server = null;
     vi.restoreAllMocks();
+    vi.useRealTimers();
+    for (const directory of directories.splice(0))
+      NodeFS.rmSync(directory, { recursive: true, force: true });
   });
 
   it("delivers one notification when a thread enters an enabled phase", async () => {
@@ -249,7 +256,7 @@ describe("personal push relay HTTP integration", () => {
     expect(await first).toEqual({ status: 200, body: { ok: true } });
   });
 
-  it("retries an identical notification after transient APNs failure", async () => {
+  it("retries a transient APNs failure without another publication", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const apns = new RecordingApnsClient();
     apns.notificationResults.push(transientFailure, success);
@@ -257,9 +264,10 @@ describe("personal push relay HTTP integration", () => {
     await registerDevice(server, { liveActivitiesEnabled: false });
     await publish(server, "running");
 
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const waiting = activityState("waiting_for_approval");
     await publishState(server, waiting);
-    await publishState(server, waiting);
+    await vi.advanceTimersByTimeAsync(30_000);
 
     expect(apns.notifications).toHaveLength(2);
     expect(apns.notifications.map((delivery) => delivery.state)).toEqual([waiting, waiting]);
@@ -278,9 +286,10 @@ describe("personal push relay HTTP integration", () => {
     });
     apns.liveActivityResults.push(transientFailure, success);
 
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const waiting = activityState("waiting_for_approval");
     await publishState(server, waiting);
-    await publishState(server, waiting);
+    await vi.advanceTimersByTimeAsync(30_000);
 
     expect(apns.notifications).toHaveLength(1);
     expect(apns.liveActivities).toHaveLength(3);
@@ -289,6 +298,67 @@ describe("personal push relay HTTP integration", () => {
       apns.liveActivities[1]?.aggregate,
     ]);
     expect(apns.liveActivities.slice(1).map((delivery) => delivery.alert)).toEqual([null, null]);
+  });
+
+  it("resumes pending notifications after relay restart", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "push-recovery-"));
+    directories.push(directory);
+    const persistentConfig = { ...config, databasePath: NodePath.join(directory, "relay.sqlite") };
+    const first = new RecordingApnsClient();
+    first.notificationResults.push(transientFailure);
+    server = await startServer(persistentConfig, { apns: first });
+    await registerDevice(server, { liveActivitiesEnabled: false });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const waiting = activityState("waiting_for_input");
+    await publishState(server, waiting);
+    await server.close();
+    const restarted = new RecordingApnsClient();
+    server = await startServer(persistentConfig, { apns: restarted });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(restarted.notifications.map(({ state }) => state)).toEqual([waiting]);
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect(restarted.notifications).toHaveLength(1);
+  });
+
+  it("bounds retries during a persistent outage", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const apns = new RecordingApnsClient();
+    const send = vi.spyOn(apns, "sendNotification").mockResolvedValue(transientFailure);
+    server = await startServer(config, { apns });
+    await registerDevice(server, { liveActivitiesEnabled: false });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    await publish(server, "waiting_for_input");
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(send).toHaveBeenCalledTimes(6);
+  });
+
+  it("supersedes an undelivered alert when the thread resumes work", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const apns = new RecordingApnsClient();
+    apns.notificationResults.push(transientFailure);
+    server = await startServer(config, { apns });
+    await registerDevice(server, { liveActivitiesEnabled: false });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    await publish(server, "waiting_for_approval");
+    await publish(server, "running");
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(apns.notifications).toHaveLength(1);
+    await publish(server, "waiting_for_approval");
+    expect(apns.notifications).toHaveLength(2);
+  });
+
+  it("deduplicates notifications for threads outside the five displayed activities", async () => {
+    const apns = new RecordingApnsClient();
+    server = await startServer(config, { apns });
+    await registerDevice(server, { liveActivitiesEnabled: false });
+    const states = Array.from({ length: 7 }, (_, index) => ({
+      ...activityState("waiting_for_approval"),
+      threadId: `thread-${index}` as RelayAgentActivityState["threadId"],
+    }));
+    for (const state of states) await publishState(server, state);
+    for (const state of states) await publishState(server, state);
+    expect(apns.notifications).toHaveLength(7);
   });
 
   it("uses a successful Live Activity alert to acknowledge a failed notification", async () => {

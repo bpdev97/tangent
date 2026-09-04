@@ -61,17 +61,13 @@ describe("personal push relay aggregation", () => {
   });
 
   it("notifies once when a thread enters an enabled phase", () => {
-    const running = makeAggregate([state("running")], Date.parse("2026-07-14T12:00:30.000Z"));
     expect(
-      shouldNotify({ state: state("waiting_for_approval"), previous: running, preferences }),
+      shouldNotify({ state: state("waiting_for_approval"), previous: "running", preferences }),
     ).toBe(true);
     expect(
       shouldNotify({
         state: state("waiting_for_approval"),
-        previous: makeAggregate(
-          [state("waiting_for_approval")],
-          Date.parse("2026-07-14T12:00:30.000Z"),
-        ),
+        previous: "waiting_for_approval",
         preferences,
       }),
     ).toBe(false);

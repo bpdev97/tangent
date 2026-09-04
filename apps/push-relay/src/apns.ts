@@ -310,15 +310,12 @@ function statusForPhase(phase: RelayAgentActivityState["phase"]): string {
 
 export function shouldNotify(input: {
   readonly state: RelayAgentActivityState | null;
-  readonly previous: RelayAgentActivityAggregateState | null;
+  readonly previous: RelayAgentActivityState["phase"] | null;
   readonly preferences: RelayAgentAwarenessPreferences;
 }): boolean {
   const state = input.state;
   if (!state || !input.preferences.notificationsEnabled) return false;
-  const previousPhase = input.previous?.activities.find(
-    (row) => row.environmentId === state.environmentId && row.threadId === state.threadId,
-  )?.phase;
-  if (previousPhase === state.phase) return false;
+  if (input.previous === state.phase) return false;
   switch (state.phase) {
     case "waiting_for_approval":
       return input.preferences.notifyOnApproval;
@@ -335,7 +332,7 @@ export function shouldNotify(input: {
 
 export function liveActivityAlert(input: {
   readonly state: RelayAgentActivityState | null;
-  readonly previous: RelayAgentActivityAggregateState | null;
+  readonly previous: RelayAgentActivityState["phase"] | null;
   readonly preferences: RelayAgentAwarenessPreferences;
 }): { readonly title: string; readonly body: string } | null {
   if (!shouldNotify(input) || !input.state) return null;

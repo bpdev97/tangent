@@ -97,12 +97,18 @@ a terminal state, the relay sends the configured notification and keeps the comp
 updateable for five minutes. New work during that grace period reuses the activity; otherwise the
 relay ends it and clears its update token.
 
-The relay advances each channel's watermark only after APNs accepts that delivery. A transient
-failure therefore leaves an identical publication eligible for retry. If a standard notification
-succeeds but its Live Activity update fails, the retry sends only the Live Activity update; if the
-standard notification fails but APNs accepts the alert embedded in the Live Activity update, that
-alert satisfies the notification channel as well. Invalid tokens are cleared so the app can
-re-register them.
+The relay commits each publication and its pending deliveries together in SQLite before acknowledging
+it. Transient APNs failures retry without another server publication, including after relay restart.
+Retries back off from 30 seconds to five minutes, stop after six delivery attempts, and expire with
+the activity. A newer state for the same device and thread replaces the pending state, so resuming
+work cancels an undelivered approval alert. HTTP 200 means the relay accepted responsibility for
+this bounded delivery process; it does not mean the phone displayed a notification.
+
+Notification phases are stored per device, environment, and thread, independently of the five-row
+Live Activity display. Successful notification delivery is retained when only the Live Activity
+channel needs retrying. A successful alert embedded in a Live Activity also satisfies notification
+delivery. Invalid tokens are cleared so the app can re-register them. A crash after Apple accepts
+a request but before SQLite records success can cause a repeat.
 
 ## Retention and delivery bounds
 

@@ -9,11 +9,13 @@ const RUNNING_TTL_MS = 2 * 60 * 60 * 1_000;
 const WAITING_TTL_MS = 24 * 60 * 60 * 1_000;
 const TERMINAL_TTL_MS = 15 * 60 * 1_000;
 
-export function isTerminal(state: RelayAgentActivityState): boolean {
+export function isTerminal(state: Pick<RelayAgentActivityState, "phase">): boolean {
   return state.phase === "completed" || state.phase === "failed";
 }
 
-export function activityExpiresAtMs(state: RelayAgentActivityState): number {
+export function activityExpiresAtMs(
+  state: Pick<RelayAgentActivityState, "phase" | "updatedAt">,
+): number {
   const updatedAt = Date.parse(state.updatedAt);
   if (!Number.isFinite(updatedAt)) return 0;
   if (isTerminal(state)) return updatedAt + TERMINAL_TTL_MS;
