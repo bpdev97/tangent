@@ -9,6 +9,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
 } from "react";
@@ -79,6 +80,7 @@ export function LinearPrBadge(props: {
     reportFailure: false,
   });
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
+  const requestGeneration = useRef(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [resolution, setResolution] = useState<LinearPrDestinationResolution | null>(null);
   const [loading, setLoading] = useState(false);
@@ -90,8 +92,17 @@ export function LinearPrBadge(props: {
 
   useEffect(() => {
     setResolution(null);
+    setLoading(false);
     setTransportFailed(false);
-  }, [props.pr.url, linear.apiKeyRedacted, linear.reviewRepositories]);
+    return () => {
+      requestGeneration.current += 1;
+    };
+  }, [
+    props.pr.url,
+    props.threadRef.environmentId,
+    linear.apiKeyRedacted,
+    linear.reviewRepositories,
+  ]);
 
   const handleGitHubClick = useCallback(
     (event: ReactMouseEvent<HTMLElement>) => {
@@ -115,12 +126,14 @@ export function LinearPrBadge(props: {
 
   const load = useCallback(
     async (refresh = false): Promise<LinearPrDestinationResolution | null> => {
+      const generation = ++requestGeneration.current;
       setLoading(true);
       setTransportFailed(false);
       const result = await resolveDestinations({
         environmentId: props.threadRef.environmentId,
         input: { prUrl: props.pr.url, ...(refresh ? { refresh: true } : {}) },
       });
+      if (generation !== requestGeneration.current) return null;
       setLoading(false);
       if (result._tag === "Failure") {
         if (!isAtomCommandInterrupted(result)) setTransportFailed(true);
@@ -138,7 +151,8 @@ export function LinearPrBadge(props: {
       if (isPreviewSupportedInRuntime()) {
         props.onThreadActivate(props.threadRef);
         const reviewUrl = currentResolution?.review?.url ?? directReviewUrl;
-        const lookup = currentResolution === null ? load() : Promise.resolve(currentResolution);
+        const lookup =
+          resolutionOverride === undefined ? load() : Promise.resolve(currentResolution);
         const result = await openLinearPreviewDestination({
           threadRef: props.threadRef,
           destinationUrl: url,
@@ -203,9 +217,9 @@ export function LinearPrBadge(props: {
   const handleMenuOpenChange = useCallback(
     (open: boolean) => {
       setMenuOpen(open);
-      if (open && resolution === null && !loading) void load();
+      if (open) void load();
     },
-    [load, loading, resolution],
+    [load],
   );
 
   const handleLinearClick = useCallback(
@@ -215,7 +229,7 @@ export function LinearPrBadge(props: {
       const nextResolution =
         linear.ticketOpenBehavior === "linear-app" && directReviewUrl !== null
           ? resolution
-          : (resolution ?? (await load()));
+          : await load();
       const resolved = nextResolution?.status === "resolved" ? nextResolution : null;
       const destinationUrls = linearPrPrimaryDestinationUrls({
         behavior: linear.ticketOpenBehavior,
