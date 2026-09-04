@@ -21,7 +21,7 @@ diffs.
   `personal-ios-release.yml`.
 
 The upstream release workflows remain in the tree for mergeability and must stay disabled in this
-repository's Actions settings. Tangent workflows begin with `personal-`.
+repository's Actions settings or explicitly restricted to the upstream repository. Tangent workflows begin with `personal-`.
 
 ## Distribution identity
 

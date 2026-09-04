@@ -20,7 +20,9 @@ const changed = git("diff", "--name-only", "--diff-filter=ACDMRT", manifest.base
   .filter(Boolean);
 const untracked = git("ls-files", "--others", "--exclude-standard").split("\n").filter(Boolean);
 const missing = [...new Set([...changed, ...untracked])].filter((path) => !paths.has(path));
-const obsolete = [...paths.keys()].filter((path) => !NodeFS.existsSync(path));
+const obsolete = [...paths.keys()].filter(
+  (path) => !NodeFS.existsSync(path) && !changed.includes(path),
+);
 if (missing.length || obsolete.length) {
   throw new Error(
     [

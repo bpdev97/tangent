@@ -6,7 +6,7 @@ feature IDs. Shared registration files can have several owners. This is a review
 not permission to replace a whole shared file with the fork version.
 
 Run `node scripts/check-fork.ts` from the repository root. It checks upstream ancestry, rejects
-unregistered tracked and untracked paths, rejects deleted inventory entries, and prints focused
+unregistered tracked and untracked paths, rejects obsolete inventory entries, and prints focused
 test commands derived from each feature's test files. Add or remove ownership entries in the same
 PR as a path change. When upstream absorbs a feature, remove its implementation, tests that only
 cover the removed delta, and inventory entry after checking its documented replacement criteria.
