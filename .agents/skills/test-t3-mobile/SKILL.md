@@ -26,11 +26,13 @@ Do not treat unavailable iOS tooling as a blocker when Android is a valid repres
 - Use `vp run ios:dev` or `vp run android:dev` only when an Expo clean prebuild is actually required; both commands regenerate the native project.
 - If the user requested no native rebuild and no compatible app is installed, reuse an existing compatible `.app` or `.apk` artifact when available. Otherwise report the missing dev client instead of silently rebuilding.
 
-The development identity on both platforms is:
+Read `downstream/mobile-config.ts` and `apps/mobile/app.config.ts` for the canonical development
+identity. The current values are:
 
-- App: `T3 Code Dev`
-- Bundle/package identifier: `com.t3tools.t3code.dev`
-- URL scheme: `t3code-dev`
+- App: `Tangent Dev`
+- iOS bundle identifier: `com.bpdev97.t3code.ios.dev`
+- Android package identifier: `com.t3tools.t3code.dev`
+- URL scheme: `bpdev-code-dev`
 
 Bundle or package presence proves the correct variant, not native compatibility. Reuse it only when the current changes did not alter its Expo SDK, native dependencies, config plugins, entitlements, generated project, or native source.
 
@@ -72,14 +74,14 @@ Enter the complete `http://` origin to make the test transport explicit. Bare IP
 
 Run Metro from `apps/mobile`.
 
-1. Inspect any process on the intended Metro port and its `/status` response. Reuse it only when it is healthy, belongs to this worktree, and matches `APP_VARIANT=development`, `--dev-client`, and scheme `t3code-dev`.
+1. Inspect any process on the intended Metro port and its `/status` response. Reuse it only when it is healthy, belongs to this worktree, and matches `APP_VARIANT=development`, `--dev-client`, and scheme `bpdev-code-dev`.
 2. Never kill another worktree's Metro. Use a free explicit port when necessary.
 3. Run `vp run dev:client` on the standard port. For another port, retain the complete development identity:
 
    ```bash
    APP_VARIANT=development vp exec expo start \
      --dev-client \
-     --scheme t3code-dev \
+     --scheme bpdev-code-dev \
      --lan \
      --port <metro-port>
    ```
@@ -92,16 +94,16 @@ Run Metro from `apps/mobile`.
 
 Use `ios-debugger-agent` to select one UDID and set these XcodeBuildMCP session defaults:
 
-- Workspace: `<repo>/apps/mobile/ios/T3CodeDev.xcworkspace`
-- Scheme: `T3CodeDev`
+- Workspace: `<repo>/apps/mobile/ios/TangentDev.xcworkspace`
+- Scheme: `TangentDev`
 - Configuration: `Debug`
 - Simulator ID: the selected UDID
-- Bundle ID: `com.t3tools.t3code.dev`
+- Bundle ID: `com.bpdev97.t3code.ios.dev`
 
 Check the installed client with:
 
 ```bash
-xcrun simctl get_app_container <simulator-udid> com.t3tools.t3code.dev app
+xcrun simctl get_app_container <simulator-udid> com.bpdev97.t3code.ios.dev app
 xcrun simctl openurl <simulator-udid> <printed-dev-client-url>
 ```
 
@@ -134,12 +136,13 @@ Use the bundled helper from the repository root. It issues a fresh credential ag
   android <emulator-serial> <server-port> <base-dir>
 ```
 
-Run only the command for the selected platform. The helper uses `http://127.0.0.1:<server-port>` for iOS and `http://10.0.2.2:<server-port>` for Android. Pass a fifth argument only when testing a non-development URL scheme.
+Run only the command for the selected platform. The helper uses `http://127.0.0.1:<server-port>` for iOS and `http://10.0.2.2:<server-port>` for Android. The helper reads the development scheme from `downstream/mobile-config.ts`. Pass a fifth argument
+only when testing a non-development URL scheme.
 
 The helper opens this registered route:
 
 ```text
-t3code-dev://connections/new?pairingUrl=<encoded-pairing-url>&autoConnect=1
+bpdev-code-dev://connections/new?pairingUrl=<encoded-pairing-url>&autoConnect=1
 ```
 
 The Add Environment route owns the behavior: `pairingUrl` prefills its normal host and token inputs, while `autoConnect=1` submits once in development builds and returns to Home after success. Without `autoConnect`, the same route only prefills the form for manual inspection.
@@ -168,7 +171,7 @@ Exercise only the affected flow on one representative device unless the change s
 
 1. Confirm the app connected to the intended disposable environment instead of merely rendering an empty disconnected state.
 2. Capture the relevant final state.
-3. Remove the disposable environment from T3 Code Dev.
+3. Remove the disposable environment from Tangent Dev.
 4. Remove any `adb reverse` rule created for this test with `adb -s <emulator-serial> reverse --remove tcp:<metro-port>`.
 5. Stop only the serve-sim, Metro, backend, emulator, and log processes started by this test.
 6. Remove only base directories and temporary Git repositories deliberately created for this test. Preserve them when they contain useful reproduction evidence.
@@ -176,6 +179,10 @@ Exercise only the affected flow on one representative device unless the change s
 Keep local verification focused. Do not turn this workflow into a full repository test run.
 
 ## Troubleshoot predictable failures
+
+- **Loopback Metro binds only to IPv6:** retain `--localhost` and add
+  `NODE_OPTIONS=--dns-result-order=ipv4first` when the simulator requests `127.0.0.1`.
+  Confirm `/status` responds on that address before reopening the dev-client URL.
 
 - **Old UI or an old error appears:** verify Metro's worktree, variant, URL, and port before diagnosing the app.
 - **Metro serves stale or invalid transforms after those checks:** stop the owned Metro process and run `vp run dev:client:reset` once on the standard port. For a custom port, add `--clear` to the complete explicit `expo start` command above.

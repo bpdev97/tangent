@@ -260,7 +260,10 @@
     {
       "features": ["FORK-MAINT-001"],
       "paths": [
+        ".agents/skills/ios-debugger-agent/SKILL.md",
         ".agents/skills/test-t3-app/SKILL.md",
+        ".agents/skills/test-t3-mobile/SKILL.md",
+        ".agents/skills/test-t3-mobile/scripts/pair-client.sh",
         ".dockerignore",
         ".github/workflows/deploy-relay.yml",
         ".github/workflows/mobile-fingerprint-check.yml",

@@ -20,6 +20,10 @@ If the tools are missing:
 
 Do not ask contributors to install the OpenAI `build-ios-apps` plugin globally.
 
+If the selected beta Xcode lacks `SimulatorKit.framework`, use the pinned CLI with a per-command
+`DEVELOPER_DIR` pointing to an installed Xcode that contains the framework. Keep the same simulator
+UDID and target current accessibility labels; do not change the machine-wide Xcode selection.
+
 ## Establish one simulator context
 
 1. Call `session_show_defaults` before discovery, build, launch, or UI work.
