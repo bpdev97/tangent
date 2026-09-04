@@ -27,6 +27,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
       - id: release-meta
         name: Resolve personal release version
         shell: bash
@@ -44,13 +51,6 @@ jobs:
           version="$(node scripts/personal-release-version.ts "$DISPATCH_VERSION" "$(cat "$tags_file")")"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=personal-v$version" >> "$GITHUB_OUTPUT"
-
-      - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@v1
-        with:
-          node-version-file: package.json
-          cache: true
-          run-install: true
 
       - name: Ensure Electron runtime is installed
         run: vp run --filter @t3tools/desktop ensure:electron
