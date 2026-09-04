@@ -20,6 +20,7 @@ import {
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
@@ -39,7 +40,11 @@ import {
 } from "../Errors.ts";
 import type { EventNdjsonLogger } from "../Layers/EventNdjsonLogger.ts";
 import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
-import { type HermesGatewayConnection, type HermesGatewayEvent } from "./HermesGatewayClient.ts";
+import {
+  type HermesGatewayConnection,
+  type HermesGatewayEvent,
+  type HermesGatewayRequestOptions,
+} from "./HermesGatewayClient.ts";
 import { makeHermesGatewayRuntime, type HermesGatewayRuntime } from "./HermesGatewayRuntime.ts";
 import {
   hermesApprovalChoice,
@@ -80,6 +85,8 @@ interface HermesSessionContext {
   readonly pendingInteractions: Map<ApprovalRequestId, PendingInteraction>;
   readonly toolItems: Map<string, HermesToolState>;
   readonly eventQueue: Queue.Queue<HermesGatewayEvent>;
+  readonly scope: Scope.Closeable;
+  turnAbort: AbortController | undefined;
   session: ProviderSession;
   turns: Array<{ id: TurnId; items: Array<unknown> }>;
   activeTurnId: TurnId | undefined;
@@ -668,9 +675,14 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
     context: HermesSessionContext,
     method: string,
     params: Readonly<Record<string, unknown>>,
+    options: HermesGatewayRequestOptions = {},
   ) =>
     Effect.tryPromise({
-      try: () => context.client.request<T>(method, params),
+      try: (signal) =>
+        context.client.request<T>(method, params, {
+          ...options,
+          signal: options.signal ? AbortSignal.any([signal, options.signal]) : signal,
+        }),
       catch: (cause) => gatewayRequestError(context.threadId, method, cause),
     });
 
@@ -790,6 +802,7 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
     function* (
       context: HermesSessionContext,
       shouldAbandon: (pending: PendingInteraction) => boolean = () => true,
+      turnId = context.activeTurnId,
     ) {
       for (const [requestId, pending] of context.pendingInteractions) {
         if (!shouldAbandon(pending)) continue;
@@ -801,7 +814,7 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
             provider: HERMES_DRIVER_KIND,
             providerInstanceId: boundInstanceId,
             threadId: context.threadId,
-            ...(context.activeTurnId ? { turnId: context.activeTurnId } : {}),
+            ...(turnId ? { turnId } : {}),
             requestId: RuntimeRequestId.make(requestId),
             payload: { requestType: pending.requestType, decision: "cancelled" },
           });
@@ -813,7 +826,7 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
           provider: HERMES_DRIVER_KIND,
           providerInstanceId: boundInstanceId,
           threadId: context.threadId,
-          ...(context.activeTurnId ? { turnId: context.activeTurnId } : {}),
+          ...(turnId ? { turnId } : {}),
           requestId: RuntimeRequestId.make(requestId),
           payload: { answers: {} },
         });
@@ -825,11 +838,14 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
     context: HermesSessionContext,
     state: "completed" | "failed" | "cancelled",
     detail?: string,
+    expectedTurnId = context.activeTurnId,
   ) {
     const turnId = context.activeTurnId;
-    if (!turnId) return;
-    yield* abandonPendingInteractions(context);
+    if (!turnId || turnId !== expectedTurnId) return;
     context.activeTurnId = undefined;
+    context.turnAbort?.abort();
+    context.turnAbort = undefined;
+    yield* abandonPendingInteractions(context, undefined, turnId);
     context.assistantItemId = undefined;
     context.assistantSegmentIndex = 0;
     context.assistantOutputText = "";
@@ -896,31 +912,50 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
   const submitPrompt = (
     context: HermesSessionContext,
     prompt: string,
+    signal: AbortSignal,
   ): Effect.Effect<void, ProviderAdapterError> =>
-    request<{ readonly status?: string }>(context, "prompt.submit", {
-      session_id: context.liveSessionId,
-      text: prompt,
-    }).pipe(Effect.asVoid);
+    request<{ readonly status?: string }>(
+      context,
+      "prompt.submit",
+      {
+        session_id: context.liveSessionId,
+        text: prompt,
+      },
+      { signal, timeoutMs: null },
+    ).pipe(Effect.asVoid);
 
   const executeSlashCommand = Effect.fn("HermesAdapter.executeSlashCommand")(function* (
     context: HermesSessionContext,
     initialSlash: HermesSlashCommand,
     preparePrompt: (message: string) => string,
+    signal: AbortSignal,
   ) {
     let slash = initialSlash;
     const aliases = new Set([slash.name.toLowerCase()]);
     while (true) {
-      const slashExec = yield* request<unknown>(context, "slash.exec", {
-        session_id: context.liveSessionId,
-        command: slash.command,
-      }).pipe(Effect.result);
+      const slashExec = yield* request<unknown>(
+        context,
+        "slash.exec",
+        {
+          session_id: context.liveSessionId,
+          command: slash.command,
+        },
+        { signal, timeoutMs: null },
+      ).pipe(Effect.result);
+      if (signal.aborted) return;
       const response = Result.isSuccess(slashExec)
         ? slashExec.success
-        : yield* request<unknown>(context, "command.dispatch", {
-            session_id: context.liveSessionId,
-            name: slash.name,
-            arg: slash.arg,
-          });
+        : yield* request<unknown>(
+            context,
+            "command.dispatch",
+            {
+              session_id: context.liveSessionId,
+              name: slash.name,
+              arg: slash.arg,
+            },
+            { signal, timeoutMs: null },
+          );
+      if (signal.aborted) return;
       const dispatch = parseHermesCommandDispatch(response);
 
       if (!dispatch) {
@@ -978,7 +1013,7 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
           issue: `Hermes returned an empty ${dispatch.type} command payload for /${slash.name}.`,
         });
       }
-      yield* submitPrompt(context, preparePrompt(message));
+      yield* submitPrompt(context, preparePrompt(message), signal);
       return;
     }
   });
@@ -1444,7 +1479,12 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
         if (existing && !existing.stopped) return existing.session;
         let context: HermesSessionContext | undefined;
         const client = yield* runtime.connect((event) => {
-          if (context) runFork(Queue.offer(context.eventQueue, event));
+          if (!context || context.stopped) return;
+          if (event.type === "transport.closed") {
+            runFork(withLock(context.threadId, stopSessionInternal(context, true)));
+          } else {
+            runFork(Queue.offer(context.eventQueue, event));
+          }
         });
         const cursor = parseHermesGatewayConversationCursor(input.resumeCursor);
         const requestedModel =
@@ -1533,6 +1573,8 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
           pendingInteractions: new Map(),
           toolItems: new Map(),
           eventQueue: yield* Queue.unbounded<HermesGatewayEvent>(),
+          scope: yield* Scope.fork(parentScope),
+          turnAbort: undefined,
           session,
           turns: [],
           activeTurnId: undefined,
@@ -1546,10 +1588,18 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
           stopped: false,
         };
         sessions.set(input.threadId, context);
+        const sessionContext = context;
+        yield* Scope.addFinalizer(
+          context.scope,
+          Effect.sync(() => client.close()).pipe(
+            Effect.andThen(Queue.shutdown(context.eventQueue)),
+            Effect.asVoid,
+          ),
+        );
         yield* Queue.take(context.eventQueue).pipe(
-          Effect.flatMap((event) => handleGatewayEvent(context!, event)),
+          Effect.flatMap((event) => handleGatewayEvent(sessionContext, event)),
           Effect.forever,
-          Effect.forkIn(parentScope),
+          Effect.forkIn(context.scope),
         );
 
         if (cursor && requestedModel && requestedModel.id !== gatewayModel) {
@@ -1660,6 +1710,8 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
         }
 
         const turnId = TurnId.make(yield* uuid);
+        const turnAbort = new AbortController();
+        context.turnAbort = turnAbort;
         context.activeTurnId = turnId;
         context.turns = [...context.turns, { id: turnId, items: [{ prompt, attachments }] }];
         context.session = {
@@ -1683,12 +1735,16 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
         // and T3 can continue receiving ordered gateway events.
         yield* (
           slashCommand
-            ? executeSlashCommand(context, slashCommand, prepareCommandPrompt)
-            : submitPrompt(context, prompt || "Please inspect the attached image.")
+            ? executeSlashCommand(context, slashCommand, prepareCommandPrompt, turnAbort.signal)
+            : submitPrompt(
+                context,
+                prompt || "Please inspect the attached image.",
+                turnAbort.signal,
+              )
         ).pipe(
-          Effect.tapError((error) => finishTurn(context, "failed", error.message)),
+          Effect.tapError((error) => finishTurn(context, "failed", error.message, turnId)),
           Effect.ignore,
-          Effect.forkIn(parentScope),
+          Effect.forkIn(context.scope),
         );
         return { threadId: input.threadId, turnId, resumeCursor: context.session.resumeCursor };
       }),
@@ -1794,14 +1850,22 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
 
   const stopSessionInternal = Effect.fn("HermesAdapter.stopSessionInternal")(function* (
     context: HermesSessionContext,
+    disconnected = false,
   ) {
     if (context.stopped) return;
-    yield* abandonPendingInteractions(context);
     context.stopped = true;
-    yield* request(context, "session.close", { session_id: context.liveSessionId }).pipe(
-      Effect.ignore,
+    yield* finishTurn(
+      context,
+      disconnected ? "failed" : "cancelled",
+      disconnected ? "Hermes gateway disconnected." : undefined,
     );
-    context.client.close();
+    yield* abandonPendingInteractions(context);
+    if (!disconnected) {
+      yield* request(context, "session.close", { session_id: context.liveSessionId }).pipe(
+        Effect.ignore,
+      );
+    }
+    yield* Scope.close(context.scope, Exit.void);
     sessions.delete(context.threadId);
     const { activeTurnId: _activeTurnId, ...session } = context.session;
     context.session = { ...session, status: "closed", updatedAt: yield* nowIso };
@@ -1811,7 +1875,9 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
       provider: HERMES_DRIVER_KIND,
       providerInstanceId: boundInstanceId,
       threadId: context.threadId,
-      payload: { reason: "stopped", exitKind: "graceful" },
+      payload: disconnected
+        ? { reason: "Hermes gateway disconnected.", recoverable: true }
+        : { reason: "stopped", exitKind: "graceful" },
     });
   });
 
@@ -1850,7 +1916,13 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
       }),
     );
   const stopSession: ProviderAdapterShape<ProviderAdapterError>["stopSession"] = (threadId) =>
-    withLock(threadId, requireSession(threadId).pipe(Effect.flatMap(stopSessionInternal)));
+    withLock(
+      threadId,
+      Effect.gen(function* () {
+        const context = yield* requireSession(threadId);
+        yield* stopSessionInternal(context);
+      }),
+    );
   const listSessions = () =>
     Effect.sync(() => Array.from(sessions.values(), (context) => ({ ...context.session })));
   const hasSession = (threadId: ThreadId) =>
@@ -1859,7 +1931,9 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
       return !!context && !context.stopped;
     });
   const stopAll = () =>
-    Effect.forEach(Array.from(sessions.values()), stopSessionInternal, { discard: true });
+    Effect.forEach(Array.from(sessions.values()), (context) => stopSessionInternal(context), {
+      discard: true,
+    });
 
   yield* Effect.addFinalizer(() =>
     stopAll().pipe(Effect.ignore, Effect.andThen(PubSub.shutdown(events))),

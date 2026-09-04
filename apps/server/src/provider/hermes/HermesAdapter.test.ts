@@ -1,6 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Deferred from "effect/Deferred";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -19,7 +20,11 @@ import {
 } from "@t3tools/shared/genericChat";
 import { ServerConfig } from "../../config.ts";
 import { makeHermesAdapter } from "./HermesAdapter.ts";
-import type { HermesGatewayConnection, HermesGatewayEvent } from "./HermesGatewayClient.ts";
+import type {
+  HermesGatewayConnection,
+  HermesGatewayEvent,
+  HermesGatewayRequestOptions,
+} from "./HermesGatewayClient.ts";
 import type { HermesGatewayRuntime } from "./HermesGatewayRuntime.ts";
 
 const decodeSettings = Schema.decodeSync(HermesSettings);
@@ -36,13 +41,19 @@ function asRecord(value: unknown): Readonly<Record<string, unknown>> {
 class FakeGateway implements HermesGatewayConnection {
   readonly requests: Array<{ method: string; params: Readonly<Record<string, unknown>> }> = [];
   promptSubmit: Promise<unknown> | undefined;
+  onPrompt: ((options: HermesGatewayRequestOptions) => void) | undefined;
   slashExecResult: unknown = { output: "(no output)" };
   slashExecError: Error | undefined;
   commandDispatchResult: unknown = { type: "exec", output: "(no output)" };
   closed = false;
 
-  async request<T>(method: string, params: Readonly<Record<string, unknown>> = {}): Promise<T> {
+  async request<T>(
+    method: string,
+    params: Readonly<Record<string, unknown>> = {},
+    options: HermesGatewayRequestOptions = {},
+  ): Promise<T> {
     this.requests.push({ method, params });
+    if (method === "prompt.submit") this.onPrompt?.(options);
     if (method === "prompt.submit" && this.promptSubmit) {
       return (await this.promptSubmit) as T;
     }
@@ -95,6 +106,90 @@ const testLayer = ServerConfig.layerTest(process.cwd(), {
 }).pipe(Layer.provideMerge(NodeServices.layer));
 
 it.layer(testLayer)("HermesAdapter gateway", (it) => {
+  it.effect("cancels an interrupted RPC without failing the next turn", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const gateway = new FakeGateway();
+        const pending = Promise.withResolvers<unknown>();
+        const submitted = Promise.withResolvers<HermesGatewayRequestOptions>();
+        gateway.promptSubmit = pending.promise;
+        gateway.onPrompt = submitted.resolve;
+        const emitter: { current?: (event: HermesGatewayEvent) => void } = {};
+        const adapter = yield* makeHermesAdapter(decodeSettings({}), {
+          gatewayRuntime: fakeRuntime(gateway, emitter),
+        });
+        const completed =
+          yield* Deferred.make<Extract<ProviderRuntimeEvent, { type: "turn.completed" }>>();
+        const threadId = ThreadId.make("hermes-late-failure");
+        yield* adapter.startSession({ threadId, runtimeMode: "approval-required" });
+        const first = yield* adapter.sendTurn({ threadId, input: "first" });
+        const options = yield* Effect.promise(() => submitted.promise);
+        assert.equal(options.timeoutMs, null);
+        yield* adapter.interruptTurn(threadId, first.turnId);
+        assert.isTrue(options.signal?.aborted);
+        gateway.promptSubmit = undefined;
+        const second = yield* adapter.sendTurn({ threadId, input: "second" });
+        yield* Stream.runForEach(adapter.streamEvents, (event) =>
+          event.type === "turn.completed" ? Deferred.succeed(completed, event) : Effect.void,
+        ).pipe(Effect.forkChild);
+        yield* Effect.yieldNow;
+        pending.reject(new Error("old gateway failure"));
+        emitter.current?.({
+          type: "message.complete",
+          session_id: "live-1",
+          payload: { text: "second completed", status: "complete" },
+        });
+        const event = yield* Deferred.await(completed);
+        assert.equal(event.turnId, second.turnId);
+        assert.equal(event.payload.state, "completed");
+      }),
+    ),
+  );
+
+  it.effect("closes a disconnected session and releases its pending turn", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const gateway = new FakeGateway();
+        const submitted = Promise.withResolvers<HermesGatewayRequestOptions>();
+        gateway.onPrompt = submitted.resolve;
+        gateway.promptSubmit = new Promise(() => undefined);
+        const emitter: { current?: (event: HermesGatewayEvent) => void } = {};
+        const adapter = yield* makeHermesAdapter(decodeSettings({}), {
+          gatewayRuntime: fakeRuntime(gateway, emitter),
+        });
+        const exited =
+          yield* Deferred.make<Extract<ProviderRuntimeEvent, { type: "session.exited" }>>();
+        const events: ProviderRuntimeEvent[] = [];
+        yield* Stream.runForEach(adapter.streamEvents, (event) =>
+          Effect.gen(function* () {
+            events.push(event);
+            if (event.type === "session.exited") yield* Deferred.succeed(exited, event);
+          }),
+        ).pipe(Effect.forkChild);
+        yield* Effect.yieldNow;
+        const threadId = ThreadId.make("hermes-disconnected");
+        yield* adapter.startSession({ threadId, runtimeMode: "approval-required" });
+        const turn = yield* adapter.sendTurn({ threadId, input: "wait" });
+        const options = yield* Effect.promise(() => submitted.promise);
+        emitter.current?.({ type: "transport.closed" });
+        const event = yield* Deferred.await(exited);
+        assert.isTrue(event.payload.recoverable);
+        assert.isTrue(options.signal?.aborted);
+        assert.isTrue(gateway.closed);
+        assert.isFalse(yield* adapter.hasSession(threadId));
+        assert.deepEqual(yield* adapter.listSessions(), []);
+        assert.isTrue(
+          events.some(
+            (event) =>
+              event.type === "turn.completed" &&
+              event.turnId === turn.turnId &&
+              event.payload.state === "failed",
+          ),
+        );
+      }),
+    ),
+  );
+
   it.effect("streams native gateway events and persists a durable gateway cursor", () =>
     Effect.scoped(
       Effect.gen(function* () {

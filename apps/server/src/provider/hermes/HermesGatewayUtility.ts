@@ -56,19 +56,21 @@ export const makeHermesGatewayUtility = Effect.fn("makeHermesGatewayUtility")(fu
   const runtime = providedRuntime ?? (yield* makeHermesGatewayRuntime(settings, environment));
   const lock = yield* Semaphore.make(1);
   let client: HermesGatewayConnection | undefined;
-  let cachedModels: HermesModelOptions | undefined;
-  let cachedSetupStatus: { readonly provider_configured?: boolean } | undefined;
 
   const getClient = Effect.gen(function* () {
     if (client) return client;
-    client = yield* runtime.connect(() => undefined);
-    return client;
+    let connection: HermesGatewayConnection | undefined;
+    connection = yield* runtime.connect((event) => {
+      if (event.type === "transport.closed" && client === connection) client = undefined;
+    });
+    client = connection;
+    return connection;
   });
   const rpc = <T>(method: string, params: Readonly<Record<string, unknown>> = {}) =>
     Effect.gen(function* () {
       const gateway = yield* getClient;
       return yield* Effect.tryPromise({
-        try: () => gateway.request<T>(method, params),
+        try: (signal) => gateway.request<T>(method, params, { signal }),
         catch: (cause) =>
           new ProviderAdapterRequestError({
             provider: HERMES_DRIVER_KIND,
@@ -80,26 +82,10 @@ export const makeHermesGatewayUtility = Effect.fn("makeHermesGatewayUtility")(fu
       });
     });
 
-  const getModels = lock.withPermit(
-    Effect.suspend(() =>
-      cachedModels
-        ? Effect.succeed(cachedModels)
-        : rpc<HermesModelOptions>("model.options").pipe(
-            Effect.tap((models) => Effect.sync(() => (cachedModels = models))),
-          ),
-    ),
-  );
-  // Commands include profile-local quick commands and installed skills, so refresh the
-  // catalog whenever provider status is refreshed instead of pinning the startup result.
+  const getModels = lock.withPermit(rpc<HermesModelOptions>("model.options"));
   const getCommands = lock.withPermit(rpc<HermesCommandsCatalog>("commands.catalog"));
   const getSetupStatus = lock.withPermit(
-    Effect.suspend(() =>
-      cachedSetupStatus
-        ? Effect.succeed(cachedSetupStatus)
-        : rpc<{ readonly provider_configured?: boolean }>("setup.status").pipe(
-            Effect.tap((status) => Effect.sync(() => (cachedSetupStatus = status))),
-          ),
-    ),
+    rpc<{ readonly provider_configured?: boolean }>("setup.status"),
   );
   const generate: HermesGatewayUtility["generate"] = (input) =>
     lock.withPermit(

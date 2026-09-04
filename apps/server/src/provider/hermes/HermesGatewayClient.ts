@@ -34,7 +34,7 @@ interface PendingRequest {
   readonly method: string;
   readonly resolve: (value: unknown) => void;
   readonly reject: (cause: unknown) => void;
-  readonly timer: ReturnType<typeof setTimeout>;
+  readonly cleanup: () => void;
 }
 
 export interface HermesWebSocketLike {
@@ -56,8 +56,17 @@ export interface HermesGatewayClientOptions {
 }
 
 export interface HermesGatewayConnection {
-  request<T>(method: string, params?: Readonly<Record<string, unknown>>): Promise<T>;
+  request<T>(
+    method: string,
+    params?: Readonly<Record<string, unknown>>,
+    options?: HermesGatewayRequestOptions,
+  ): Promise<T>;
   close(): void;
+}
+
+export interface HermesGatewayRequestOptions {
+  readonly signal?: AbortSignal;
+  readonly timeoutMs?: number | null;
 }
 
 const DEFAULT_CONNECT_TIMEOUT_MS = 15_000;
@@ -117,6 +126,7 @@ export class HermesGatewayClient implements HermesGatewayConnection {
       const onError = () => {
         cleanup();
         reject(new Error("Could not connect to the Hermes gateway."));
+        this.close();
       };
 
       socket.addEventListener("open", onOpen);
@@ -130,40 +140,60 @@ export class HermesGatewayClient implements HermesGatewayConnection {
         this.#handleFrame(frame);
       });
       socket.addEventListener("close", () => {
-        if (this.#socket === socket) this.#socket = undefined;
         const cause = new Error("Hermes gateway connection closed.");
         cleanup();
         reject(cause);
+        if (this.#socket !== socket) return;
+        this.#socket = undefined;
         this.#rejectPending(cause);
+        this.#eventHandler({ type: "transport.closed" });
       });
     });
     await ready;
   }
 
-  request<T>(method: string, params: Readonly<Record<string, unknown>> = {}): Promise<T> {
+  request<T>(
+    method: string,
+    params: Readonly<Record<string, unknown>> = {},
+    options: HermesGatewayRequestOptions = {},
+  ): Promise<T> {
     const socket = this.#socket;
     if (!socket || socket.readyState !== 1) {
       return Promise.reject(new Error("Hermes gateway is not connected."));
     }
+    if (options.signal?.aborted) return Promise.reject(options.signal.reason);
     const id = `t3-${++this.#nextId}`;
     return new Promise<T>((resolve, reject) => {
-      // @effect-diagnostics-next-line globalTimers:off - Promise WebSocket boundary.
-      const timer = setTimeout(() => {
+      const timeoutMs =
+        options.timeoutMs === undefined ? this.#options.requestTimeoutMs : options.timeoutMs;
+      const fail = (cause: unknown) => {
+        cleanup();
         this.#pending.delete(id);
-        reject(new Error(`Hermes gateway request timed out: ${method}`));
-      }, this.#options.requestTimeoutMs);
+        reject(cause);
+      };
+      const timer =
+        timeoutMs === null
+          ? undefined
+          : // @effect-diagnostics-next-line globalTimers:off - Promise WebSocket boundary.
+            setTimeout(() => {
+              fail(new Error(`Hermes gateway request timed out: ${method}`));
+            }, timeoutMs);
+      const onAbort = () => fail(options.signal?.reason);
+      const cleanup = () => {
+        clearTimeout(timer);
+        options.signal?.removeEventListener("abort", onAbort);
+      };
+      options.signal?.addEventListener("abort", onAbort, { once: true });
       this.#pending.set(id, {
         method,
         resolve: resolve as (value: unknown) => void,
         reject,
-        timer,
+        cleanup,
       });
       try {
         socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
       } catch (cause) {
-        clearTimeout(timer);
-        this.#pending.delete(id);
-        reject(cause);
+        fail(cause);
       }
     });
   }
@@ -192,7 +222,7 @@ export class HermesGatewayClient implements HermesGatewayConnection {
     if (frame.id === undefined || frame.id === null) return;
     const pending = this.#pending.get(frame.id);
     if (!pending) return;
-    clearTimeout(pending.timer);
+    pending.cleanup();
     this.#pending.delete(frame.id);
     if (frame.error) pending.reject(new HermesGatewayRpcError(pending.method, frame.error));
     else pending.resolve(frame.result);
@@ -200,7 +230,7 @@ export class HermesGatewayClient implements HermesGatewayConnection {
 
   #rejectPending(cause: unknown): void {
     for (const pending of this.#pending.values()) {
-      clearTimeout(pending.timer);
+      pending.cleanup();
       pending.reject(cause);
     }
     this.#pending.clear();
