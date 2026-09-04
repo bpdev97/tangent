@@ -5,7 +5,7 @@ This repository builds Tangent, my personal distribution of
 and mobile. The separate name distinguishes the installed fork and its releases; the product keeps
 T3 Code's visual identity and vocabulary.
 
-It works with Claude Code, Codex, Cursor, Grok Build, OpenCode, and the fork's early-access Hermes
+It works with Claude Code, Codex, Cursor, Grok Build, OpenCode, Antigravity, and the fork's early-access Hermes
 Agent integration.
 
 ## "Wait, what are you selling me?"
@@ -24,6 +24,7 @@ We wanted something performant, remote-ready, and truly open. If we ever go the 
 > - Cursor: install [Cursor CLI](https://cursor.com/cli) and run `agent login`
 > - Grok Build: install [Grok Build CLI](https://x.ai/cli) and run `grok login`
 > - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
+> - Antigravity: enable it in Settings, then use **Install Antigravity** and **Sign in with Google**. No CLI is required.
 
 ### Run the server without installing
 
@@ -62,12 +63,12 @@ Full docs live in [docs/](./docs). There's no docs site yet.
 - [Install and first run](./docs/user/install.md)
 - [Permission modes](./docs/user/permission-modes.md)
 - [Keyboard shortcuts](./docs/user/keybindings.md)
-- [Customize a project icon](./docs/user/project-settings.md)
+- [Project settings](./docs/user/project-settings.md)
 - [Remote access from a phone or another machine](./docs/user/remote-access.md)
 - [Keeping app and server in sync](./docs/user/updating.md)
 - [Source control integrations](./docs/user/source-control.md)
 - Multiple accounts: [Codex](./docs/user/providers-codex.md) · [Claude](./docs/user/providers-claude.md)
-- Linux: [run T3 Code as a background service](./docs/user/background-service.md)
+- [Run T3 Code as a background service](./docs/user/background-service.md)
 
 Building from source? Start at [docs/internals/overview.md](./docs/internals/overview.md).
 

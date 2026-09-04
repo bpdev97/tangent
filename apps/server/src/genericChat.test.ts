@@ -27,6 +27,8 @@ function projectionQuery(project: Option.Option<OrchestrationProjectShell>) {
     getProjectShellById: () => Effect.succeed(project),
     getFirstActiveThreadIdByProjectId: () => Effect.die("unused"),
     getThreadCheckpointContext: () => Effect.die("unused"),
+    getThreadRuntimeContext: () => Effect.die("unused"),
+    getUserInputActivity: () => Effect.die("unused"),
     getFullThreadDiffContext: () => Effect.die("unused"),
     getThreadShellById: () => Effect.die("unused"),
     getThreadDetailById: () => Effect.die("unused"),
@@ -38,6 +40,8 @@ function projectionQuery(project: Option.Option<OrchestrationProjectShell>) {
 function orchestrationEngine(commands: Ref.Ref<ReadonlyArray<OrchestrationCommand>>) {
   return OrchestrationEngineService.of({
     readEvents: () => Stream.empty,
+    readThreadEvents: () => Stream.empty,
+    getThreadReplayStats: () => Effect.die("unused"),
     dispatch: (command) =>
       Ref.update(commands, (current) => [...current, command]).pipe(Effect.as({ sequence: 1 })),
     latestSequence: Effect.succeed(0),

@@ -1,3 +1,5 @@
+import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
+import { __setClientSettingsForTests } from "~/hooks/useSettings";
 import type { PreviewSessionSnapshot, ScopedThreadRef } from "@t3tools/contracts";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -26,6 +28,11 @@ const snapshot: PreviewSessionSnapshot = {
 };
 
 beforeEach(() => {
+  __setClientSettingsForTests({
+    ...DEFAULT_CLIENT_SETTINGS,
+    browserProfiles: [{ id: "work", name: "Work", kind: "persistent" }],
+    browserDefaultProfileId: "work",
+  });
   resetPreviewStateForTests();
   useRightPanelStore.setState({ byThreadKey: {} });
 });
@@ -53,6 +60,8 @@ describe("openUrlInPreviewSession", () => {
       input: {
         threadId: "thread-1",
         url: "https://linear.review/bpdev97/tangent/pull/52",
+        profileId: "work",
+        viewport: { _tag: "fill" },
       },
     });
     expect(

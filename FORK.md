@@ -43,16 +43,7 @@ upstream npm package.
 
 ## Active fork features
 
-The dated [2026-08-01 audit](docs/fork/audit-2026-08-01.md) records the complete downstream commit
-ledger and keep/restore review. The [2026-08-08 sync audit](docs/fork/audit-2026-08-08.md) records
-the previous upstream merge. The [2026-08-10 sync audit](docs/fork/audit-2026-08-10.md) records the
-next merge, the [2026-08-16 sync audit](docs/fork/audit-2026-08-16.md) records the following merge,
-the [2026-08-21 sync audit](docs/fork/audit-2026-08-21.md) records the next merge, the
-[2026-08-26 sync audit](docs/fork/audit-2026-08-26.md) records the previous merge, the
-[2026-08-27 sync audit](docs/fork/audit-2026-08-27.md) records the next merge, the
-[2026-08-29 sync audit](docs/fork/audit-2026-08-29.md) records the following merge, and the
-[2026-09-02 sync audit](docs/fork/audit-2026-09-02.md) records the latest upstream merge,
-compatibility decisions, and verification.
+The inventory below describes the current fork. Merged pull requests record individual syncs and fixes.
 
 | ID                 | Kept behavior                                                                                | Status               | Maintenance record                                                    | Focused verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ------------------ | -------------------------------------------------------------------------------------------- | -------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -372,8 +363,8 @@ pipelines.
 
 ## Merged upstream baseline
 
-The most recently merged upstream comparison baseline is `28ddaf759`, integrated on 2026-09-02.
-Update this line and the dated sync audit whenever Tangent merges a newer upstream baseline.
+The most recently merged upstream comparison baseline is `b7d6e6502`, integrated on 2026-09-04.
+Update this baseline when merging upstream; record validation in the pull request.
 
 ## Required verification
 

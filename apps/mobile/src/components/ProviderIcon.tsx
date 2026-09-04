@@ -1,3 +1,4 @@
+import { Image } from "expo-image";
 import { Path, Svg } from "react-native-svg";
 import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
 
@@ -28,6 +29,15 @@ export function ProviderIcon(props: ProviderIconProps) {
           strokeLinecap="round"
         />
       </Svg>
+    );
+  }
+  if (props.provider?.trim().toLowerCase() === "antigravity") {
+    return (
+      <Image
+        source={require("../../assets/antigravity.png")}
+        style={{ width: size, height: size }}
+        contentFit="contain"
+      />
     );
   }
 

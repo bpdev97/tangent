@@ -5,7 +5,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as Migrator from "effect/unstable/sql/Migrator";
 
 import { migrationManifest, runMigrations } from "./Migrations.ts";
-import * as NodeSqliteClient from "./NodeSqliteClient.ts";
+import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 
 for (const id of [36, 39, 41, 44, 45]) {
   it.effect(`upgrades a release with fork migration ${id} and leaves upstream IDs available`, () =>
