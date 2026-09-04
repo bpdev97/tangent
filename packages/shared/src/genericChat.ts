@@ -26,29 +26,15 @@ export function isGenericChatThread(
   return thread != null && isGenericChatProjectId(thread.projectId);
 }
 
+/** An explicit chat host never falls back to another environment. */
 export function findGenericChatProject<
   T extends { readonly id: string; readonly environmentId: string },
->(projects: ReadonlyArray<T>, preferredEnvironmentId?: string | null): T | null {
+>(projects: ReadonlyArray<T>, environmentId?: string | null): T | null {
   return (
     projects.find(
       (project) =>
-        isGenericChatProject(project) && project.environmentId === preferredEnvironmentId,
-    ) ??
-    projects.find(isGenericChatProject) ??
-    null
-  );
-}
-
-/**
- * Resolves the managed chat project on one exact environment. Unlike
- * `findGenericChatProject`, this never falls back to another host.
- */
-export function findGenericChatProjectInEnvironment<
-  T extends { readonly id: string; readonly environmentId: string },
->(projects: ReadonlyArray<T>, environmentId: string): T | null {
-  return (
-    projects.find(
-      (project) => isGenericChatProject(project) && project.environmentId === environmentId,
+        isGenericChatProject(project) &&
+        (environmentId == null || project.environmentId === environmentId),
     ) ?? null
   );
 }
