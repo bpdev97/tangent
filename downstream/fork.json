@@ -423,6 +423,13 @@
         "packages/contracts/src/settings.test.ts",
         "packages/contracts/src/settings.ts"
       ]
+    },
+    {
+      "features": ["MAINT"],
+      "paths": [
+        "apps/server/src/provider/Layers/AntigravityAdapter.ts",
+        "apps/server/src/provider/Layers/AntigravityAdapter.test.ts"
+      ]
     }
   ]
 }

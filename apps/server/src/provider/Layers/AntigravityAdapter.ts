@@ -217,7 +217,10 @@ const CLIENT_FILE_MAX_BYTES = 8 * 1024 * 1024;
 
 function isInsideRoot(path: Path.Path, root: string, candidate: string): boolean {
   const relative = path.relative(root, candidate);
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  return (
+    relative === "" ||
+    (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
+  );
 }
 
 /** Resolves an agent-supplied path and rejects anything outside the session roots. */
@@ -229,12 +232,34 @@ const resolveClientFilePath = Effect.fn("AntigravityAdapter.resolveClientFilePat
     readonly requestPath: string;
   }) {
     const { path } = input;
-    const resolved = path.resolve(input.requestPath);
-    // Follow symlinks on the parent so a link out of the workspace cannot escape it.
-    const parent = yield* input.fileSystem
-      .realPath(path.dirname(resolved))
-      .pipe(Effect.orElseSucceed(() => path.dirname(resolved)));
-    const real = path.join(parent, path.basename(resolved));
+    const invalidPath = () =>
+      EffectAcpErrors.AcpRequestError.invalidParams(
+        `Path '${input.requestPath}' is outside the session workspace.`,
+      );
+    let ancestor = path.resolve(input.requestPath);
+    const missing: string[] = [];
+    let real: string;
+    // Resolve the nearest existing ancestor, including a final file symlink.
+    while (true) {
+      const canonical = yield* input.fileSystem.realPath(ancestor).pipe(
+        Effect.map(Option.some),
+        Effect.catch((cause) =>
+          cause.reason._tag === "NotFound"
+            ? Effect.succeed(Option.none<string>())
+            : Effect.fail(invalidPath()),
+        ),
+      );
+      if (Option.isSome(canonical)) {
+        real = path.join(canonical.value, ...missing);
+        break;
+      }
+      const link = yield* input.fileSystem.readLink(ancestor).pipe(Effect.option);
+      if (Option.isSome(link)) return yield* invalidPath();
+      const parent = path.dirname(ancestor);
+      if (parent === ancestor) return yield* invalidPath();
+      missing.unshift(path.basename(ancestor));
+      ancestor = parent;
+    }
     const roots = yield* Effect.forEach(input.allowedRoots, (root) =>
       input.fileSystem.realPath(root).pipe(Effect.orElseSucceed(() => root)),
     );
