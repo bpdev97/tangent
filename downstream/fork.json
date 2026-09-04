@@ -423,6 +423,14 @@
         "packages/contracts/src/settings.test.ts",
         "packages/contracts/src/settings.ts"
       ]
+    },
+    {
+      "features": ["MAINT"],
+      "paths": [
+        "apps/server/src/provider/AntigravityInstallation.test.ts",
+        "apps/server/src/provider/Layers/CursorProvider.test.ts",
+        "apps/server/src/textGeneration/CodexTextGeneration.test.ts"
+      ]
     }
   ]
 }
