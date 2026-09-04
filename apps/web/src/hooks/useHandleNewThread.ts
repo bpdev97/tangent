@@ -7,7 +7,7 @@ import {
 import { DEFAULT_RUNTIME_MODE, type ScopedProjectRef, type ThreadId } from "@t3tools/contracts";
 import {
   GENERIC_CHAT_RUNTIME_MODE,
-  findGenericChatProjectInEnvironment,
+  findGenericChatProject,
   isGenericChatProject,
   isGenericChatProjectId,
 } from "@t3tools/shared/genericChat";
@@ -515,7 +515,7 @@ export function useHandleNewChat() {
     () =>
       chatHostEnvironmentId === null
         ? null
-        : findGenericChatProjectInEnvironment(projects, chatHostEnvironmentId),
+        : findGenericChatProject(projects, chatHostEnvironmentId),
     [chatHostEnvironmentId, projects],
   );
   const handleNewChat = useCallback(async (): Promise<void> => {

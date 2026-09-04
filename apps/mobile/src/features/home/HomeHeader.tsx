@@ -35,7 +35,6 @@ import {
   PROJECT_SORT_OPTIONS,
   THREAD_SORT_OPTIONS,
 } from "./home-list-options";
-import { resolveHomeHeaderPlacement } from "./home-header-placement";
 
 export type HomeHeaderEnvironment = HomeListFilterMenuEnvironment;
 
@@ -326,10 +325,11 @@ function IosHomeHeader(props: HomeHeaderProps) {
   const hasCustomListOptions = threadListV2Enabled
     ? props.selectedEnvironmentId !== null || props.selectedProjectKey !== null
     : hasCustomHomeListOptions(props);
-  const placement = resolveHomeHeaderPlacement({
-    bottomComposerPresent: props.bottomComposerPresent,
-    nativeMailSearchToolbarSupported: NATIVE_MAIL_SEARCH_TOOLBAR_SUPPORTED,
-  });
+  const placement = props.bottomComposerPresent
+    ? "top"
+    : NATIVE_MAIL_SEARCH_TOOLBAR_SUPPORTED
+      ? "native-mail-bottom"
+      : "legacy-bottom";
   const focusSearch = useCallback(() => {
     if (placement === "top") {
       setSearchActive(true);
