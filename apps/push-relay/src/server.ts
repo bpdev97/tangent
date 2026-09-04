@@ -112,6 +112,8 @@ export async function startServer(
   const maxPendingPublications = dependencies.maxPendingPublications ?? MAX_PENDING_PUBLICATIONS;
   let publishQueue = Promise.resolve();
   let pendingPublications = 0;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  let closing = false;
 
   const cancelActivityEnd = (deviceId: string): void => {
     const controller = activityEndTimers.get(deviceId);
@@ -178,13 +180,15 @@ export async function startServer(
     state: ReturnType<typeof decodePublish>["state"],
     aggregate: ReturnType<RelayStore["aggregate"]>,
     updateNotificationWatermark: boolean,
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     const alert = liveActivityAlert({
       state,
-      previous: target.lastNotificationAggregate,
+      previous: state ? store.notificationPhase(target, state) : null,
       preferences: target.preferences,
     });
 
+    let retryNotification = false;
+    let retryLiveActivity = false;
     let notificationDelivered = alert === null;
     if (alert && target.pushToken && state) {
       const result = await apns.sendNotification({
@@ -195,8 +199,9 @@ export async function startServer(
       });
       if (result.ok) {
         notificationDelivered = true;
-        store.recordNotificationAggregate(target.deviceId, aggregate);
+        store.recordNotificationPhase(target.deviceId, state);
       }
+      retryNotification = !result.ok && (result.status === 429 || result.status >= 500);
       if (result.invalidToken) store.clearPushToken(target.deviceId);
       if (!result.ok) {
         console.warn("APNs notification delivery failed", {
@@ -207,8 +212,8 @@ export async function startServer(
         });
       }
     }
-    if (alert === null && updateNotificationWatermark) {
-      store.recordNotificationAggregate(target.deviceId, aggregate);
+    if (alert === null && updateNotificationWatermark && state) {
+      store.recordNotificationPhase(target.deviceId, state);
     }
 
     const liveActivityChanged =
@@ -238,8 +243,10 @@ export async function startServer(
         }
       }
       if (result.ok && includesNotification) {
-        store.recordNotificationAggregate(target.deviceId, aggregate);
+        if (state) store.recordNotificationPhase(target.deviceId, state);
+        retryNotification = false;
       }
+      retryLiveActivity = !result.ok && (result.status === 429 || result.status >= 500);
       if (!result.ok) {
         console.warn("APNs Live Activity delivery failed", {
           deviceId: target.deviceId,
@@ -249,6 +256,44 @@ export async function startServer(
         });
       }
     }
+    return retryNotification || retryLiveActivity;
+  };
+
+  const drainDeliveries = async (): Promise<void> => {
+    const aggregate = store.aggregate();
+    await mapConcurrent(store.pendingDeliveries(), 4, async (delivery) => {
+      const target = store.target(delivery.deviceId);
+      try {
+        if (target && (await deliver(target, delivery.state, aggregate, true))) {
+          store.retryDelivery(delivery);
+        } else {
+          store.completeDelivery(delivery);
+        }
+      } catch (error) {
+        console.warn("APNs delivery deferred", { deviceId: delivery.deviceId, error });
+        store.retryDelivery(delivery);
+      }
+    });
+  };
+
+  const scheduleRetries = (): void => {
+    clearTimeout(retryTimer);
+    if (closing) return;
+    const next = store.nextDeliveryAt();
+    if (next === null) return;
+    // @effect-diagnostics-next-line globalTimers:off - Node HTTP service owns this timer.
+    retryTimer = setTimeout(
+      () => {
+        publishQueue = publishQueue
+          .then(drainDeliveries)
+          .catch((error) => {
+            console.error("Push delivery retry failed", { error });
+          })
+          .finally(scheduleRetries);
+      },
+      Math.max(0, next - Date.now()),
+    );
+    retryTimer.unref();
   };
 
   const server = NodeHttp.createServer(
@@ -330,15 +375,12 @@ export async function startServer(
           pendingPublications += 1;
           const publicationOperation = publishQueue
             .then(async () => {
-              const targets = store.targets();
-              store.publish(publication);
-              const aggregate = store.aggregate();
-              await mapConcurrent(targets, 4, (target) =>
-                deliver(target, publication.state, aggregate, true),
-              );
+              store.publishForDelivery(publication);
+              await drainDeliveries();
             })
             .finally(() => {
               pendingPublications -= 1;
+              scheduleRetries();
             });
           publishQueue = publicationOperation.catch(() => undefined);
           await publicationOperation;
@@ -371,9 +413,12 @@ export async function startServer(
     }
   }
   const address = server.address() as NodeNet.AddressInfo;
+  scheduleRetries();
   return {
     url: `http://${address.address}:${address.port}`,
     close: async () => {
+      closing = true;
+      clearTimeout(retryTimer);
       for (const controller of activityEndTimers.values()) controller.abort();
       activityEndTimers.clear();
       await new Promise<void>((resolve, reject) =>
