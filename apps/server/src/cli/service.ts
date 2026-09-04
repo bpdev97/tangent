@@ -2,6 +2,7 @@ import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { resolveServerReleaseArtifact } from "@t3tools/shared/serverRelease";
 import * as Terminal from "effect/Terminal";
 import { Command, Flag, GlobalFlag, Prompt } from "effect/unstable/cli";
 
@@ -15,6 +16,8 @@ import { projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
 
 const SERVICE_IDENTITY = PERSONAL_DISTRIBUTION.connect;
 const SERVICE_DISPLAY_NAME = SERVICE_IDENTITY.displayName;
+const serviceUpdateCommandForVersion = (version: string) =>
+  `npx --yes ${resolveServerReleaseArtifact({ repository: PERSONAL_DISTRIBUTION.repository, ...PERSONAL_DISTRIBUTION.serverRelease }, version).artifactUrl} service update`;
 
 export const bootServiceLayer = (config: ServerConfig.ServerConfig["Service"]) =>
   BootService.layer({
@@ -73,6 +76,10 @@ export function formatServiceStatus(
     return `${SERVICE_DISPLAY_NAME} service\n  Status: not installed\n  Next: Run \`t3 service install\`.`;
   }
   const installedVersion = status.installedVersion ?? cliVersion;
+  const problems = (status.problems ?? []).map(
+    (problem) =>
+      `  [${problem}] ${BootService.formatBootServiceProblem(problem, SERVICE_IDENTITY)}`,
+  );
   if (
     !status.current &&
     status.installedVersion !== undefined &&
@@ -83,7 +90,8 @@ export function formatServiceStatus(
       `  Status: installed · ${SERVICE_DISPLAY_NAME} ${installedVersion} (newer than this ${SERVICE_DISPLAY_NAME} ${cliVersion} CLI)`,
       `  Unit: ${status.unitPath}`,
       `  Logs: ${status.logPath}`,
-      "  Next: Install the matching Tangent GitHub Release to repair it, or pass `--allow-downgrade` explicitly.",
+      ...problems,
+      `  Next: Run \`${serviceUpdateCommandForVersion(installedVersion)}\` to repair it, or pass \`--allow-downgrade\` explicitly.`,
     ].join("\n");
   }
   return [
@@ -91,9 +99,8 @@ export function formatServiceStatus(
     `  Status: ${status.current ? `installed · ${SERVICE_DISPLAY_NAME} ${installedVersion}` : "needs an update or repair"}`,
     `  Unit: ${status.unitPath}`,
     `  Logs: ${status.logPath}`,
-    ...(status.current
-      ? []
-      : ["  Next: Install the latest Tangent GitHub Release, then run `t3 service update`."]),
+    ...problems,
+    ...(status.current ? [] : [`  Next: Run \`${serviceUpdateCommandForVersion(cliVersion)}\`.`]),
   ].join("\n");
 }
 
@@ -204,6 +211,11 @@ export const offerServiceDuringOnboarding = Effect.gen(function* () {
     );
     return true;
   }
+  for (const problem of status.problems ?? []) {
+    yield* Console.warn(
+      `[${problem}] ${BootService.formatBootServiceProblem(problem, SERVICE_IDENTITY)}`,
+    );
+  }
   if (
     installed &&
     status.installedVersion !== undefined &&
@@ -253,6 +265,8 @@ export const recoverServiceOnboardingOffer = <R>(
       BootServiceCommandError: (error) =>
         Console.warn(`Background setup did not finish: ${error.message}`).pipe(Effect.as(false)),
       BootServiceInstallError: (error) =>
+        Console.warn(`Background setup did not finish: ${error.message}`).pipe(Effect.as(false)),
+      BootServicePrerequisiteError: (error) =>
         Console.warn(`Background setup did not finish: ${error.message}`).pipe(Effect.as(false)),
       BootServiceUpdatePendingError: (error) =>
         Console.warn(`Background setup did not finish: ${error.message}`).pipe(Effect.as(false)),

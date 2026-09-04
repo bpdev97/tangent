@@ -23,6 +23,12 @@ import {
 } from "~/previewStateStore";
 import { type LinearPreviewPresentation, useRightPanelStore } from "~/rightPanelStore";
 
+import {
+  browserDefaultOpenProfileId,
+  browserDefaultOpenViewport,
+  resolveBrowserDefaults,
+} from "./browserDefaults";
+
 export const isBrowserPreviewFile = (path: string): boolean =>
   /\.(?:html?|pdf)$/i.test(path.split(/[?#]/, 1)[0] ?? "");
 
@@ -47,9 +53,18 @@ interface OpenUrlInPreviewInput<E> {
 export async function openUrlInPreviewSession<E>(
   input: OpenUrlInPreviewInput<E>,
 ): Promise<AtomCommandResult<PreviewSessionSnapshot, E>> {
+  const defaults = await resolveBrowserDefaults();
   const result = await input.openPreview({
     environmentId: input.threadRef.environmentId,
-    input: { threadId: input.threadRef.threadId, url: input.url },
+    input: {
+      threadId: input.threadRef.threadId,
+      url: input.url,
+      // Built here rather than via `openPreviewSession` because this path
+      // maps the result differently, so the configured defaults have to be
+      // applied explicitly or file/link opens would ignore them.
+      viewport: browserDefaultOpenViewport(defaults),
+      profileId: browserDefaultOpenProfileId(defaults),
+    },
   });
   return mapAtomCommandResult(result, (snapshot) => {
     applyPreviewServerSnapshot(input.threadRef, snapshot);

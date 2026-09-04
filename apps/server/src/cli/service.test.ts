@@ -45,8 +45,40 @@ it("reports the installed service version and host paths", () => {
 it("gives a direct repair command for a stale service", () => {
   assert.include(
     formatServiceStatus({ ...status, current: false }, "0.0.29"),
-    "Next: Install the latest Tangent GitHub Release, then run `t3 service update`.",
+    "Next: Run `npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v0.0.29/tangent-server-0.0.29.tgz service update`.",
   );
+});
+
+it("explains an incomplete installation and keeps repair on its installed version", () => {
+  const output = formatServiceStatus(
+    {
+      ...status,
+      current: false,
+      installedVersion: "0.1.50",
+      problems: ["linger-disabled", "service-stopped"],
+    },
+    "0.1.50",
+  );
+
+  expect(output).toContain("[linger-disabled]");
+  expect(output).toContain("last login session ends");
+  expect(output).toContain('sudo loginctl enable-linger "$(id -un)"');
+  expect(output).toContain("[service-stopped]");
+  expect(output).toContain(
+    "npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v0.1.50/tangent-server-0.1.50.tgz service update",
+  );
+  expect(output).not.toContain("t3@latest");
+});
+
+it("suggests the newer CLI version when the installed service needs an update", () => {
+  const output = formatServiceStatus(
+    { ...status, current: false, installedVersion: "0.0.28" },
+    "0.0.29",
+  );
+  expect(output).toContain(
+    "npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v0.0.29/tangent-server-0.0.29.tgz service update",
+  );
+  expect(output).not.toContain("npx t3@0.0.28 service update");
 });
 
 it("explains where the service is supported", () => {
@@ -58,12 +90,12 @@ it("explains where the service is supported", () => {
 
 it("reports a newer installed service and gives an exact-version repair command", () => {
   const output = formatServiceStatus(
-    { ...status, current: false, installedVersion: "0.0.32-nightly.1" },
+    { ...status, current: false, installedVersion: "0.1.50" },
     "0.0.31",
   );
 
-  assert.include(output, "Tangent 0.0.32-nightly.1 (newer than this Tangent 0.0.31 CLI)");
-  assert.include(output, "Install the matching Tangent GitHub Release");
+  assert.include(output, "Tangent 0.1.50 (newer than this Tangent 0.0.31 CLI)");
+  assert.include(output, "personal-v0.1.50/tangent-server-0.1.50.tgz service update");
   assert.include(output, "--allow-downgrade");
   assert.notInclude(output, "npx t3@");
 });
@@ -152,6 +184,15 @@ it.effect.each([
     name: "the same version",
     state: { ...status, current: false, installedVersion: packageJson.version },
   },
+  {
+    name: "an incomplete install of the same version",
+    state: {
+      ...status,
+      current: false,
+      installedVersion: packageJson.version,
+      problems: ["linger-disabled"] as const,
+    },
+  },
   { name: "an unknown version", state: { ...status, current: false } },
 ])("installs or repairs $name without an override", ({ state }) =>
   Effect.gen(function* () {
@@ -199,6 +240,15 @@ it.effect("keeps onboarding successful when a newer version appears before insta
       ),
     );
 
+    expect(ready).toBe(false);
+  }),
+);
+
+it.effect("keeps the manual-server fallback when background prerequisites fail", () =>
+  Effect.gen(function* () {
+    const ready = yield* recoverServiceOnboardingOffer(
+      Effect.fail(new BootService.BootServicePrerequisiteError({ problem: "linger-disabled" })),
+    );
     expect(ready).toBe(false);
   }),
 );

@@ -55,8 +55,11 @@ jobs:
       - name: Ensure Electron runtime is installed
         run: vp run --filter @t3tools/desktop ensure:electron
 
+      - name: Install browser secret helper build libraries
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config
+
       - name: Test
-        run: vp run test
+        run: vp run --concurrency-limit 1 test
 
   mobile-native:
     name: Mobile Native Static Analysis

@@ -1,119 +1,88 @@
 # Install Tangent
 
-Tangent is a personal T3 Code distribution for running coding agents on your machine. Its macOS
-app, iOS app, server package, data directory, and update feed are separate from upstream T3 Code.
+Tangent runs coding agents on your computer and lets you control them from its
+desktop, web, or mobile app. Set up the machine where the agents will work first.
 
 ## Requirements
 
-Node.js `^22.16 || ^23.11 || >=24.10` on the machine that runs the Tangent server.
+Command-line use, SSH hosts, and WSL backends need Node.js 22.16+ (22.x), 23.11+
+(23.x), or 24.10 and later. The native desktop app includes its server runtime.
 
-At least one provider CLI, installed and authenticated. See [Providers](#providers) below.
+You need an installed, authenticated provider before starting a thread. You can
+launch Tangent and configure providers afterwards.
 
-## Run the Server Without Installing
-
-Download `tangent-server-X.Y.Z.tgz` from the matching
-[Tangent release](https://github.com/bpdev97/tangent/releases), then run it locally:
-
-```bash
-npx --yes ./tangent-server-X.Y.Z.tgz
-```
-
-This starts the Tangent server on your machine and opens the local web app. Use
-`npx --yes ./tangent-server-X.Y.Z.tgz --help` for the full CLI reference. Do not use
-`npx t3@latest` for a Tangent environment: that installs the upstream distribution and can create
-client/server version skew.
-
-## Open a project in the desktop app
-
-When the T3 Code desktop app is running on the same machine, open the current directory with:
+## Run without installing
 
 ```bash
-npx t3 app
+npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v<version>/tangent-server-<version>.tgz
 ```
 
-Pass a path to open another directory:
+This starts the server and opens the local web app. Run
+`npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v<version>/tangent-server-<version>.tgz --help` for command-line options.
 
-```bash
-npx t3 app ../my-project
-```
+## Desktop app
 
-The command adds the directory as a project when needed, focuses the desktop app, and opens a new
-thread. It does not launch the desktop app, open a browser, or start a T3 Code server. A background
-server does not count as the desktop app. The command also rejects SSH sessions because a remote
-shell cannot focus a local desktop window. The CLI package and the running desktop app must both
-include `t3 app` support.
-
-## Desktop App
-
-Download the latest Tangent macOS artifact from
-[GitHub Releases](https://github.com/bpdev97/tangent/releases). Tangent does not currently publish
-Windows, Linux desktop, Homebrew, Winget, or Arch packages.
-
-The iOS build is distributed through TestFlight. It uses the `personal` EAS channel, so JavaScript
-updates are delivered only to a compatible Tangent binary.
-
-Nightly:
-
-```bash
-yay -S t3code-nightly-bin
-```
+Download the macOS Apple Silicon DMG from [Tangent Releases](https://github.com/bpdev97/tangent/releases). Use the version shown there in the commands on this page.
 
 ### Windows Subsystem for Linux
 
-When the desktop app runs a WSL backend, it installs the matching server runtime into
-`~/.t3/wsl-runtime` inside the selected distro. The first launch after installing or updating T3
-Code may take a little longer while that release's runtime is extracted. Later launches reuse the
-Linux-local copy so startup does not depend on reading application files through `/mnt/c`. After a
-successful launch, T3 Code keeps the current runtime and one previous runtime for rollback and
-removes older caches automatically. If a cached runtime stops working, T3 Code launches from the
-application files under `/mnt/c` instead and reinstalls the runtime on the next launch.
+Choose a WSL distro in **Settings → Connections** to run agents and projects
+there. Install Node.js and provider CLIs inside that distro. Tangent installs its
+matching server runtime there automatically; the first launch after an app
+update can take longer.
+
+### Open a project from a terminal
+
+With the desktop app already running on the same machine:
+
+```bash
+npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v<version>/tangent-server-<version>.tgz app
+```
+
+This opens a new thread for the current directory, adding the project if needed.
+Pass a path, such as `npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v<version>/tangent-server-<version>.tgz app ../my-project`, to open another directory. It requires
+the desktop app, so a standalone server or an SSH session is not enough. If the
+command cannot reach the app, start or update the desktop app and try again.
+
+## Mobile app
+
+Install Tangent from its personal TestFlight distribution, then connect it to your server over LAN or Tailscale with a pairing URL. See [remote access](./remote-access.md).
 
 ## Providers
 
-Tangent drives provider CLIs; it does not ship them. Install the CLI for each provider you want
-to use, then authenticate it.
+Open **Settings → Providers** in the web or desktop app, select the environment,
+and enable the provider you want. Installation, login, and configuration belong
+to that environment's machine, even when you connect from a phone or another
+computer.
 
-| Provider   | CLI                                                          | Default binary | Log in with           |
-| ---------- | ------------------------------------------------------------ | -------------- | --------------------- |
-| Codex      | [Codex CLI](https://developers.openai.com/codex/cli)         | `codex`        | `codex login`         |
-| Claude     | [Claude Code](https://claude.com/product/claude-code)        | `claude`       | `claude auth login`   |
-| Cursor     | [Cursor CLI](https://cursor.com/cli)                         | `cursor-agent` | `agent login`         |
-| Grok Build | [Grok Build CLI](https://x.ai/cli)                           | `grok`         | `grok login`          |
-| OpenCode   | [OpenCode](https://opencode.ai)                              | `opencode`     | `opencode auth login` |
-| Hermes     | [Hermes Agent](https://github.com/NousResearch/hermes-agent) | `hermes`       | `hermes model`        |
+| Provider    | Install and authenticate                                                                                          |
+| ----------- | ----------------------------------------------------------------------------------------------------------------- |
+| Codex       | Install [Codex CLI](https://developers.openai.com/codex/cli), then run `codex login`.                             |
+| Claude      | Install [Claude Code](https://claude.com/product/claude-code), then run `claude auth login`.                      |
+| Cursor      | Install [Cursor CLI](https://cursor.com/cli), then run `agent login`.                                             |
+| Grok Build  | Install [Grok Build CLI](https://x.ai/cli), then run `grok login`.                                                |
+| OpenCode    | Install [OpenCode](https://opencode.ai), then run `opencode auth login`.                                          |
+| Hermes      | Install [Hermes Agent](https://hermes-agent.nousresearch.com/) and run `hermes setup`. See [Hermes](./hermes.md). |
+| Antigravity | Install and sign in with Google from Tangent's provider settings.                                                 |
 
-Codex, Claude, Cursor, and Hermes are on by default. Grok Build and OpenCode are off by default;
-turn them on in **Settings** → the provider's card when you want to use them.
+Provider CLIs must be on the server's `PATH`. If Tangent cannot find one, set its
+**Binary path** in provider settings, especially when using a version manager.
+Cursor's executable is `cursor-agent`, although its login command is
+`agent login`. Antigravity can use its managed runtime without a `PATH` entry.
 
-Cursor is the one to watch: install Cursor CLI, which provides the `cursor-agent` binary that
-T3 Code looks for, but authenticate with `agent login`, not `cursor-agent login`.
+Add another provider instance for a separate account or configuration. Each
+instance can have its own environment variables, such as API keys or a custom
+base URL. Mark secret values as sensitive; after saving, Tangent does not display
+their original values.
 
-Grok models that support adjustable reasoning show a **Reasoning** control beside the model picker.
-The available levels and default come from the installed Grok Build CLI, so they can vary by model
-and CLI version.
+For provider-specific setup and accounts, see [Codex](./providers-codex.md),
+[Claude](./providers-claude.md), [OpenCode](./providers-opencode.md), and
+[Antigravity](./providers-antigravity.md).
 
-Run the login command on the machine running the Tangent server, not on the device you browse
-from.
+## Next steps
 
-### Binary Discovery
-
-Each provider CLI must be on the server's `PATH`, or have an explicit binary path set in
-**Settings** → the provider instance → **Binary path**. Use the explicit path when a version
-manager or a non-standard install location keeps the CLI off the `PATH` of the shell that
-started Tangent.
-
-### When Auth Is Needed
-
-Provider auth is required before you start a session with that provider, not before you start
-Tangent. You can install Tangent, open it, and add providers afterwards. A provider that is not
-authenticated shows its status in **Settings** and fails at session start with the login command
-to run.
-
-For multi-account setups, see [Codex](./providers-codex.md) and [Claude](./providers-claude.md).
-
-## Next Steps
-
-- [Permission modes](./permission-modes.md): how much T3 Code asks before acting
-- [Remote access](./remote-access.md): connect from a phone, tablet, or another desktop
-- [Keeping Tangent in sync](./updating.md): client and server version skew
-- [Running in the background](./background-service.md): Linux and macOS background service
+- [Working with threads](./thread-sidebar.md): start tasks and organize parallel work.
+- [Permission modes](./permission-modes.md): choose when agents ask before acting.
+- [Remote access](./remote-access.md): connect from another device.
+- [Running in the background](./background-service.md): keep a Linux or macOS host available.
+- [Updating Tangent](./updating.md): update the app and connected servers.

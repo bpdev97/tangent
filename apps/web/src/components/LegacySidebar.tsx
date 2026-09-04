@@ -23,6 +23,7 @@ import {
   ThreadWorktreeIndicator,
   useLinkedThreadPullRequest,
 } from "./ThreadStatusIndicators";
+import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { useAtomValue } from "@effect/atom-react";
 import { autoAnimate } from "@formkit/auto-animate";
@@ -49,6 +50,7 @@ import {
   type ScopedThreadRef,
   type ResolvedKeybindingsConfig,
   type SidebarProjectGroupingMode,
+  resolveEnvironmentMachineKind,
   ThreadId,
 } from "@t3tools/contracts";
 import {
@@ -401,9 +403,11 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
   });
   const environment = useEnvironment(thread.environmentId);
   const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const isRemoteThread =
-    primaryEnvironmentId !== null && thread.environmentId !== primaryEnvironmentId;
+  // No primary (the hosted app) means every thread is remote, and the machine
+  // glyph is what tells the environments apart.
+  const isRemoteThread = thread.environmentId !== primaryEnvironmentId;
   const remoteEnvLabel = environment?.label ?? null;
+  const remoteMachine = resolveEnvironmentMachineKind(environment?.serverConfig ?? null);
   // A desktop-local secondary backend (e.g. the WSL backend) shows up as a
   // bearer environment whose connection id is prefixed "local:". It runs on the
   // user's own machine, so the cloud icon is misleading — label it "Local" and
@@ -724,7 +728,7 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
         onContextMenu={handleRowContextMenu}
       >
         <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-          {prStatus && (
+          {prStatus && pr && (
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -737,7 +741,11 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
                     onPointerDown={(event) => event.stopPropagation()}
                     onClick={handlePrClick}
                   >
-                    <ChangeRequestStatusIcon className="size-3" />
+                    <ChangeRequestStatusIcon
+                      state={pr.state}
+                      isDraft={pr.isDraft}
+                      className="size-3"
+                    />
                   </a>
                 }
               />
@@ -884,7 +892,10 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
                         />
                       }
                     >
-                      <CloudIcon className="size-3 text-muted-foreground/40" />
+                      <EnvironmentMachineIcon
+                        kind={remoteMachine}
+                        className="size-3 text-muted-foreground/40"
+                      />
                     </TooltipTrigger>
                     <TooltipPopup side="top">{threadEnvironmentLabel}</TooltipPopup>
                   </Tooltip>
@@ -2355,6 +2366,8 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               environmentId={project.environmentId}
               cwd={project.workspaceRoot}
               faviconPath={project.faviconPath}
+              projectName={project.title}
+              projectIcon={project.projectIcon}
             />
           )}
           <span className="flex min-w-0 flex-1 items-center gap-2">

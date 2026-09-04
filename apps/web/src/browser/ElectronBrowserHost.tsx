@@ -71,6 +71,7 @@ function ThreadBrowserSessions(props: {
         tabId={snapshot.tabId}
         runtimeTabId={runtimeTabId}
         initialUrl={url}
+        profileId={snapshot.profileId}
         viewport={snapshot.viewport ?? FILL_PREVIEW_VIEWPORT}
         pictureInPicture={previewState.desktopByTabId[snapshot.tabId]?.pictureInPicture ?? false}
         zoomFactor={previewState.desktopByTabId[snapshot.tabId]?.zoomFactor ?? 1}
