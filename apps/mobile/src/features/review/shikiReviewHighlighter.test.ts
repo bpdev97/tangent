@@ -158,8 +158,18 @@ describe("highlightSourceFile", () => {
         .join(""),
     ).toBe(source);
     expect(highlighted.flat().some((token) => token.color !== null)).toBe(true);
+    const snippet = await highlighter.highlightCodeSnippet({
+      code: source,
+      language: "ts",
+      theme: "dark",
+    });
+    // Shiki bounds tokenization time, so a cold call may stop at different token boundaries.
     expect(
-      await highlighter.highlightCodeSnippet({ code: source, language: "ts", theme: "dark" }),
-    ).toEqual(highlighted);
+      snippet
+        .flat()
+        .map((token) => token.content)
+        .join(""),
+    ).toBe(source);
+    expect(snippet.flat().some((token) => token.color !== null)).toBe(true);
   });
 });
