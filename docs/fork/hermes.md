@@ -50,7 +50,8 @@ accepted for the gateway migration.
 The adapter and utility service share the provider instance's gateway process. Model discovery uses
 `model.options`, slash-command discovery uses `commands.catalog`, readiness uses `setup.status`,
 and small text-generation jobs use the stateless `llm.oneshot` method, so they do not add turns to a
-chat transcript.
+chat transcript. Provider-status refreshes reread models, commands, and setup state. If the utility
+socket disconnects, its next request opens a new connection.
 
 ## Protocol mappings
 
@@ -58,6 +59,10 @@ chat transcript.
 - `prompt.submit` claims the turn and returns `{ "status": "streaming" }` after starting Hermes's
   background run thread. T3 still forks the request effect from `sendTurn`; streaming events own the
   actual turn lifecycle, and `session.steer` handles text sent during the active turn.
+  Older supported gateways keep the RPC pending for the entire turn. Prompt and slash execution
+  therefore have no RPC deadline; turn completion, interruption, and session shutdown abort the
+  outstanding request. Control RPCs retain their two-minute deadline. A late RPC failure belongs
+  only to the turn that submitted it.
 - `message.*`, `reasoning.*`, `tool.*`, `subagent.*`, `session.usage`, and `background.complete`
   become canonical T3 runtime events. `message.interim` seals assistant commentary as a separate
   message without ending the turn; a terminal response marked `response_previewed` is de-duplicated
@@ -95,6 +100,9 @@ chat transcript.
 - Terminal turns, interrupts, session stops, and gateway expiry events resolve any remaining
   Hermes approval or user-input activities so blocked-on-user indicators cannot outlive the
   provider callback they represent.
+- Unexpected socket closure fails the active turn and emits a recoverable session exit. Each
+  session owns a child scope for its event consumer and pending requests; stopping the session
+  closes that scope and its socket.
 
 `full-access` auto-accepts an individual gateway approval with `once`. `approval-required` and
 `auto-accept-edits` surface approval requests. Gateway contract 2 has no session-local equivalent of
