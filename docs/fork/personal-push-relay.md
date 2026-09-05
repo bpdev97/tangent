@@ -77,6 +77,12 @@ No `.p8` file is installed on a T3 server. Relay settings take effect without re
 the mobile app after first configuration so it immediately registers through the newly configured
 backend.
 
+On the iPhone, enable **Settings → Device Notifications** and allow the iOS permission prompt.
+This is available without a T3 Connect account. Notifications cover completion, failure, approval
+requests, and requests for input, including while the app is open. Live Activities have separate
+permission and can work before device notifications are enabled. To revoke notification permission,
+turn the switch off and follow the link to iOS Settings.
+
 ## Operations
 
 `GET /healthz` is the only unauthenticated route. Back up the `push-relay-data` volume if preserving

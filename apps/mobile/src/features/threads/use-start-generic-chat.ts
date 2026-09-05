@@ -7,8 +7,7 @@ import { useCallback, useMemo } from "react";
 import { useProjects } from "../../state/entities";
 import { mobilePreferencesAtom } from "../../state/preferences";
 
-export function useStartGenericChat() {
-  const navigation = useNavigation();
+export function useGenericChatProject() {
   const projects = useProjects();
   const preferences = useAtomValue(mobilePreferencesAtom);
   const preferredEnvironmentId = AsyncResult.isSuccess(preferences)
@@ -18,6 +17,16 @@ export function useStartGenericChat() {
     () => findGenericChatProject(projects, preferredEnvironmentId),
     [preferredEnvironmentId, projects],
   );
+
+  return {
+    genericChatProject,
+    genericChatEnvironmentId: genericChatProject?.environmentId ?? preferredEnvironmentId ?? null,
+  };
+}
+
+export function useStartGenericChat() {
+  const navigation = useNavigation();
+  const { genericChatProject, genericChatEnvironmentId } = useGenericChatProject();
 
   const startGenericChat = useCallback(() => {
     if (genericChatProject === null) {
@@ -35,7 +44,7 @@ export function useStartGenericChat() {
 
   return {
     genericChatAvailable: genericChatProject !== null,
-    genericChatEnvironmentId: genericChatProject?.environmentId ?? preferredEnvironmentId ?? null,
+    genericChatEnvironmentId,
     startGenericChat,
   };
 }

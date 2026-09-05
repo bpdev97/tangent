@@ -795,6 +795,35 @@ describe("makeRelayDeviceRegistrationRequest", () => {
     }).pipe(Effect.provide(relayTestLayer));
   });
 
+  it.effect(
+    "registers an alert token after notification permission is enabled without cloud sign-in",
+    () => {
+      const fetchMock = vi.fn((_request: RequestInfo | URL, _init?: RequestInit) =>
+        Promise.resolve(Response.json({ ok: true })),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      vi.mocked(Notifications.getPermissionsAsync).mockResolvedValueOnce({
+        granted: false,
+      } as Awaited<ReturnType<typeof Notifications.getPermissionsAsync>>);
+      syncAgentAwarenessConnections([savedConnection()]);
+
+      return Effect.gen(function* () {
+        yield* runBackgroundOperations();
+        yield* refreshAgentAwarenessRegistration();
+
+        const registrations = fetchMock.mock.calls
+          .filter(([request]) => String(request).endsWith("/api/personal-push/v1/devices"))
+          .map(([, init]) => JSON.parse(String(init?.body)));
+        expect(registrations).toHaveLength(2);
+        expect(registrations[0]).toMatchObject({ preferences: { notificationsEnabled: false } });
+        expect(registrations[1]).toMatchObject({
+          pushToken: "apns-token",
+          preferences: { notificationsEnabled: true },
+        });
+      }).pipe(Effect.provide(relayTestLayer));
+    },
+  );
+
   it.effect("keeps push registration stable while a prepared connection is replaced", () => {
     const fetchMock = vi.fn((_request: RequestInfo | URL, _init?: RequestInit) =>
       Promise.resolve(Response.json({ ok: true })),
