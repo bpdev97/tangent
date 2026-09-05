@@ -40,6 +40,7 @@ const source = "export const View = () => <div>Ready</div>;";
 let pool: WorkerPoolManager;
 let renderer: FileRenderer;
 let terminationPromises: Promise<number>[];
+const scheduledFrames = new Set<ReturnType<typeof setImmediate>>();
 
 class WorkerTransport {
   private readonly worker = new NodeWorkerThreads.Worker(
@@ -96,10 +97,18 @@ function firstEnter(highlighter: DiffsHighlighter, file: FileContents, language:
 
 beforeEach(async () => {
   terminationPromises = [];
-  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
-    setImmediate(() => callback(0)),
-  );
-  vi.stubGlobal("cancelAnimationFrame", clearImmediate);
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    const frame = setImmediate(() => {
+      scheduledFrames.delete(frame);
+      callback(0);
+    });
+    scheduledFrames.add(frame);
+    return frame;
+  });
+  vi.stubGlobal("cancelAnimationFrame", (frame: ReturnType<typeof setImmediate>) => {
+    scheduledFrames.delete(frame);
+    clearImmediate(frame);
+  });
   vi.stubGlobal("window", { matchMedia: () => ({ matches: true }) });
   await disposeHighlighter();
   pool = new WorkerPoolManager(
@@ -116,6 +125,8 @@ afterEach(async () => {
   pool?.terminate();
   await Promise.all(terminationPromises);
   await disposeHighlighter();
+  for (const frame of scheduledFrames) clearImmediate(frame);
+  scheduledFrames.clear();
   vi.unstubAllGlobals();
 });
 

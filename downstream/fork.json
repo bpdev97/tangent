@@ -485,7 +485,10 @@
     },
     {
       "features": ["FORK-MAINT-001"],
-      "paths": ["apps/server/src/provider/providerMaintenance.test.ts"]
+      "paths": [
+        "apps/server/src/provider/providerMaintenance.test.ts",
+        "apps/web/src/components/files/fileEditorLanguageReadiness.test.ts"
+      ]
     }
   ]
 }
