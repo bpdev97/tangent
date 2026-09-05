@@ -12,10 +12,8 @@ import {
   type ThreadSortInput,
 } from "../lib/threadSort";
 import type { SidebarThreadSummary, Thread } from "../types";
-import type { ThreadRouteTarget } from "../threadRoutes";
 import { cn } from "../lib/utils";
 import { isLatestTurnSettled } from "../session-logic";
-import { isGenericChatProjectId } from "@t3tools/shared/genericChat";
 
 export const THREAD_SELECTION_SAFE_SELECTOR = "[data-thread-item], [data-thread-selection-safe]";
 export const THREAD_JUMP_HINT_SHOW_DELAY_MS = 200;
@@ -408,31 +406,6 @@ export function orderItemsByPreferredIds<TItem, TId>(input: {
   return [...ordered, ...remaining];
 }
 
-export function getVisibleSidebarThreadIds<TThreadId>(
-  renderedProjects: readonly {
-    shouldShowThreadPanel?: boolean;
-    renderedThreadIds: readonly TThreadId[];
-  }[],
-): TThreadId[] {
-  return renderedProjects.flatMap((renderedProject) =>
-    renderedProject.shouldShowThreadPanel === false ? [] : renderedProject.renderedThreadIds,
-  );
-}
-
-export function resolvePinnedCollapsedThread<TThread>(input: {
-  readonly projectId: string;
-  readonly projectExpanded: boolean;
-  readonly activeThreadKey: string | null | undefined;
-  readonly threads: ReadonlyArray<TThread>;
-  readonly threadKey: (thread: TThread) => string;
-}): TThread | null {
-  if (input.projectExpanded || !input.activeThreadKey || isGenericChatProjectId(input.projectId)) {
-    return null;
-  }
-
-  return input.threads.find((thread) => input.threadKey(thread) === input.activeThreadKey) ?? null;
-}
-
 export function getSidebarThreadIdsToPrewarm<TThreadId>(
   visibleThreadIds: readonly TThreadId[],
   limit = SIDEBAR_THREAD_PREWARM_LIMIT,
@@ -465,28 +438,6 @@ export function resolveAdjacentThreadId<T>(input: {
   }
 
   return currentIndex < threadIds.length - 1 ? (threadIds[currentIndex + 1] ?? null) : null;
-}
-
-export function shouldNavigateAfterProjectRemoval(input: {
-  routeTarget: ThreadRouteTarget | null;
-  projectThreads: readonly {
-    environmentId: string;
-    id: string;
-  }[];
-  projectDraftId: string | null;
-}): boolean {
-  const { projectDraftId, projectThreads, routeTarget } = input;
-  if (routeTarget?.kind === "draft") {
-    return projectDraftId === routeTarget.draftId;
-  }
-  if (routeTarget?.kind !== "server") {
-    return false;
-  }
-  return projectThreads.some(
-    (thread) =>
-      thread.environmentId === routeTarget.threadRef.environmentId &&
-      thread.id === routeTarget.threadRef.threadId,
-  );
 }
 
 export function isContextMenuPointerDown(input: {
@@ -851,54 +802,6 @@ export function resolveProjectStatusIndicator(
   }
 
   return highestPriorityStatus;
-}
-
-export function getVisibleThreadsForProject<T extends Pick<Thread, "id">>(input: {
-  threads: readonly T[];
-  activeThreadId: T["id"] | undefined;
-  isThreadListExpanded: boolean;
-  previewLimit: number;
-}): {
-  hasHiddenThreads: boolean;
-  visibleThreads: T[];
-  hiddenThreads: T[];
-} {
-  const { activeThreadId, isThreadListExpanded, previewLimit, threads } = input;
-  const hasHiddenThreads = threads.length > previewLimit;
-
-  if (!hasHiddenThreads || isThreadListExpanded) {
-    return {
-      hasHiddenThreads,
-      hiddenThreads: [],
-      visibleThreads: [...threads],
-    };
-  }
-
-  const previewThreads = threads.slice(0, previewLimit);
-  if (!activeThreadId || previewThreads.some((thread) => thread.id === activeThreadId)) {
-    return {
-      hasHiddenThreads: true,
-      hiddenThreads: threads.slice(previewLimit),
-      visibleThreads: previewThreads,
-    };
-  }
-
-  const activeThread = threads.find((thread) => thread.id === activeThreadId);
-  if (!activeThread) {
-    return {
-      hasHiddenThreads: true,
-      hiddenThreads: threads.slice(previewLimit),
-      visibleThreads: previewThreads,
-    };
-  }
-
-  const visibleThreadIds = new Set([...previewThreads, activeThread].map((thread) => thread.id));
-
-  return {
-    hasHiddenThreads: true,
-    hiddenThreads: threads.filter((thread) => !visibleThreadIds.has(thread.id)),
-    visibleThreads: threads.filter((thread) => visibleThreadIds.has(thread.id)),
-  };
 }
 
 export function getFallbackThreadIdAfterDelete<

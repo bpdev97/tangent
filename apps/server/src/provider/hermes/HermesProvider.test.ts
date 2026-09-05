@@ -1,11 +1,41 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it } from "@effect/vitest";
+import { HermesSettings } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
+import * as Effect from "effect/Effect";
 
 import {
+  buildInitialHermesProviderSnapshot,
   buildHermesModelsFromGateway,
   buildHermesSlashCommandsFromGateway,
 } from "./HermesProvider.ts";
 
 describe("HermesProvider", () => {
+  it.effect("publishes legacy and named custom models with their option descriptors", () =>
+    Effect.gen(function* () {
+      const capabilities = {
+        optionDescriptors: [
+          {
+            id: "effort",
+            label: "Reasoning",
+            type: "select",
+            options: [{ id: "high", label: "High", isDefault: true }],
+          },
+        ],
+      };
+      const settings = Schema.decodeSync(HermesSettings)({
+        customModels: [
+          "openrouter:legacy",
+          { slug: "openrouter:custom", name: "Research", capabilities },
+        ],
+      });
+      const snapshot = yield* buildInitialHermesProviderSnapshot(settings);
+
+      expect(snapshot.models).toMatchObject([
+        { slug: "openrouter:legacy", isCustom: true },
+        { slug: "openrouter:custom", name: "Research", isCustom: true, capabilities },
+      ]);
+    }),
+  );
   it("discovers authenticated gateway models with stable provider-qualified ids", () => {
     expect(
       buildHermesModelsFromGateway({

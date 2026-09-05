@@ -1,6 +1,6 @@
 {
   "upstream": "pingdotgg/t3code",
-  "baseline": "b7d6e65021b021207424c56cb32d6d711fd875fb",
+  "baseline": "cb9a6942363ed7f097c7d1fb075bf3a265fbf5d2",
   "features": {
     "FORK-DIST-001": "docs/personal-distribution.md",
     "FORK-CHAT-001": "docs/fork/generic-chat.md",
@@ -231,8 +231,6 @@
         "apps/web/src/components/ChatView.tsx",
         "apps/web/src/components/LegacySidebar.tsx",
         "apps/web/src/components/NoActiveThreadState.tsx",
-        "apps/web/src/components/Sidebar.logic.test.ts",
-        "apps/web/src/components/Sidebar.logic.ts",
         "apps/web/src/components/Sidebar.tsx",
         "apps/web/src/components/chat/ChatComposer.tsx",
         "apps/web/src/components/chat/CompactComposerControlsMenu.tsx",
@@ -360,7 +358,6 @@
         "apps/server/src/serviceLauncher.ts",
         "apps/web/index.html",
         "apps/web/package.json",
-        "apps/web/src/AppRoot.test.tsx",
         "apps/web/src/AppRoot.tsx",
         "apps/web/src/branding.test.ts",
         "apps/web/src/branding.ts",
@@ -446,6 +443,18 @@
         "patches/app-builder-lib@26.15.6.patch",
         "pnpm-workspace.yaml"
       ]
+    },
+    {
+      "features": ["FORK-CHAT-001"],
+      "paths": [
+        "apps/web/src/components/onboarding/FirstRunGate.tsx",
+        "apps/web/src/onboarding/firstRun.logic.ts",
+        "apps/web/src/onboarding/firstRun.logic.test.ts"
+      ]
+    },
+    {
+      "features": ["FORK-PREVIEW-001"],
+      "paths": ["apps/web/src/browser/HostedBrowserWebview.test.tsx"]
     }
   ]
 }

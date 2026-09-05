@@ -19,11 +19,7 @@ import {
   type ProviderInstance,
 } from "../ProviderDriver.ts";
 import { mergeProviderInstanceEnvironment } from "../ProviderInstanceEnvironment.ts";
-import {
-  makeManualOnlyProviderMaintenanceCapabilities,
-  makeStaticProviderMaintenanceResolver,
-  resolveProviderMaintenanceCapabilitiesEffect,
-} from "../providerMaintenance.ts";
+import { makeManualOnlyProviderMaintenanceCapabilities } from "../providerMaintenance.ts";
 import type { ServerProviderDraft } from "../providerSnapshot.ts";
 import {
   haveProviderSnapshotSettingsChanged,
@@ -39,12 +35,10 @@ import { makeHermesTextGeneration } from "./HermesTextGeneration.ts";
 
 const decodeHermesSettings = Schema.decodeSync(HermesSettings);
 const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
-const UPDATE = makeStaticProviderMaintenanceResolver(
-  makeManualOnlyProviderMaintenanceCapabilities({
-    provider: HERMES_DRIVER_KIND,
-    packageName: null,
-  }),
-);
+const maintenanceCapabilities = makeManualOnlyProviderMaintenanceCapabilities({
+  provider: HERMES_DRIVER_KIND,
+  packageName: null,
+});
 
 export type HermesDriverEnv =
   | BackgroundPolicy.BackgroundPolicy
@@ -97,11 +91,6 @@ export const HermesDriver: ProviderDriver<HermesSettings, HermesDriverEnv> = {
         accentColor,
         continuationGroupKey: continuationIdentity.continuationKey,
       });
-      const maintenanceCapabilities = yield* resolveProviderMaintenanceCapabilitiesEffect(UPDATE, {
-        binaryPath: effectiveConfig.binaryPath,
-        env: processEnv,
-      });
-
       const gatewayRuntime = yield* makeHermesGatewayRuntime(effectiveConfig, processEnv);
       const utility = yield* makeHermesGatewayUtility(effectiveConfig, processEnv, gatewayRuntime);
       const adapter = yield* makeHermesAdapter(effectiveConfig, {

@@ -37,8 +37,7 @@ touchpoints are `AppRoot.tsx` and `ElectronBrowserHost.tsx`.
 
 ```sh
 vp test apps/web/src/browser/browserSessionSuspension.test.ts \
-  apps/web/src/browser/desktopTabLifetime.test.ts \
-  apps/web/src/AppRoot.test.tsx
+  apps/web/src/browser/desktopTabLifetime.test.ts
 vp check
 vp run typecheck
 ```

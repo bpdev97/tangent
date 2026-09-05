@@ -56,7 +56,7 @@ export function describeHermesDiscoveryFailure(
 }
 
 function modelsFromSettings(
-  customModels: ReadonlyArray<string> | undefined,
+  customModels: HermesSettings["customModels"],
   discoveredModels: ReadonlyArray<ServerProviderModel> = [],
 ): ReadonlyArray<ServerProviderModel> {
   return providerModelsFromSettings(discoveredModels, customModels ?? [], EMPTY_CAPABILITIES);
