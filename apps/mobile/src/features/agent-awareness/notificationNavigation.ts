@@ -5,6 +5,15 @@ import { useLinkTo } from "@react-navigation/native";
 import { routeAgentNotificationResponseOnce } from "./notificationPayload";
 import { consumeLastAgentNotificationResponse } from "./notificationResponseConsumer";
 
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
 export function useAgentNotificationNavigation(): void {
   const linkTo = useLinkTo();
   const handledResponseIds = useRef(new Set<string>());

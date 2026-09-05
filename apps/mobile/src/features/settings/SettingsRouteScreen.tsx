@@ -10,6 +10,7 @@ import { AsyncResult } from "effect/unstable/reactivity";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   ActionSheetIOS,
+  AppState,
   Alert,
   Linking,
   Platform,
@@ -121,6 +122,130 @@ export function SettingsRouteScreen() {
   );
 }
 
+function DeviceNotificationsRow() {
+  const [notificationStatus, setNotificationStatus] = useState<NotificationStatus>("checking");
+  const [requesting, setRequesting] = useState(false);
+  const deviceRegistered = useDeviceRegistered();
+  const agentAwarenessPushAvailable = supportsAgentAwarenessPush();
+  const agentAwarenessPlatform = resolveAgentAwarenessPlatformPresentation(Platform.OS);
+
+  const refreshNotifications = useCallback(async () => {
+    if (process.env.EXPO_OS !== "ios") {
+      setNotificationStatus("unsupported");
+      return;
+    }
+    const result = await settlePromise(() => Notifications.getPermissionsAsync());
+    if (result._tag === "Failure") {
+      reportAtomCommandResult(result, { label: "notification permission refresh" });
+      setNotificationStatus("disabled");
+      return;
+    }
+    setNotificationStatus(result.value.granted ? "enabled" : "disabled");
+  }, []);
+
+  useEffect(() => {
+    void refreshNotifications();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") void refreshNotifications();
+    });
+    return () => subscription.remove();
+  }, [refreshNotifications]);
+
+  const requestNotifications = useCallback(async () => {
+    const result = await settleAsyncResult(() =>
+      runtime.runPromiseExit(
+        requestAgentNotificationPermission.pipe(
+          Effect.tap((permission) =>
+            permission.type === "granted" ? refreshAgentAwarenessRegistration() : Effect.void,
+          ),
+        ),
+      ),
+    );
+    if (result._tag === "Failure") {
+      if (!isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        Alert.alert(
+          "Notifications unavailable",
+          error instanceof Error ? error.message : "Could not request notification permission.",
+        );
+      }
+      return;
+    }
+    if (result.value.type === "granted") {
+      setNotificationStatus("enabled");
+      // Permission alone is not enough: the switch stays off until the relay
+      // registration succeeds, so tell the user the truth about which happened.
+      if (getAgentAwarenessRegistrationStatus() === "registered") {
+        Alert.alert("Notifications enabled", "Notifications are enabled for this device.");
+      } else {
+        Alert.alert(
+          "Couldn't finish enabling notifications",
+          "Notification access was granted, but this device could not be registered for notification delivery. Notifications will start once registration succeeds.",
+        );
+      }
+      return;
+    }
+    if (result.value.type === "unsupported") {
+      setNotificationStatus("unsupported");
+      Alert.alert("Notifications unavailable", "Device notifications are only available on iOS.");
+      return;
+    }
+    setNotificationStatus("disabled");
+    if (result.value.canAskAgain) {
+      Alert.alert("Notifications disabled", "Notifications were not enabled.");
+      return;
+    }
+    Alert.alert(
+      "Notifications disabled",
+      "Notifications were denied for this app. Open Settings to enable them.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Open Settings", onPress: () => void Linking.openSettings() },
+      ],
+    );
+  }, []);
+
+  const handleDeviceNotificationsChange = useCallback(
+    (enabled: boolean) => {
+      if (enabled) {
+        setRequesting(true);
+        void requestNotifications().finally(() => setRequesting(false));
+        return;
+      }
+
+      Alert.alert(
+        "Disable notifications",
+        "Notification permission is controlled by iOS. Open Settings to disable notifications for T3 Code.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Open Settings", onPress: () => void Linking.openSettings() },
+        ],
+      );
+    },
+    [requestNotifications],
+  );
+
+  return (
+    <SettingsSwitchRow
+      icon="bell.badge"
+      label="Device Notifications"
+      disabled={
+        requesting ||
+        !agentAwarenessPlatform.supported ||
+        !agentAwarenessPushAvailable ||
+        notificationStatus === "checking" ||
+        notificationStatus === "unsupported"
+      }
+      subtitle={agentAwarenessPlatform.subtitle}
+      // Only reads as on when this device is actually registered with the
+      // relay; otherwise notifications cannot be delivered regardless of
+      // the local iOS permission.
+      value={agentAwarenessPushAvailable && notificationStatus === "enabled" && deviceRegistered}
+      onValueChange={handleDeviceNotificationsChange}
+    />
+  );
+}
+
 function LocalSettingsRouteScreen() {
   const insets = useSafeAreaInsets();
   const { savedConnectionsById } = useSavedRemoteConnections();
@@ -149,6 +274,7 @@ function LocalSettingsRouteScreen() {
             label="Automations"
             target="SettingsAutomations"
           />
+          <DeviceNotificationsRow />
         </SettingsSection>
 
         <GeneralSettingsSection />
@@ -177,7 +303,6 @@ function ConfiguredSettingsRouteScreen() {
   const { getToken, isLoaded, isSignedIn } = useAuth({ treatPendingAsSignedOut: false });
   const { user } = useUser();
   const { savedConnectionsById } = useSavedRemoteConnections();
-  const [notificationStatus, setNotificationStatus] = useState<NotificationStatus>("checking");
   const [liveActivityStatus, setLiveActivityStatus] = useState<LiveActivityStatus>("checking");
   const deviceRegistered = useDeviceRegistered();
   const liveActivitiesPreferenceEnabled = AsyncResult.isSuccess(preferencesResult)
@@ -191,24 +316,6 @@ function ConfiguredSettingsRouteScreen() {
     if (!isSignedIn) return "Sign in";
     return user?.primaryEmailAddress?.emailAddress ?? "Signed in";
   }, [isLoaded, isSignedIn, user?.primaryEmailAddress?.emailAddress]);
-
-  const refreshNotifications = useCallback(async () => {
-    if (process.env.EXPO_OS !== "ios") {
-      setNotificationStatus("unsupported");
-      return;
-    }
-    const result = await settlePromise(() => Notifications.getPermissionsAsync());
-    if (result._tag === "Failure") {
-      reportAtomCommandResult(result, { label: "notification permission refresh" });
-      setNotificationStatus("disabled");
-      return;
-    }
-    setNotificationStatus(result.value.granted ? "enabled" : "disabled");
-  }, []);
-
-  useEffect(() => {
-    void refreshNotifications();
-  }, [refreshNotifications]);
 
   useEffect(() => {
     if (!isLoaded) {
@@ -232,66 +339,6 @@ function ConfiguredSettingsRouteScreen() {
       preferencesResult.value.liveActivitiesEnabled === false ? "disabled" : "enabled",
     );
   }, [isLoaded, isSignedIn, preferencesResult]);
-
-  const requestNotifications = useCallback(async () => {
-    const result = await settleAsyncResult(() =>
-      runtime.runPromiseExit(
-        requestAgentNotificationPermission.pipe(
-          Effect.tap((permission) =>
-            permission.type === "granted" ? refreshAgentAwarenessRegistration() : Effect.void,
-          ),
-        ),
-      ),
-    );
-    if (result._tag === "Failure") {
-      if (!isAtomCommandInterrupted(result)) {
-        const error = squashAtomCommandFailure(result);
-        Alert.alert(
-          "Notifications unavailable",
-          error instanceof Error ? error.message : "Could not request notification permission.",
-        );
-      }
-      return;
-    }
-    if (result.value.type === "granted") {
-      setNotificationStatus("enabled");
-      // Permission alone is not enough: the switch stays off until the relay
-      // registration succeeds, so tell the user the truth about which happened.
-      if (getAgentAwarenessRegistrationStatus() === "registered") {
-        Alert.alert(
-          "Notifications enabled",
-          "Live Activity notifications are enabled for this device.",
-        );
-      } else {
-        Alert.alert(
-          "Couldn't finish enabling notifications",
-          "Notification access was granted, but this device could not be registered with T3 Connect. Notifications will start once registration succeeds.",
-        );
-      }
-      return;
-    }
-    if (result.value.type === "unsupported") {
-      setNotificationStatus("unsupported");
-      Alert.alert(
-        "Notifications unavailable",
-        "Live Activity notifications are only available on iOS.",
-      );
-      return;
-    }
-    setNotificationStatus("disabled");
-    if (result.value.canAskAgain) {
-      Alert.alert("Notifications disabled", "Notifications were not enabled.");
-      return;
-    }
-    Alert.alert(
-      "Notifications disabled",
-      "Notifications were denied for this app. Open Settings to enable them.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Open Settings", onPress: () => void Linking.openSettings() },
-      ],
-    );
-  }, []);
 
   const promptSignIn = useCallback(() => {
     Alert.alert(
@@ -380,25 +427,6 @@ function ConfiguredSettingsRouteScreen() {
     promptSignIn,
     savePreferences,
   ]);
-
-  const handleDeviceNotificationsChange = useCallback(
-    (enabled: boolean) => {
-      if (enabled) {
-        void requestNotifications();
-        return;
-      }
-
-      Alert.alert(
-        "Disable notifications",
-        "Notification permission is controlled by iOS. Open Settings to disable notifications for T3 Code.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Open Settings", onPress: () => void Linking.openSettings() },
-        ],
-      );
-    },
-    [requestNotifications],
-  );
 
   const handleLiveActivitiesChange = useCallback(
     (enabled: boolean) => {
@@ -502,24 +530,7 @@ function ConfiguredSettingsRouteScreen() {
             label="Automations"
             target="SettingsAutomations"
           />
-          <SettingsSwitchRow
-            icon="bell.badge"
-            label="Device Notifications"
-            disabled={
-              !agentAwarenessPlatform.supported ||
-              !agentAwarenessPushAvailable ||
-              notificationStatus === "checking" ||
-              notificationStatus === "unsupported"
-            }
-            subtitle={agentAwarenessPlatform.subtitle}
-            // Only reads as on when this device is actually registered with the
-            // relay; otherwise notifications cannot be delivered regardless of
-            // the local iOS permission.
-            value={
-              agentAwarenessPushAvailable && notificationStatus === "enabled" && deviceRegistered
-            }
-            onValueChange={handleDeviceNotificationsChange}
-          />
+          <DeviceNotificationsRow />
           <SettingsSwitchRow
             disabled={
               !agentAwarenessPlatform.supported ||
