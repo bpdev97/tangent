@@ -22,7 +22,7 @@ describe("HermesProvider", () => {
           },
         ],
       };
-      const settings = Schema.decodeSync(HermesSettings)({
+      const settings = yield* Schema.decodeUnknownEffect(HermesSettings)({
         customModels: [
           "openrouter:legacy",
           { slug: "openrouter:custom", name: "Research", capabilities },

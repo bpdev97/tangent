@@ -35,7 +35,7 @@ import { makeHermesTextGeneration } from "./HermesTextGeneration.ts";
 
 const decodeHermesSettings = Schema.decodeSync(HermesSettings);
 const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
-const maintenanceCapabilities = makeManualOnlyProviderMaintenanceCapabilities({
+const MAINTENANCE_CAPABILITIES = makeManualOnlyProviderMaintenanceCapabilities({
   provider: HERMES_DRIVER_KIND,
   packageName: null,
 });
@@ -112,7 +112,7 @@ export const HermesDriver: ProviderDriver<HermesSettings, HermesDriverEnv> = {
       );
       const snapshotSettings = makeProviderSnapshotSettingsSource(effectiveConfig, serverSettings);
       const snapshot = yield* makeManagedServerProvider<ProviderSnapshotSettings<HermesSettings>>({
-        maintenanceCapabilities,
+        resolveMaintenance: () => Effect.succeed(MAINTENANCE_CAPABILITIES),
         getSettings: snapshotSettings.getSettings,
         streamSettings: snapshotSettings.streamSettings,
         haveSettingsChanged: haveProviderSnapshotSettingsChanged,

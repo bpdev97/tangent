@@ -482,6 +482,10 @@
     {
       "features": ["FORK-PREVIEW-001"],
       "paths": ["apps/web/src/browser/HostedBrowserWebview.test.tsx"]
+    },
+    {
+      "features": ["FORK-MAINT-001"],
+      "paths": ["apps/server/src/provider/providerMaintenance.test.ts"]
     }
   ]
 }

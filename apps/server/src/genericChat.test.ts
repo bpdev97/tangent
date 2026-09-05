@@ -22,6 +22,7 @@ function projectionQuery(project: Option.Option<OrchestrationProjectShell>) {
     getArchivedShellSnapshot: () => Effect.die("unused"),
     getSnapshotSequence: () => Effect.die("unused"),
     getCounts: () => Effect.die("unused"),
+    getImportedAgentSessionSources: () => Effect.die("unused"),
     getEventReplayStats: () => Effect.die("unused"),
     getActiveProjectByWorkspaceRoot: () => Effect.die("unused"),
     getProjectShellById: () => Effect.succeed(project),
