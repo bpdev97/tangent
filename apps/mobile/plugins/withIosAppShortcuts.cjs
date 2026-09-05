@@ -35,7 +35,7 @@ struct T3OpenNewChatIntent: AppIntent {
   static var openAppWhenRun = true
 
   @available(iOS 26.0, *)
-  static var supportedModes: IntentModes { .foreground(.dynamic) }
+  static var supportedModes: IntentModes { .foreground(.immediate) }
 
   @MainActor
   func perform() async throws -> some IntentResult {
@@ -48,7 +48,7 @@ struct T3OpenNewChatIntent: AppIntent {
 struct T3DictateNewChatIntent: AppIntent {
   static let title: LocalizedStringResource = "Dictate New Chat"
   static let description = IntentDescription("Open a new chat and start dictation.")
-  static var supportedModes: IntentModes { .foreground(.dynamic) }
+  static var supportedModes: IntentModes { .foreground(.immediate) }
 
   @MainActor
   func perform() async throws -> some IntentResult {
