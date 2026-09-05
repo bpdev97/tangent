@@ -18,6 +18,7 @@
       "features": ["FORK-PUSH-001"],
       "paths": [
         ".github/workflows/personal-push-relay-image.yml",
+        "apps/mobile/src/features/agent-awareness/notificationNavigation.ts",
         "apps/mobile/src/features/agent-awareness/remoteRegistration.test.ts",
         "apps/mobile/src/features/agent-awareness/remoteRegistration.ts",
         "apps/mobile/src/widgets/AgentActivity.test.ts",
