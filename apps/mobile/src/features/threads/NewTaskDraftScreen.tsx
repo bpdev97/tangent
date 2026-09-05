@@ -504,10 +504,7 @@ export function NewTaskDraftScreen(props: {
           return;
         }
         appliedInitialProjectKeyRef.current = directProjectKey;
-        if (
-          selectedProject?.environmentId === directProject.environmentId &&
-          selectedProject.id === directProject.id
-        ) {
+        if (selectedProjectKey === directProjectKey) {
           return;
         }
         setProject(directProject);
