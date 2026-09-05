@@ -7,6 +7,10 @@ const git = (...args: string[]) =>
   NodeChildProcess.execFileSync("git", args, { encoding: "utf8" }).trim();
 const paths = new Map<string, Set<string>>();
 for (const group of manifest.groups) {
+  if (group.features.length === 0) throw new Error("Fork ownership group has no features.");
+  for (const owner of group.features) {
+    if (!Object.hasOwn(manifest.features, owner)) throw new Error(`Unknown fork feature: ${owner}`);
+  }
   for (const path of group.paths) {
     const owners = paths.get(path) ?? new Set<string>();
     for (const owner of group.features) owners.add(owner);
