@@ -22,6 +22,11 @@ to open the traditional project-based flow.
 The chat composer uses the same provider, model, reasoning, attachment, draft, and offline-queue
 behavior as the standard new-thread composer.
 
+On iOS, the **New Chat** App Shortcut opens this composer from Shortcuts, Siri, Spotlight, and
+compatible system controls. On iOS 26 and later, **Dictate New Chat** opens the composer and begins
+voice input; review or edit the transcript before sending it. The shortcuts honor the selected
+Chat Host, so a draft waits if that environment is unavailable.
+
 ![iPhone chat model settings](./images/chats/ios-model-settings.png)
 
 On desktop, the Chats section shows the selected Chat Host without taking another row of sidebar

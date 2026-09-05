@@ -62,39 +62,43 @@ function ChecksBody({
   if (checks.length === 0) {
     return <p className="text-muted-foreground text-xs">No checks reported</p>;
   }
+  const keyOccurrences = new Map<string, number>();
   return (
     <ul className="flex flex-col gap-1">
-      {/* Keyed by position as well as by name: the host is the one that decides how many runs
-          share a name, and a repeated key is a rendering fault rather than a wrong list. */}
-      {checks.map((check, index) => (
-        <li key={`${index}:${check.name}`} className="flex items-center gap-2 text-xs">
-          <PullRequestCheckStatusIcon status={check.status} />
-          <Tooltip>
-            <TooltipTrigger
-              render={<span className="min-w-0 flex-1 truncate">{check.name}</span>}
-            />
-            <TooltipPopup side="top">{check.description ?? check.name}</TooltipPopup>
-          </Tooltip>
-          <span className="shrink-0 text-muted-foreground">
-            {pullRequestCheckStatusLabel(check)}
-          </span>
-          {check.url === null ? null : (
-            <button
-              type="button"
-              className="shrink-0 text-primary hover:underline"
-              onClick={() => {
-                if (!check.url) return;
-                void openLink(check.url).catch((error: unknown) => {
-                  console.error(error);
-                  toastManager.add({ type: "error", title: "Unable to open check details" });
-                });
-              }}
-            >
-              Details
-            </button>
-          )}
-        </li>
-      ))}
+      {checks.map((check) => {
+        const keyBase = `${check.name}:${check.url ?? check.description ?? check.status}`;
+        const occurrence = keyOccurrences.get(keyBase) ?? 0;
+        keyOccurrences.set(keyBase, occurrence + 1);
+        return (
+          <li key={`${keyBase}:${occurrence}`} className="flex items-center gap-2 text-xs">
+            <PullRequestCheckStatusIcon status={check.status} />
+            <Tooltip>
+              <TooltipTrigger
+                render={<span className="min-w-0 flex-1 truncate">{check.name}</span>}
+              />
+              <TooltipPopup side="top">{check.description ?? check.name}</TooltipPopup>
+            </Tooltip>
+            <span className="shrink-0 text-muted-foreground">
+              {pullRequestCheckStatusLabel(check)}
+            </span>
+            {check.url === null ? null : (
+              <button
+                type="button"
+                className="shrink-0 text-primary hover:underline"
+                onClick={() => {
+                  if (!check.url) return;
+                  void openLink(check.url).catch((error: unknown) => {
+                    console.error(error);
+                    toastManager.add({ type: "error", title: "Unable to open check details" });
+                  });
+                }}
+              >
+                Details
+              </button>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }

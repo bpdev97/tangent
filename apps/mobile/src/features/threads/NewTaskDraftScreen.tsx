@@ -152,6 +152,8 @@ export function NewTaskDraftScreen(props: {
   readonly pendingTaskId?: string;
   /** Durable native share inbox item to merge into this project draft. */
   readonly incomingShareId?: string;
+  /** One-shot iOS App Shortcut request to begin dictation after the chat draft is ready. */
+  readonly startDictationRequestId?: string;
 }) {
   const projects = useProjects();
   const createProjectThread = useCreateProjectThread();
@@ -338,6 +340,29 @@ export function NewTaskDraftScreen(props: {
     onChangeDraftMessage: flow.setPrompt,
     onChangeSelection: composerMenu.onSelectionChange,
   });
+  const startVoiceInput = voiceInput.start;
+  const startedDictationRequestIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const requestId = props.startDictationRequestId;
+    if (
+      !requestId ||
+      startedDictationRequestIdRef.current === requestId ||
+      !isGenericChat ||
+      !flow.draftKey ||
+      isComposerInteractionLocked
+    ) {
+      return;
+    }
+
+    startedDictationRequestIdRef.current = requestId;
+    startVoiceInput();
+  }, [
+    flow.draftKey,
+    isComposerInteractionLocked,
+    isGenericChat,
+    props.startDictationRequestId,
+    startVoiceInput,
+  ]);
   const voicePresentation = resolveVoiceComposerPresentation(
     voiceInput.state,
     voiceInput.elapsedSeconds,

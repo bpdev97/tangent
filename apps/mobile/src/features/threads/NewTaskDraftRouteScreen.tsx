@@ -10,6 +10,7 @@ type NewTaskDraftRouteParams = {
   readonly title?: string | string[];
   readonly pendingTaskId?: string | string[];
   readonly incomingShareId?: string | string[];
+  readonly startDictationRequestId?: string | string[];
 };
 
 export function NewTaskDraftRouteScreen({ route }: StaticScreenProps<NewTaskDraftRouteParams>) {
@@ -42,6 +43,11 @@ export function NewTaskDraftRouteScreen({ route }: StaticScreenProps<NewTaskDraf
         }
         pendingTaskId={
           Array.isArray(params.pendingTaskId) ? params.pendingTaskId[0] : params.pendingTaskId
+        }
+        startDictationRequestId={
+          Array.isArray(params.startDictationRequestId)
+            ? params.startDictationRequestId[0]
+            : params.startDictationRequestId
         }
       />
     </>

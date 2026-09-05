@@ -11,6 +11,7 @@
     "FORK-LINEAR-001": "docs/fork/linear-pr-destinations.md",
     "FORK-MERMAID-001": "docs/fork/mermaid.md",
     "FORK-PREVIEW-001": "docs/fork/settled-preview-suspension.md",
+    "FORK-SHORTCUTS-001": "docs/fork/ios-app-shortcuts.md",
     "FORK-MAINT-001": "docs/internals/fork-maintenance.md"
   },
   "groups": [
@@ -206,7 +207,6 @@
         "apps/mobile/src/features/layout/WorkspaceEmptyDetail.tsx",
         "apps/mobile/src/features/terminal/ThreadTerminalRouteScreen.tsx",
         "apps/mobile/src/features/threads/NewTaskContextPickerScreens.tsx",
-        "apps/mobile/src/features/threads/NewTaskDraftScreen.tsx",
         "apps/mobile/src/features/threads/NewTaskRouteScreen.tsx",
         "apps/mobile/src/features/threads/ProjectThreadRouteGuard.tsx",
         "apps/mobile/src/features/threads/ThreadComposer.tsx",
@@ -218,7 +218,6 @@
         "apps/mobile/src/features/threads/sidebar-header-actions.tsx",
         "apps/mobile/src/features/threads/sidebar-native-header-items.ts",
         "apps/mobile/src/features/threads/thread-list-items.tsx",
-        "apps/mobile/src/features/threads/use-start-generic-chat.ts",
         "apps/mobile/src/persistence/mobile-preferences.ts",
         "apps/mobile/src/state/use-selected-thread-git-actions.ts",
         "apps/mobile/src/state/use-selected-thread-git-state.ts",
@@ -249,12 +248,35 @@
         "apps/web/src/uiStateStore.test.ts",
         "apps/web/src/uiStateStore.ts",
         "docs/fork/generic-chat.md",
-        "docs/user/chats.md",
         "docs/user/keybindings.md",
         "packages/client-runtime/src/state/projectGrouping.genericChat.test.ts",
         "packages/client-runtime/src/state/projectGrouping.ts",
         "packages/shared/src/genericChat.test.ts",
         "packages/shared/src/genericChat.ts"
+      ]
+    },
+    {
+      "features": ["FORK-SHORTCUTS-001"],
+      "paths": [
+        "apps/mobile/modules/t3-native-controls/expo-module.config.json",
+        "apps/mobile/modules/t3-native-controls/ios/T3AppShortcutsModule.swift",
+        "apps/mobile/plugins/withIosAppShortcuts.cjs",
+        "apps/mobile/plugins/withIosAppShortcuts.test.ts",
+        "apps/mobile/src/features/shortcuts/iosAppShortcuts.test.ts",
+        "apps/mobile/src/features/shortcuts/iosAppShortcuts.ts",
+        "apps/mobile/src/features/shortcuts/useAppShortcuts.ts",
+        "apps/mobile/src/features/threads/NewTaskDraftRouteScreen.tsx",
+        "apps/mobile/src/native/appShortcutActions.ios.ts",
+        "apps/mobile/src/native/appShortcutActions.ts",
+        "docs/fork/ios-app-shortcuts.md"
+      ]
+    },
+    {
+      "features": ["FORK-CHAT-001", "FORK-SHORTCUTS-001"],
+      "paths": [
+        "apps/mobile/src/features/threads/NewTaskDraftScreen.tsx",
+        "apps/mobile/src/features/threads/use-start-generic-chat.ts",
+        "docs/user/chats.md"
       ]
     },
     {
@@ -283,6 +305,7 @@
         "apps/server/src/persistence/ForkMigrations.ts",
         "apps/server/src/persistence/Migrations.ts",
         "apps/web/src/hooks/useHandleNewThread.test.ts",
+        "apps/web/src/components/pullRequest/PullRequestChecksPopover.tsx",
         "apps/web/tsconfig.json",
         "docs/README.md",
         "docs/internals/fork-maintenance.md",
@@ -321,7 +344,6 @@
         "apps/desktop/src/electron/ElectronShell.ts",
         "apps/desktop/src/main.ts",
         "apps/desktop/src/settings/DesktopClientSettings.test.ts",
-        "apps/mobile/app.config.ts",
         "apps/mobile/eas.json",
         "apps/mobile/package.json",
         "apps/mobile/plugins/withWidgetLogoAsset.cjs",
@@ -392,6 +414,10 @@
         "scripts/personal-release-version.ts",
         "scripts/raycast-tangent-quick-chat.sh"
       ]
+    },
+    {
+      "features": ["FORK-DIST-001", "FORK-SHORTCUTS-001"],
+      "paths": ["apps/mobile/app.config.ts"]
     },
     {
       "features": ["FORK-CHAT-001", "FORK-HERMES-001", "FORK-PUSH-001", "FORK-LINEAR-001"],

@@ -1,7 +1,8 @@
 import * as QuickActions from "expo-quick-actions";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Platform } from "react-native";
-import { useLinkTo, type NavigationState } from "@react-navigation/native";
+import { AppState, Platform } from "react-native";
+import { useLinkTo, useNavigation, type NavigationState } from "@react-navigation/native";
+import { GENERIC_CHAT_PROJECT_TITLE } from "@t3tools/shared/genericChat";
 
 import {
   loadRecentThreadShortcuts,
@@ -15,16 +16,65 @@ import {
   shortcutHref,
   withRecentThreadShortcut,
 } from "./appShortcuts";
+import { useGenericChatProject } from "../threads/use-start-generic-chat";
+import {
+  clearPendingNativeAppShortcutAction,
+  getPendingNativeAppShortcutAction,
+  subscribeToNativeAppShortcutActions,
+} from "../../native/appShortcutActions";
+import { parseIosAppShortcutAction, type IosAppShortcutAction } from "./iosAppShortcuts";
 
 /**
- * Owns the launcher app shortcuts (Android long-press menu): keeps the
- * static "New task" entry plus the recently opened threads in sync, and
- * routes shortcut taps — cold start included — to their in-app screens.
+ * Owns system entry points: iOS App Shortcuts open new chats, while Android
+ * launcher shortcuts keep "New task" plus recent threads in sync.
  * Mounted once in the root stack layout.
  */
 export function useAppShortcuts(state: NavigationState): void {
   useShortcutNavigation();
+  useIosAppShortcutNavigation();
   useRecentThreadShortcutSync(state);
+}
+
+function useIosAppShortcutNavigation(): void {
+  const navigation = useNavigation();
+  const { genericChatProject } = useGenericChatProject();
+  const [pendingAction, setPendingAction] = useState<IosAppShortcutAction | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS !== "ios") return;
+
+    const receive = (payload: unknown) => {
+      const action = parseIosAppShortcutAction(payload);
+      if (action !== null) setPendingAction(action);
+    };
+    const shortcutSubscription = subscribeToNativeAppShortcutActions(receive);
+    const readPending = () => receive(getPendingNativeAppShortcutAction());
+    const appStateSubscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") readPending();
+    });
+    readPending();
+    return () => {
+      shortcutSubscription.remove();
+      appStateSubscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (pendingAction === null || genericChatProject === null) return;
+
+    navigation.navigate("NewTaskSheet", {
+      screen: "NewTaskDraft",
+      params: {
+        environmentId: String(genericChatProject.environmentId),
+        projectId: String(genericChatProject.id),
+        title: GENERIC_CHAT_PROJECT_TITLE,
+        startDictationRequestId:
+          pendingAction.action === "dictate-new-chat" ? pendingAction.requestId : undefined,
+      },
+    });
+    clearPendingNativeAppShortcutAction(pendingAction.requestId);
+    setPendingAction(null);
+  }, [genericChatProject, navigation, pendingAction]);
 }
 
 function useShortcutNavigation(): void {
