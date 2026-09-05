@@ -564,15 +564,19 @@ export const make = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig.ServerConfig;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
-  const baseDir = path.resolve(serverConfig.baseDir);
-  const worktreesDir = path.resolve(serverConfig.worktreesDir);
+  const resolveDirectory = (directory: string) => {
+    const resolved = path.resolve(directory);
+    return fileSystem.realPath(resolved).pipe(Effect.orElseSucceed(() => resolved));
+  };
+  const baseDir = yield* resolveDirectory(serverConfig.baseDir);
+  const worktreesDir = yield* resolveDirectory(serverConfig.worktreesDir);
   // Windows filesystems are case-insensitive, so path prefix checks there
   // must case fold.
   const foldWorktreeCase = (yield* HostProcessPlatform) === "win32";
   const hostEnvironment = yield* HostProcessEnvironment;
   const excludedProjectRoots = new Set(
-    [NodeOS.homedir(), NodeOS.tmpdir()].map((directory) =>
-      normalizeProjectPathForComparison(path.resolve(directory)),
+    (yield* Effect.all([NodeOS.homedir(), NodeOS.tmpdir()].map(resolveDirectory))).map(
+      normalizeProjectPathForComparison,
     ),
   );
 

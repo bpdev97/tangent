@@ -487,7 +487,10 @@
       "features": ["FORK-MAINT-001"],
       "paths": [
         "apps/server/src/provider/providerMaintenance.test.ts",
-        "apps/web/src/components/files/fileEditorLanguageReadiness.test.ts"
+        "apps/web/src/components/files/fileEditorLanguageReadiness.test.ts",
+        "apps/server/src/provider/Drivers/CodexDriver.test.ts",
+        "apps/server/src/project/AgentSessionScanner.ts",
+        "apps/server/src/project/AgentSessionScanner.test.ts"
       ]
     }
   ]
