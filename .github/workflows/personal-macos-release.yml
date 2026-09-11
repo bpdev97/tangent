@@ -16,8 +16,53 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  resource-monitor:
+    name: Resource monitor (${{ matrix.resource_key }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            target: aarch64-apple-darwin
+            resource_key: darwin-arm64
+          - runner: macos-latest
+            target: x86_64-apple-darwin
+            resource_key: darwin-x64
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            resource_key: linux-x64
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            resource_key: win32-x64
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Build resource monitor
+        run: cargo build --locked --release --manifest-path native/resource-monitor/Cargo.toml --target ${{ matrix.target }}
+      - name: Collect resource monitor
+        shell: bash
+        env:
+          RESOURCE_KEY: ${{ matrix.resource_key }}
+        run: |
+          binary=t3-resource-monitor
+          if [[ "$RESOURCE_KEY" == win32-* ]]; then binary="$binary.exe"; fi
+          target_dir="resource-monitor-publish/$RESOURCE_KEY"
+          mkdir -p "$target_dir"
+          cp "native/resource-monitor/target/${{ matrix.target }}/release/$binary" "$target_dir/"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: resource-monitor-${{ matrix.resource_key }}
+          path: resource-monitor-publish/
+          if-no-files-found: error
+
   release:
     name: Build and publish macOS arm64
+    needs: resource-monitor
     runs-on: macos-latest
     timeout-minutes: 60
     environment: personal-release
@@ -54,6 +99,11 @@ jobs:
 
       - name: Ensure Electron runtime is installed
         run: vp run --filter @t3tools/desktop ensure:electron
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
 
       - name: Check
         run: vp check
@@ -119,10 +169,18 @@ jobs:
           test -s release/latest-mac.yml
           cp release/latest-mac.yml release-publish/
 
+      - name: Download server resource monitors
+        uses: actions/download-artifact@v8
+        with:
+          pattern: resource-monitor-*
+          path: apps/server/dist/resource-monitor
+          merge-multiple: true
+
       - name: Pack Tangent server release
         shell: bash
         run: |
           version="${{ steps.release-meta.outputs.version }}"
+          chmod +x apps/server/dist/resource-monitor/*/t3-resource-monitor
           node apps/server/scripts/cli.ts pack \
             --output-directory release-publish
           source_archive="release-publish/t3-$version.tgz"
