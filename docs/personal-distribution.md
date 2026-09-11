@@ -93,6 +93,10 @@ Manual launch, SSH launch, background-service installation, and self-update must
 GitHub Release asset. They must not fall back to the upstream npm package merely because its version
 matches.
 
+The server archive includes upstream's four native resource monitors. pnpm normalizes archive
+permissions, so the POSIX binaries must remain listed in `publishConfig.executableFiles`, including
+in the temporary publish manifest. The release workflow checks the extracted archive before publishing.
+
 The self-updater streams the archive into a unique temporary file while enforcing the 200 MiB limit
 and computing SHA-256. It renames the file into place only after the sidecar checksum matches,
 removes failed temporary files, and keeps the current archive plus one previous download under

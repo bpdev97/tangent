@@ -187,6 +187,13 @@ jobs:
           release_archive="release-publish/tangent-server-$version.tgz"
           test -f "$source_archive"
           mv "$source_archive" "$release_archive"
+          verification_dir="$(mktemp -d)"
+          trap 'rm -rf "$verification_dir"' EXIT
+          tar -xzf "$release_archive" -C "$verification_dir"
+          for platform in darwin-arm64 darwin-x64 linux-x64; do
+            test -x "$verification_dir/package/dist/resource-monitor/$platform/t3-resource-monitor"
+          done
+          test -s "$verification_dir/package/dist/resource-monitor/win32-x64/t3-resource-monitor.exe"
           (
             cd release-publish
             shasum -a 256 "tangent-server-$version.tgz" \

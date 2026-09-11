@@ -42,6 +42,7 @@ interface PackageJson {
   version: string;
   engines: Record<string, string>;
   files: string[];
+  publishConfig: typeof serverPackageJson.publishConfig;
   dependencies: Record<string, string>;
   overrides: Record<string, string>;
 }
@@ -133,6 +134,7 @@ const preparePackageResource = Effect.fn("preparePackageResource")(function* (
     version,
     engines: serverPackageJson.engines,
     files: serverPackageJson.files,
+    publishConfig: serverPackageJson.publishConfig,
     dependencies: resolveCatalogDependencies(
       serverPackageJson.dependencies,
       workspaceCatalog,
