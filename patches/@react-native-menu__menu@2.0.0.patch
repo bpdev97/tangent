@@ -203,7 +203,7 @@ index 352d8fa656aac2e39160104df2394ebe6719bac5..e44b267463f21537eaee533995f6ad66
      private var _themeVariant: String?
      @objc public var themeVariant: NSString? {
 diff --git a/ios/Shared/MenuViewImplementation.swift b/ios/Shared/MenuViewImplementation.swift
-index 5c4e0da4292b15d3a27b5ea1555f11452a470815..5e4aedc00aee45c7dd4cda204ee01da2b2fa3642 100644
+index 5c4e0da4292b15d3a27b5ea1555f11452a470815..3904166998e18b00164fc367ef577dca55430acf 100644
 --- a/ios/Shared/MenuViewImplementation.swift
 +++ b/ios/Shared/MenuViewImplementation.swift
 @@ -42,6 +42,14 @@ public class MenuViewImplementation: UIButton {
@@ -221,11 +221,12 @@ index 5c4e0da4292b15d3a27b5ea1555f11452a470815..5e4aedc00aee45c7dd4cda204ee01da2
      private var _themeVariant: String?
      @objc public var themeVariant: NSString? {
          didSet {
-@@ -60,17 +68,46 @@ public class MenuViewImplementation: UIButton {
+@@ -60,17 +68,50 @@ public class MenuViewImplementation: UIButton {
      }
     
      public override func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration? {
 -        sendMenuOpen()
+-        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
 +        // Flush updates deferred by the presented-guard before the action
 +        // provider snapshots self.menu (covers a stuck flag from an
 +        // interaction that never ended cleanly).
@@ -236,10 +237,14 @@ index 5c4e0da4292b15d3a27b5ea1555f11452a470815..5e4aedc00aee45c7dd4cda204ee01da2
 +        }
 +        isMenuPresented = true
 +        sendMenuInteractionStart()
-         return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
++        let configuration = UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
              guard let self = self else { return nil }
              return self.menu
          }
++        if #available(iOS 16.0, *) {
++            configuration.preferredMenuElementOrder = fixedOrder ? .fixed : .automatic
++        }
++        return configuration
      }
 -    
 +
@@ -270,7 +275,7 @@ index 5c4e0da4292b15d3a27b5ea1555f11452a470815..5e4aedc00aee45c7dd4cda204ee01da2
      func setup () {
          let menu = UIMenu(title: _title,
              identifier: nil,
-@@ -86,8 +123,98 @@ public class MenuViewImplementation: UIButton {
+@@ -86,8 +127,98 @@ public class MenuViewImplementation: UIButton {
              }
          }
  
@@ -369,7 +374,7 @@ index 5c4e0da4292b15d3a27b5ea1555f11452a470815..5e4aedc00aee45c7dd4cda204ee01da2
      }
  
      public override func reactSetFrame(_ frame: CGRect) {
-@@ -124,4 +251,8 @@ public class MenuViewImplementation: UIButton {
+@@ -124,4 +255,8 @@ public class MenuViewImplementation: UIButton {
      @objc func sendMenuOpen() {
          // NO-OP (should be overriden by parent)
      }
