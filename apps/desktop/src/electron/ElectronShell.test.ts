@@ -36,6 +36,28 @@ describe("ElectronShell", () => {
     }).pipe(Effect.provide(ElectronShell.layer)),
   );
 
+  it.effect("copies text to the system clipboard", () =>
+    Effect.gen(function* () {
+      writeTextMock.mockResolvedValue(undefined);
+
+      const electronShell = yield* ElectronShell.ElectronShell;
+      yield* electronShell.copyText("https://example.com/path");
+
+      assert.deepEqual(writeTextMock.mock.calls, [["https://example.com/path"]]);
+    }).pipe(Effect.provide(ElectronShell.layer)),
+  );
+
+  it.effect("does not fail when the clipboard write rejects", () =>
+    Effect.gen(function* () {
+      writeTextMock.mockRejectedValue(new Error("write failed"));
+
+      const electronShell = yield* ElectronShell.ElectronShell;
+      yield* electronShell.copyText("https://example.com/path");
+
+      assert.deepEqual(writeTextMock.mock.calls, [["https://example.com/path"]]);
+    }).pipe(Effect.provide(ElectronShell.layer)),
+  );
+
   it.effect("opens the Full Disk Access settings anchor", () =>
     Effect.gen(function* () {
       openExternalMock.mockResolvedValue(undefined);
@@ -66,35 +88,36 @@ describe("ElectronShell", () => {
     }).pipe(Effect.provide(ElectronShell.layer)),
   );
 
-  it.effect("opens Linear desktop app deep links", () =>
+  it.effect("opens Zed's ssh deep link", () =>
     Effect.gen(function* () {
       openExternalMock.mockResolvedValue(undefined);
 
       const electronShell = yield* ElectronShell.ElectronShell;
-      const result = yield* electronShell.openExternal(
-        "linear://linear.app/tangent/issue/TAN-42/native-ticket-opening",
-      );
+      const results = yield* Effect.all([
+        electronShell.openExternal("zed://ssh/example.com/home/user/project"),
+        electronShell.openExternal("zed://ssh/example.com/"),
+      ]);
 
-      assert.equal(result, true);
+      assert.deepEqual(results, [true, true]);
       assert.deepEqual(openExternalMock.mock.calls, [
-        ["linear://linear.app/tangent/issue/TAN-42/native-ticket-opening"],
+        ["zed://ssh/example.com/home/user/project"],
+        ["zed://ssh/example.com/"],
       ]);
     }).pipe(Effect.provide(ElectronShell.layer)),
   );
 
-  it.effect("opens Linear Review desktop app deep links", () =>
+  it.effect("does not open editor URLs that mix up link shapes", () =>
     Effect.gen(function* () {
       openExternalMock.mockResolvedValue(undefined);
 
       const electronShell = yield* ElectronShell.ElectronShell;
-      const result = yield* electronShell.openExternal(
-        "linear://linear.review/bpdev97/tangent/pull/52",
-      );
-
-      assert.equal(result, true);
-      assert.deepEqual(openExternalMock.mock.calls, [
-        ["linear://linear.review/bpdev97/tangent/pull/52"],
+      const results = yield* Effect.all([
+        electronShell.openExternal("zed://extension/attacker"),
+        electronShell.openExternal("vscode://ssh/example.com/home/user/project"),
       ]);
+
+      assert.deepEqual(results, [false, false]);
+      assert.equal(openExternalMock.mock.calls.length, 0);
     }).pipe(Effect.provide(ElectronShell.layer)),
   );
 
@@ -110,9 +133,10 @@ describe("ElectronShell", () => {
         electronShell.openExternal(
           "vscode://:secret@vscode-remote/ssh-remote+example.com/home/user/project",
         ),
+        electronShell.openExternal("zed://ssh/user@example.com/home/user/project"),
       ]);
 
-      assert.deepEqual(results, [false, false]);
+      assert.deepEqual(results, [false, false, false]);
       assert.equal(openExternalMock.mock.calls.length, 0);
     }).pipe(Effect.provide(ElectronShell.layer)),
   );
@@ -135,16 +159,6 @@ describe("ElectronShell", () => {
       const result = yield* electronShell.openExternal(
         "vscode://ms-python.python/some-command?argument=attacker",
       );
-
-      assert.equal(result, false);
-      assert.equal(openExternalMock.mock.calls.length, 0);
-    }).pipe(Effect.provide(ElectronShell.layer)),
-  );
-
-  it.effect("does not open untrusted Linear deep links", () =>
-    Effect.gen(function* () {
-      const electronShell = yield* ElectronShell.ElectronShell;
-      const result = yield* electronShell.openExternal("linear://example.com/issue/TAN-42");
 
       assert.equal(result, false);
       assert.equal(openExternalMock.mock.calls.length, 0);

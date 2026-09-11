@@ -21,7 +21,6 @@ const mocks = vi.hoisted(() => ({
   toggleNativePictureInPicture: null as (() => void) | null,
   pictureInPicturePressed: false,
   miniPlayerTabId: null as string | null,
-  controller: "none" as "agent" | "human" | "none",
   openMiniPlayer: vi.fn(),
   closeMiniPlayer: vi.fn(),
   closeRightPanel: vi.fn(),
@@ -57,7 +56,8 @@ vi.mock("~/browserHistoryStore", () => ({
   useThreadRecentHistory: () => EMPTY_HISTORY,
 }));
 
-vi.mock("~/state/session", () => ({
+vi.mock("~/state/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("~/state/session")>()),
   readPreparedConnection: mocks.readPreparedConnection,
 }));
 
@@ -114,7 +114,7 @@ vi.mock("~/previewStateStore", () => ({
         colorScheme: "system",
         audioMuted: false,
         audible: false,
-        controller: mocks.controller,
+        controller: "none",
       },
     },
     recentlySeenUrls: [],
@@ -335,7 +335,6 @@ describe("PreviewView navigation", () => {
     mocks.toggleNativePictureInPicture = null;
     mocks.pictureInPicturePressed = false;
     mocks.miniPlayerTabId = null;
-    mocks.controller = "none";
     mocks.openMiniPlayer.mockClear();
     mocks.closeMiniPlayer.mockClear();
     mocks.closeRightPanel.mockClear();
@@ -434,57 +433,6 @@ describe("PreviewView navigation", () => {
         "http://localhost:3000/admin",
       );
     });
-  });
-
-  it("renders Linear destinations without nested destination or browser chrome", () => {
-    const markup = renderToStaticMarkup(
-      <PreviewView
-        threadRef={TEST_THREAD_REF}
-        tabId="tab-1"
-        presentation={{
-          _tag: "linear",
-          reviewUrl: "https://linear.review/bpdev97/tangent/pull/52",
-          tickets: [
-            {
-              id: "issue-1",
-              identifier: "TAN-42",
-              title: "Make Linear feel native",
-              url: "https://linear.app/tangent/issue/TAN-42",
-            },
-          ],
-          ticketLookup: "ready",
-        }}
-        visible
-      />,
-    );
-
-    expect(mocks.submittedUrl).toBeNull();
-    expect(markup).not.toContain("data-linear-preview-toolbar");
-    expect(markup).not.toContain("Search or enter URL");
-    expect(mocks.navigate).not.toHaveBeenCalled();
-  });
-
-  it("hides human-control chrome from Linear while preserving agent-control status", () => {
-    const presentation = {
-      _tag: "linear" as const,
-      reviewUrl: "https://linear.review/bpdev97/tangent/pull/52",
-      tickets: [],
-      ticketLookup: "ready" as const,
-    };
-    mocks.controller = "human";
-
-    const humanMarkup = renderToStaticMarkup(
-      <PreviewView threadRef={TEST_THREAD_REF} tabId="tab-1" presentation={presentation} visible />,
-    );
-
-    expect(humanMarkup).not.toContain("Human control");
-
-    mocks.controller = "agent";
-    const agentMarkup = renderToStaticMarkup(
-      <PreviewView threadRef={TEST_THREAD_REF} tabId="tab-1" presentation={presentation} visible />,
-    );
-
-    expect(agentMarkup).toContain("Agent controlling browser");
   });
 
   it("maps an empty-state localhost server onto the WSL host", async () => {

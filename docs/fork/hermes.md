@@ -88,6 +88,8 @@ socket disconnects, its next request opens a new connection.
 - `commands.catalog` supplies built-in, quick, and skill-derived slash commands. Submitted slash
   commands use `slash.exec` with `command.dispatch` fallback; dispatches that return a prompt are
   sent through `prompt.submit`, while direct command output becomes canonical assistant output.
+- Manual context compaction declares the gateway’s `/compress` slash command through upstream’s
+  adapter strategy. Its supervised command response emits ordinary turn completion.
 - `session.interrupt`, `session.close`, and `session.undo` implement stop, lifecycle cleanup, and
   rollback.
 - `approval.request` maps to T3 approvals. Accept, accept-for-session, and decline map to `once`,

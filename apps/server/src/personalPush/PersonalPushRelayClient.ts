@@ -19,9 +19,7 @@ import type * as Schema from "effect/Schema";
 import * as ServerConfig from "../config.ts";
 import * as ServerSettingsModule from "../serverSettings.ts";
 
-export class PersonalPushRelayRequestError extends Data.TaggedError(
-  "PersonalPushRelayRequestError",
-)<{
+class PersonalPushRelayRequestError extends Data.TaggedError("PersonalPushRelayRequestError")<{
   readonly operation: string;
   readonly status: number | null;
   readonly cause?: unknown;
@@ -50,9 +48,7 @@ export type PersonalPushConfig = Pick<
   "personalPushRelayUrl" | "personalPushRelayToken"
 >;
 
-export function configFromServerConfig(
-  config: ServerConfig.ServerConfig["Service"],
-): PersonalPushConfig {
+function configFromServerConfig(config: ServerConfig.ServerConfig["Service"]): PersonalPushConfig {
   return {
     ...(config.personalPushRelayUrl ? { personalPushRelayUrl: config.personalPushRelayUrl } : {}),
     ...(config.personalPushRelayToken

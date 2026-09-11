@@ -38,12 +38,12 @@ const DEFAULT_BOOT_SERVICE_IDENTITY = {
   launchdLabel: "com.t3tools.t3code.service",
   displayName: "T3 Code",
 } as const;
-export const BOOT_SERVICE_UNIT_FILE = `${DEFAULT_BOOT_SERVICE_IDENTITY.bootServiceName}.service`;
+const BOOT_SERVICE_UNIT_FILE = `${DEFAULT_BOOT_SERVICE_IDENTITY.bootServiceName}.service`;
 // `.service` suffix keeps the label distinct from the desktop app's bundle id
 // (com.t3tools.t3code), so launchd and TCC records never collide.
-export const BOOT_SERVICE_LAUNCHD_LABEL = DEFAULT_BOOT_SERVICE_IDENTITY.launchdLabel;
-export const BOOT_SERVICE_PLIST_FILE = `${BOOT_SERVICE_LAUNCHD_LABEL}.plist`;
-export const BOOT_SERVICE_UNIT_ENV = "T3_BOOT_SERVICE_UNIT";
+const BOOT_SERVICE_LAUNCHD_LABEL = DEFAULT_BOOT_SERVICE_IDENTITY.launchdLabel;
+const BOOT_SERVICE_PLIST_FILE = `${BOOT_SERVICE_LAUNCHD_LABEL}.plist`;
+const BOOT_SERVICE_UNIT_ENV = "T3_BOOT_SERVICE_UNIT";
 
 export interface BootServiceIdentity {
   readonly bootServiceName: string;
@@ -51,10 +51,10 @@ export interface BootServiceIdentity {
   readonly displayName: string;
 }
 
-export const bootServiceUnitFile = (identity: BootServiceIdentity): string =>
+const bootServiceUnitFile = (identity: BootServiceIdentity): string =>
   `${identity.bootServiceName}.service`;
 
-export const bootServicePlistFile = (identity: BootServiceIdentity): string =>
+const bootServicePlistFile = (identity: BootServiceIdentity): string =>
   `${identity.launchdLabel}.plist`;
 
 /** systemd expands `%` specifiers, including in unquoted append-log paths. */
@@ -395,7 +395,7 @@ function selectBootServiceManager(input: {
   return undefined;
 }
 
-export class BootServiceUnsupportedError extends Schema.TaggedErrorClass<BootServiceUnsupportedError>()(
+export class BootServiceUnsupportedError extends Schema.TaggedError<BootServiceUnsupportedError>()(
   "BootServiceUnsupportedError",
   { platform: Schema.String },
 ) {
@@ -404,7 +404,7 @@ export class BootServiceUnsupportedError extends Schema.TaggedErrorClass<BootSer
   }
 }
 
-export class BootServiceCommandError extends Schema.TaggedErrorClass<BootServiceCommandError>()(
+export class BootServiceCommandError extends Schema.TaggedError<BootServiceCommandError>()(
   "BootServiceCommandError",
   {
     step: Schema.String,
@@ -421,7 +421,7 @@ export class BootServiceCommandError extends Schema.TaggedErrorClass<BootService
   }
 }
 
-export class BootServiceInstallError extends Schema.TaggedErrorClass<BootServiceInstallError>()(
+export class BootServiceInstallError extends Schema.TaggedError<BootServiceInstallError>()(
   "BootServiceInstallError",
   { cause: Schema.Defect() },
 ) {
@@ -458,7 +458,7 @@ export function formatBootServiceProblem(
   }
 }
 
-export class BootServicePrerequisiteError extends Schema.TaggedErrorClass<BootServicePrerequisiteError>()(
+export class BootServicePrerequisiteError extends Schema.TaggedError<BootServicePrerequisiteError>()(
   "BootServicePrerequisiteError",
   { problem: BootServiceProblem, cause: Schema.optional(Schema.Defect()) },
 ) {
@@ -467,7 +467,7 @@ export class BootServicePrerequisiteError extends Schema.TaggedErrorClass<BootSe
   }
 }
 
-export class BootServiceUpdatePendingError extends Schema.TaggedErrorClass<BootServiceUpdatePendingError>()(
+export class BootServiceUpdatePendingError extends Schema.TaggedError<BootServiceUpdatePendingError>()(
   "BootServiceUpdatePendingError",
   {},
 ) {
@@ -476,7 +476,7 @@ export class BootServiceUpdatePendingError extends Schema.TaggedErrorClass<BootS
   }
 }
 
-export class BootServiceDowngradeRefusedError extends Schema.TaggedErrorClass<BootServiceDowngradeRefusedError>()(
+export class BootServiceDowngradeRefusedError extends Schema.TaggedError<BootServiceDowngradeRefusedError>()(
   "BootServiceDowngradeRefusedError",
   {
     installedVersion: Schema.String,

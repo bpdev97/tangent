@@ -31,7 +31,6 @@ import {
 interface ElectronWebview extends HTMLElement {
   src: string;
   partition: string;
-  useragent: string;
   preload?: string;
   webpreferences?: string;
   getWebContentsId: () => number;
@@ -299,7 +298,6 @@ export function HostedBrowserWebview(props: {
           {...({ allowpopups: "true" } as unknown as { readonly allowpopups?: boolean })}
           src={webviewGeneration === 0 ? initialSrc : recoverySrc}
           partition={config.partition}
-          useragent={config.userAgent}
           webpreferences={config.webPreferences}
           {...(config.preloadUrl ? { preload: config.preloadUrl } : {})}
           data-preview-tab={runtimeTabId}

@@ -958,6 +958,42 @@ it.layer(testLayer)("HermesAdapter gateway", (it) => {
     ),
   );
 
+  it.effect("completes the declared context-compaction command through the gateway", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const gateway = new FakeGateway();
+        gateway.slashExecResult = { output: "Context compressed" };
+        const adapter = yield* makeHermesAdapter(decodeSettings({ profile: "default" }), {
+          gatewayRuntime: fakeRuntime(gateway, {}),
+        });
+        const threadId = ThreadId.make("hermes-compaction");
+        yield* adapter.startSession({ threadId, runtimeMode: "approval-required" });
+        const completed = yield* adapter.streamEvents.pipe(
+          Stream.filter((event) => event.type === "turn.completed"),
+          Stream.runHead,
+          Effect.forkChild({ startImmediately: true }),
+        );
+        const compaction = adapter.compaction;
+        if (compaction?.type !== "slash-command") {
+          return yield* Effect.die("Expected Hermes slash-command compaction");
+        }
+        const turn = yield* adapter.sendTurn({ threadId, input: compaction.command });
+        const event = yield* Fiber.join(completed);
+        assert.equal(event._tag, "Some");
+        if (event._tag === "Some") {
+          assert.equal(event.value.turnId, turn.turnId);
+          assert.deepEqual(event.value.payload, { state: "completed" });
+        }
+        assert.isTrue(
+          gateway.requests.some(
+            (request) => request.method === "slash.exec" && request.params.command === "compress",
+          ),
+        );
+        assert.isFalse(gateway.requests.some((request) => request.method === "prompt.submit"));
+      }),
+    ),
+  );
+
   it.effect("falls back to command.dispatch and submits skill payloads as prompts", () =>
     Effect.scoped(
       Effect.gen(function* () {

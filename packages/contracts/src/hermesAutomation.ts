@@ -86,7 +86,7 @@ export const HermesAutomationMutationInput = Schema.Union([
 ]);
 export type HermesAutomationMutationInput = typeof HermesAutomationMutationInput.Type;
 
-export class HermesAutomationError extends Schema.TaggedErrorClass<HermesAutomationError>()(
+export class HermesAutomationError extends Schema.TaggedError<HermesAutomationError>()(
   "HermesAutomationError",
   {
     message: Schema.String,

@@ -1,3 +1,4 @@
+import { isGenericChatProjectId } from "@t3tools/shared/genericChat";
 import {
   CommandId,
   type CheckpointRef,
@@ -190,6 +191,7 @@ const make = Effect.gen(function* () {
     readonly projects: ReadonlyArray<{ readonly id: ProjectId; readonly workspaceRoot: string }>;
     readonly preferSessionRuntime: boolean;
   }): Effect.fn.Return<string | undefined, CheckpointStoreError> {
+    if (isGenericChatProjectId(input.thread.projectId)) return undefined;
     const fromSession = yield* resolveSessionRuntimeForThread(input.threadId);
     const fromThread = resolveThreadWorkspaceCwd({
       thread: input.thread,
@@ -478,6 +480,8 @@ const make = Effect.gen(function* () {
   const refreshLocalGitStatusFromTurnCompletion = Effect.fn(
     "refreshLocalGitStatusFromTurnCompletion",
   )(function* (event: Extract<ProviderRuntimeEvent, { type: "turn.completed" }>) {
+    const thread = yield* projectionSnapshotQuery.getThreadShellById(event.threadId);
+    if (Option.isSome(thread) && isGenericChatProjectId(thread.value.projectId)) return;
     const sessionRuntime = yield* resolveSessionRuntimeForThread(event.threadId);
     if (Option.isNone(sessionRuntime)) {
       return;
@@ -563,8 +567,7 @@ const make = Effect.gen(function* () {
         thread.branch === null ||
         thread.branch === checkedOutBranch ||
         thread.worktreePath === null ||
-        thread.worktreePath !== input.cwd ||
-        isTemporaryWorktreeBranch(thread.branch)
+        thread.worktreePath !== input.cwd
       ) {
         return;
       }
@@ -604,6 +607,23 @@ const make = Effect.gen(function* () {
       }),
     );
   });
+
+  // Refreshing git status ends in a remote PR lookup under the vcs status
+  // write lock. Run it on its own worker so file capture for this turn (and
+  // checkpoints for other threads) never wait behind that network call.
+  const statusRefreshWorker = yield* makeDrainableWorker(
+    (event: Extract<ProviderRuntimeEvent, { type: "turn.completed" }>) =>
+      refreshLocalGitStatusFromTurnCompletion(event).pipe(
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.failCause(cause)
+            : Effect.logWarning("failed to refresh git status after turn completion", {
+                threadId: event.threadId,
+                cause: Cause.pretty(cause),
+              }),
+        ),
+      ),
+  );
 
   const ensurePreTurnBaselineFromDomainTurnStart = Effect.fn(
     "ensurePreTurnBaselineFromDomainTurnStart",
@@ -853,7 +873,7 @@ const make = Effect.gen(function* () {
       const isTrackedTurn = sameId(startedTurnId, turnId);
       if (isTrackedTurn) startedTurns.delete(event.threadId);
       if (event.type === "turn.completed") {
-        yield* refreshLocalGitStatusFromTurnCompletion(event);
+        yield* statusRefreshWorker.enqueue(event);
       }
       if (
         turnId !== null &&
@@ -944,7 +964,7 @@ const make = Effect.gen(function* () {
 
   return {
     start,
-    drain: worker.drain,
+    drain: worker.drain.pipe(Effect.andThen(statusRefreshWorker.drain)),
   } satisfies CheckpointReactorShape;
 });
 

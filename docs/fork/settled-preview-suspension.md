@@ -3,7 +3,7 @@
 Tangent keeps browser-preview tabs and their navigation metadata attached to a thread after the
 thread is settled, but it does not keep an inactive settled thread's Electron webviews alive. This
 provides a bounded lifecycle signal without making right-panel tabs disappear or coupling browser
-resource management to Linear-specific UI.
+resource management to individual destinations.
 
 ## Lifecycle
 
@@ -25,7 +25,7 @@ settling use that signal; client-derived guesses never destroy a webview.
 The suspension decision and its tests are fork-owned under `apps/web/src/browser/`. Shared upstream
 touchpoints are `AppRoot.tsx` and `ElectronBrowserHost.tsx`.
 
-- Apply the lifecycle uniformly to all desktop browser previews, not only Linear destinations.
+- Apply the lifecycle uniformly to all desktop browser previews.
 - Keep the active route mounted even during the settle/navigation transition.
 - Preserve preview sessions, right-panel surfaces, latest URLs, and persistent browser storage.
 - Releasing a webview may stop recording and close its desktop lease; it must not send the server

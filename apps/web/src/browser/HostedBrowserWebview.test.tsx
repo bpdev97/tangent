@@ -74,7 +74,6 @@ beforeEach(() => {
     partition: "persist:t3-preview-work",
     webPreferences: "contextIsolation=yes",
     preloadUrl: null,
-    userAgent: "Mozilla/5.0 Chrome/140.0.0.0 Safari/537.36",
   });
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("window", globalThis);

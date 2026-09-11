@@ -1942,6 +1942,7 @@ export const makeHermesAdapter = Effect.fn("makeHermesAdapter")(function* (
   return {
     provider: HERMES_DRIVER_KIND,
     capabilities: { sessionModelSwitch: "in-session" },
+    compaction: { type: "slash-command", command: "/compress" },
     startSession,
     sendTurn,
     interruptTurn,

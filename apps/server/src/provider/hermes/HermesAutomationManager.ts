@@ -223,7 +223,7 @@ export class HermesAutomationManager extends Context.Service<
   }
 >()("t3/provider/hermes/HermesAutomationManager") {}
 
-export const make = Effect.fn("HermesAutomationManager.make")(function* () {
+const make = Effect.fn("HermesAutomationManager.make")(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const platform = yield* HostProcessPlatform;

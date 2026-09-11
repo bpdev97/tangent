@@ -131,7 +131,7 @@ function DeviceNotificationsRow() {
   const agentAwarenessPlatform = resolveAgentAwarenessPlatformPresentation(Platform.OS);
 
   const refreshNotifications = useCallback(async () => {
-    if (process.env.EXPO_OS !== "ios") {
+    if (Platform.OS !== "ios" && Platform.OS !== "android") {
       setNotificationStatus("unsupported");
       return;
     }
@@ -150,7 +150,7 @@ function DeviceNotificationsRow() {
       if (state === "active") void refreshNotifications();
     });
     return () => subscription.remove();
-  }, [refreshNotifications]);
+  }, [deviceRegistered, refreshNotifications]);
 
   const requestNotifications = useCallback(async () => {
     const result = await settleAsyncResult(() =>
@@ -299,6 +299,10 @@ function ConfiguredSettingsRouteScreen() {
   const savePreferences = useAtomSet(updateMobilePreferencesAtom);
   const agentAwarenessPushAvailable = supportsAgentAwarenessPush();
   const agentAwarenessPlatform = resolveAgentAwarenessPlatformPresentation(Platform.OS);
+  const agentAwarenessSubtitle =
+    Platform.OS === "android" && !agentAwarenessPushAvailable
+      ? "Install a newer app build to enable notifications"
+      : agentAwarenessPlatform.subtitle;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { getToken, isLoaded, isSignedIn } = useAuth({ treatPendingAsSignedOut: false });
@@ -362,13 +366,39 @@ function ConfiguredSettingsRouteScreen() {
     }
 
     setLiveActivityStatus("linking");
+    if (Platform.OS === "android") {
+      const permission = await settleAsyncResult(() =>
+        runtime.runPromiseExit(requestAgentNotificationPermission),
+      );
+      if (permission._tag === "Failure") {
+        setLiveActivityStatus("disabled");
+        const error = squashAtomCommandFailure(permission);
+        Alert.alert(
+          "Ongoing activity unavailable",
+          error instanceof Error ? error.message : "Could not enable agent notifications.",
+        );
+        return;
+      }
+      if (permission.value.type !== "granted") {
+        setLiveActivityStatus("disabled");
+        Alert.alert(
+          "Notification permission needed",
+          "Enable notifications in system Settings to show ongoing agent activity.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Open Settings", onPress: () => void Linking.openSettings() },
+          ],
+        );
+        return;
+      }
+    }
     const tokenResult = await settlePromise(() => getToken(resolveRelayClerkTokenOptions()));
     if (tokenResult._tag === "Failure") {
       setLiveActivityStatus("disabled");
       const error = squashAtomCommandFailure(tokenResult);
       Alert.alert(
-        "Live Activities unavailable",
-        error instanceof Error ? error.message : "Could not enable Live Activity updates.",
+        Platform.OS === "android" ? "Ongoing activity unavailable" : "Live Activities unavailable",
+        error instanceof Error ? error.message : "Could not enable agent activity updates.",
       );
       return;
     }
@@ -393,8 +423,10 @@ function ConfiguredSettingsRouteScreen() {
       if (!isAtomCommandInterrupted(updateResult)) {
         const error = squashAtomCommandFailure(updateResult);
         Alert.alert(
-          "Live Activities unavailable",
-          error instanceof Error ? error.message : "Could not enable Live Activity updates.",
+          Platform.OS === "android"
+            ? "Ongoing activity unavailable"
+            : "Live Activities unavailable",
+          error instanceof Error ? error.message : "Could not enable agent activity updates.",
         );
       }
       return;
@@ -408,15 +440,15 @@ function ConfiguredSettingsRouteScreen() {
     // Activities are live until the device is actually registered.
     if (getAgentAwarenessRegistrationStatus() === "registered") {
       Alert.alert(
-        "Live Activities enabled",
+        Platform.OS === "android" ? "Ongoing activity enabled" : "Live Activities enabled",
         environmentCount > 0
-          ? `${environmentCount} environment${environmentCount === 1 ? "" : "s"} linked for Live Activity updates.`
-          : "Live Activity updates are enabled. Add an environment to start receiving updates.",
+          ? `${environmentCount} environment${environmentCount === 1 ? "" : "s"} linked for agent activity updates.`
+          : "Agent activity updates are enabled. Add an environment to start receiving updates.",
       );
     } else {
       Alert.alert(
-        "Couldn't finish enabling Live Activities",
-        "This device could not be registered with T3 Connect, so Live Activities won't appear yet. They'll start once registration succeeds.",
+        "Couldn't finish enabling activity updates",
+        "This device could not be registered with T3 Connect, so activity updates won't appear yet. They'll start once registration succeeds.",
       );
     }
   }, [
@@ -541,8 +573,8 @@ function ConfiguredSettingsRouteScreen() {
               liveActivityStatus === "linking"
             }
             icon="bolt.circle"
-            label="Live Activity Updates"
-            subtitle={agentAwarenessPlatform.subtitle}
+            label={Platform.OS === "android" ? "Ongoing Agent Activity" : "Live Activity Updates"}
+            subtitle={agentAwarenessSubtitle}
             // Same gate: a saved preference is meaningless until the device
             // registration the relay needs to push updates has succeeded.
             value={
@@ -750,6 +782,8 @@ function AutoSettleSettingsRows() {
                     patch: filterSharedServerPatch(
                       patch,
                       target?.serverConfig?.environment.capabilities,
+                      target?.serverConfig?.settings,
+                      referenceSettings,
                     ),
                   },
                 });

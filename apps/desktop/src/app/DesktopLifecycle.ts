@@ -17,7 +17,7 @@ import * as DesktopState from "./DesktopState.ts";
 import { isQuickChatActionUrl, resolveQuickChatActionScheme } from "./DesktopQuickChat.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
 
-export class DesktopLifecycleRelaunchError extends Schema.TaggedErrorClass<DesktopLifecycleRelaunchError>()(
+export class DesktopLifecycleRelaunchError extends Schema.TaggedError<DesktopLifecycleRelaunchError>()(
   "DesktopLifecycleRelaunchError",
   {
     reason: Schema.String,
@@ -160,6 +160,7 @@ function quitFromSignal(
   );
 }
 
+/** @public Service construction is part of the canonical Effect module API. */
 export const make = DesktopLifecycle.of({
   relaunch: Effect.fn("desktop.lifecycle.relaunch")(function* (reason) {
     const electronApp = yield* ElectronApp.ElectronApp;

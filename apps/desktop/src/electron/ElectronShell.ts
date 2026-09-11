@@ -24,8 +24,9 @@ const SYSTEM_SETTINGS_URLS: Record<SystemSettingsPane, string> = {
     "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles",
 };
 
-// Remote open-in-editor deep links (`vscode://vscode-remote/ssh-remote+…`)
-// must reach the OS handler; every other non-web scheme stays blocked.
+// Remote open-in-editor deep links (`vscode://vscode-remote/ssh-remote+…`,
+// `zed://ssh/<host>/<path>`) must reach the OS handler; every other non-web
+// scheme stays blocked.
 const SAFE_WEB_PROTOCOLS = new Set(["http:", "https:"]);
 const REMOTE_EDITOR_PROTOCOLS = new Set(
   REMOTE_CAPABLE_EDITOR_IDS.flatMap((id) => {
@@ -34,24 +35,18 @@ const REMOTE_EDITOR_PROTOCOLS = new Set(
   }),
 );
 
+// Zed's host sits in the first path segment, so it needs its own userinfo ban.
+const ZED_SSH_PATHNAME = /^\/[^/@:]+\/.*$/;
+
 const isRemoteEditorUrl = (url: URL) =>
   REMOTE_EDITOR_PROTOCOLS.has(url.protocol) &&
   url.username.length === 0 &&
   url.password.length === 0 &&
-  url.host === "vscode-remote" &&
-  url.pathname.startsWith("/ssh-remote+") &&
-  url.pathname.length > "/ssh-remote+".length;
-
-function isSafeLinearAppUrl(url: URL): boolean {
-  const hostname = url.hostname.toLowerCase();
-  return (
-    url.protocol === "linear:" &&
-    (hostname === "linear.app" || hostname === "linear.review") &&
-    url.username === "" &&
-    url.password === "" &&
-    url.port === ""
-  );
-}
+  (url.protocol === "zed:"
+    ? url.host === "ssh" && ZED_SSH_PATHNAME.test(url.pathname)
+    : url.host === "vscode-remote" &&
+      url.pathname.startsWith("/ssh-remote+") &&
+      url.pathname.length > "/ssh-remote+".length);
 
 export function parseSafeExternalUrl(rawUrl: unknown): Option.Option<string> {
   if (typeof rawUrl !== "string") {
@@ -60,7 +55,7 @@ export function parseSafeExternalUrl(rawUrl: unknown): Option.Option<string> {
 
   try {
     const url = new URL(rawUrl);
-    return SAFE_WEB_PROTOCOLS.has(url.protocol) || isRemoteEditorUrl(url) || isSafeLinearAppUrl(url)
+    return SAFE_WEB_PROTOCOLS.has(url.protocol) || isRemoteEditorUrl(url)
       ? Option.some(url.href)
       : Option.none();
   } catch {
@@ -78,6 +73,7 @@ export class ElectronShell extends Context.Service<
   }
 >()("@t3tools/desktop/electron/ElectronShell") {}
 
+/** @public Service construction is part of the canonical Effect module API. */
 export const make = ElectronShell.of({
   openExternal: (rawUrl) =>
     Option.match(parseSafeExternalUrl(rawUrl), {
@@ -98,9 +94,7 @@ export const make = ElectronShell.of({
       ),
     ),
   copyText: (text) =>
-    Effect.sync(() => {
-      Electron.clipboard.writeText(text);
-    }),
+    Effect.promise(() => Electron.clipboard.writeText(text).catch(() => undefined)),
 });
 
 export const layer = Layer.succeed(ElectronShell, make);

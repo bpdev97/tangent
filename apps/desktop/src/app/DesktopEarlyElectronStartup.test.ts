@@ -81,7 +81,9 @@ describe("DesktopEarlyElectronStartup", () => {
     });
 
     assert.deepEqual(options, {
+      isDevelopment: true,
       linuxWmClass: "bpdev-code-dev",
+      linuxDesktopEntryName: "bpdev-code-dev.desktop",
       passwordStore: "gnome-libsecret",
     });
   });

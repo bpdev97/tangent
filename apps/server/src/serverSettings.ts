@@ -21,6 +21,7 @@ import {
   type UsageLimitSourceConfig,
   ProviderDriverKind,
   ProviderInstanceId,
+  resolveProviderInstanceEnabled,
   ServerSettings,
   ServerSettingsError,
   type ServerSettingsPatch,
@@ -63,7 +64,6 @@ const decodeServerSettings = Schema.decodeUnknownEffect(ServerSettings);
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 const PERSONAL_PUSH_RELAY_PASSWORD_SECRET = "personal-push-relay-password";
-const LINEAR_API_KEY_SECRET = "linear-api-key";
 
 /**
  * Fold the legacy in-config `enabled` flag into the envelope-level
@@ -143,7 +143,7 @@ function providerEnvironmentSecretName(input: {
  */
 const USAGE_LIMIT_SOURCE_KEY_REDACTED = "\u2022\u2022\u2022\u2022\u2022\u2022";
 
-export function usageLimitSourceSecretName(sourceId: string): string {
+function usageLimitSourceSecretName(sourceId: string): string {
   return `usage-limit-source-${Buffer.from(sourceId, "utf8").toString("base64url")}`;
 }
 
@@ -186,9 +186,6 @@ export function redactServerSettingsForClient(settings: ServerSettings): ServerS
   const passwordConfigured =
     settings.personalPushRelay.password.length > 0 ||
     settings.personalPushRelay.passwordRedacted === true;
-  const linearApiKeyConfigured =
-    settings.linearIntegration.apiKey.length > 0 ||
-    settings.linearIntegration.apiKeyRedacted === true;
   return {
     ...settings,
     providerInstances,
@@ -197,11 +194,6 @@ export function redactServerSettingsForClient(settings: ServerSettings): ServerS
       ...settings.personalPushRelay,
       password: "",
       ...(passwordConfigured ? { passwordRedacted: true } : {}),
-    },
-    linearIntegration: {
-      ...settings.linearIntegration,
-      apiKey: "",
-      ...(linearApiKeyConfigured ? { apiKeyRedacted: true } : {}),
     },
   };
 }
@@ -343,7 +335,13 @@ function resolveTextGenerationProvider(settings: ServerSettings): ServerSettings
 }
 
 function fallbackTextGenerationProvider(settings: ServerSettings): ServerSettings {
-  const fallbackEntry = Object.entries(settings.providers).find(([, provider]) => provider.enabled);
+  // Same precedence as isModelSelectionProviderEnabled: an explicit provider
+  // instance wins over the legacy providers map, which decodes to defaults
+  // (codex enabled) when the Providers UI has only written providerInstances.
+  const fallbackEntry = Object.entries(settings.providers).find(([driver, provider]) => {
+    const instance = settings.providerInstances[ProviderInstanceId.make(driver)];
+    return instance === undefined ? provider.enabled : resolveProviderInstanceEnabled(instance);
+  });
   const fallback = fallbackEntry ? ProviderDriverKind.make(fallbackEntry[0]) : undefined;
   if (!fallback) {
     return settings;
@@ -605,34 +603,9 @@ const make = Effect.gen(function* () {
     );
   };
 
-  const materializeLinearApiKey = (
-    settings: ServerSettings,
-  ): Effect.Effect<ServerSettings, ServerSettingsError> => {
-    if (!settings.linearIntegration.apiKeyRedacted) return Effect.succeed(settings);
-    return secretStore.get(LINEAR_API_KEY_SECRET).pipe(
-      Effect.map((secret) => ({
-        ...settings,
-        linearIntegration: {
-          ...settings.linearIntegration,
-          apiKey: Option.isSome(secret) ? textDecoder.decode(secret.value) : "",
-        },
-      })),
-      Effect.mapError(
-        (cause) =>
-          new ServerSettingsError({
-            settingsPath,
-            operation: "read-secret",
-            environmentVariable: "linearIntegration.apiKey",
-            cause,
-          }),
-      ),
-    );
-  };
-
   const materializeSecrets = (settings: ServerSettings) =>
     materializeProviderEnvironmentSecrets(settings).pipe(
       Effect.flatMap(materializePersonalPushRelayPassword),
-      Effect.flatMap(materializeLinearApiKey),
     );
 
   const materializeChanges = (changes: Stream.Stream<ServerSettings>) =>
@@ -685,9 +658,20 @@ const make = Effect.gen(function* () {
           }
 
           nextSecretKeys.add(secretName);
-          if (!variable.valueRedacted) {
-            if (variable.value.length > 0) {
-              yield* secretStore.set(secretName, textEncoder.encode(variable.value)).pipe(
+          // Match the provider environment's last-value-wins behavior for duplicate names.
+          const previous = variable.valueRedacted
+            ? current.providerInstances[ProviderInstanceId.make(instanceId)]?.environment?.findLast(
+                (entry) => entry.name === variable.name,
+              )
+            : undefined;
+          const inlineValue =
+            previous?.sensitive && !previous.valueRedacted && previous.value.length > 0
+              ? previous.value
+              : undefined;
+          const value = inlineValue ?? variable.value;
+          if (!variable.valueRedacted || inlineValue !== undefined) {
+            if (value.length > 0) {
+              yield* secretStore.set(secretName, textEncoder.encode(value)).pipe(
                 Effect.mapError(
                   (cause) =>
                     new ServerSettingsError({
@@ -836,43 +820,6 @@ const make = Effect.gen(function* () {
       ),
     );
 
-  const persistLinearApiKey = (
-    settings: ServerSettings,
-  ): Effect.Effect<ServerSettings, ServerSettingsError> =>
-    Effect.gen(function* () {
-      const linear = settings.linearIntegration;
-      if (linear.apiKeyRedacted) {
-        return {
-          ...settings,
-          linearIntegration: { ...linear, apiKey: "", apiKeyRedacted: true },
-        };
-      }
-      if (linear.apiKey.length > 0) {
-        yield* secretStore.set(LINEAR_API_KEY_SECRET, textEncoder.encode(linear.apiKey));
-        return {
-          ...settings,
-          linearIntegration: { ...linear, apiKey: "", apiKeyRedacted: true },
-        };
-      }
-      yield* secretStore.remove(LINEAR_API_KEY_SECRET);
-      const { apiKeyRedacted: _omit, ...withoutRedaction } = linear;
-      return {
-        ...settings,
-        linearIntegration: { ...withoutRedaction, apiKey: "" },
-      };
-    }).pipe(
-      Effect.mapError(
-        (cause) =>
-          new ServerSettingsError({
-            settingsPath,
-            operation:
-              settings.linearIntegration.apiKey.length > 0 ? "write-secret" : "remove-secret",
-            environmentVariable: "linearIntegration.apiKey",
-            cause,
-          }),
-      ),
-    );
-
   const writeSettingsAtomically = Effect.fnUntraced(
     function* (settings: ServerSettings) {
       const sparseSettingsJson = yield* encodeServerSettingsJson(
@@ -980,9 +927,7 @@ const make = Effect.gen(function* () {
             current,
             applyServerSettingsPatch(current, patch),
           );
-          const nextWithPushSecret =
-            yield* persistPersonalPushRelayPassword(nextWithProviderSecrets);
-          const nextPersisted = yield* persistLinearApiKey(nextWithPushSecret);
+          const nextPersisted = yield* persistPersonalPushRelayPassword(nextWithProviderSecrets);
           const next = yield* normalizeServerSettings(nextPersisted);
           yield* writeSettingsAtomically(next);
           yield* Cache.set(settingsCache, cacheKey, next);

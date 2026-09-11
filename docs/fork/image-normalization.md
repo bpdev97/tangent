@@ -72,6 +72,10 @@ The server declares `heic-decode` and `jpeg-js` as direct runtime dependencies. 
 the `libheif-js` WASM decoder transitively. Keep these dependencies on the server package: the
 worker resolves them at runtime from the packaged server installation.
 
+Keep `heic-decode` on `libheif-js` 1.19.8 until its tiled-image regression is fixed: during the
+2026-09-11 sync, 1.23.2 rejected the valid 80×80 fixture because its internal 160×64 tile exceeded
+the decoder’s derived 6,400-pixel limit. Revalidate the real fixture before lifting this override.
+
 When changing server bundling or dependency externalization, build the server bundle and verify
 that a packaged installation can resolve both direct dependencies before shipping.
 

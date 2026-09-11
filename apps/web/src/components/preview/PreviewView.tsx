@@ -35,7 +35,7 @@ import { useEnvironmentHttpBaseUrl } from "~/state/environments";
 import { previewEnvironment } from "~/state/preview";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { selectThreadPreviewMiniPlayer, usePreviewMiniPlayerStore } from "~/previewMiniPlayerStore";
-import { type LinearPreviewPresentation, useRightPanelStore } from "~/rightPanelStore";
+import { useRightPanelStore } from "~/rightPanelStore";
 
 import { previewBridge } from "./previewBridge";
 import { subscribePreviewAction } from "./previewActionBus";
@@ -72,7 +72,6 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 interface Props {
   threadRef: ScopedThreadRef;
   tabId?: string | null;
-  presentation?: LinearPreviewPresentation;
   configuredUrls?: ReadonlyArray<string> | undefined;
   visible: boolean;
   onSendAnnotation?: (
@@ -97,7 +96,6 @@ const localApi = typeof window === "undefined" ? null : ensureLocalApi();
 export function PreviewView({
   threadRef,
   tabId: requestedTabId,
-  presentation,
   configuredUrls,
   visible,
   onSendAnnotation,
@@ -708,73 +706,71 @@ export function PreviewView({
       className="flex min-h-0 flex-1 flex-col bg-background"
       data-thread-key={scopedThreadKey(threadRef)}
     >
-      {presentation?._tag === "linear" ? null : (
-        <PreviewChromeRow
-          url={url}
-          loading={loading}
-          canGoBack={canGoBack}
-          canGoForward={canGoForward}
-          refreshDisabled={refreshDisabled}
-          focusUrlNonce={focusUrlNonce}
-          onBack={handleBack}
-          onForward={handleForward}
-          onRefresh={handleRefresh}
-          onSubmit={(next) => void handleSubmitUrl(next)}
-          onOpenInBrowser={tabId ? handleOpenInBrowser : undefined}
-          onCapture={previewBridge && tabId ? handleCapture : undefined}
-          captureDisabled={!desktopOverlay || isUnreachable}
-          recording={recordingRuntimeTabId !== null}
-          onPictureInPicture={previewBridge && tabId ? handlePictureInPicture : undefined}
-          pictureInPicture={miniPlayer?.tabId === tabId}
-          pictureInPictureDisabled={!desktopOverlay?.hasWebContents || isUnreachable}
-          onPickElement={previewBridge && tabId ? handlePickElement : undefined}
-          pickActive={pickActive}
-          // Disable when there's no tab (nothing to pick on) OR the page
-          // failed to load (a React overlay covers the webview, so the
-          // user wouldn't be able to actually click anything underneath).
-          pickDisabled={!tabId || isUnreachable}
-          pickDisabledReason={
-            isUnreachable ? "Page didn't load — pick unavailable until the page renders" : undefined
-          }
-          leadingActions={
-            // Only when it differs from the default: labelling every tab
-            // "Default" would be noise on the common case, while a tab in
-            // another profile is exactly what needs calling out.
-            activeProfileId !== browserDefaults.profileId ? (
-              // Capped: profile names run to 48 characters, and an unbounded
-              // badge in this row takes its width from the URL input, the only
-              // flexible element in the compact chrome. The cap sits on the
-              // badge and the truncation on an inner span, because `Badge` is an
-              // `inline-flex` with `whitespace-nowrap` — `text-overflow` never
-              // reaches a bare text node inside it, so the name would be cut off
-              // at both ends with no ellipsis.
-              <Tooltip>
-                <TooltipTrigger render={<Badge variant="outline" className="max-w-28 shrink-0" />}>
-                  <span className="truncate">{activeProfileName}</span>
-                </TooltipTrigger>
-                <TooltipPopup side="top">{activeProfileName}</TooltipPopup>
-              </Tooltip>
-            ) : null
-          }
-          trailingActions={
-            previewBridge ? (
-              <PreviewMoreMenu
-                environmentId={threadRef.environmentId}
-                profileId={activeProfileId}
-                profileName={activeProfileName}
-                tabId={runtimeTabId}
-                hasWebContents={desktopOverlay?.hasWebContents ?? false}
-                zoomFactor={desktopOverlay?.zoomFactor ?? 1}
-                colorScheme={desktopOverlay?.colorScheme ?? "system"}
-                deviceToolbarVisible={viewport._tag !== "fill"}
-                onToggleDeviceToolbar={handleToggleDeviceToolbar}
-                nativePictureInPicture={desktopOverlay?.pictureInPicture ?? false}
-                onNativePictureInPicture={handleNativePictureInPicture}
-              />
-            ) : null
-          }
-        />
-      )}
+      <PreviewChromeRow
+        url={url}
+        loading={loading}
+        canGoBack={canGoBack}
+        canGoForward={canGoForward}
+        refreshDisabled={refreshDisabled}
+        focusUrlNonce={focusUrlNonce}
+        onBack={handleBack}
+        onForward={handleForward}
+        onRefresh={handleRefresh}
+        onSubmit={(next) => void handleSubmitUrl(next)}
+        onOpenInBrowser={tabId ? handleOpenInBrowser : undefined}
+        onCapture={previewBridge && tabId ? handleCapture : undefined}
+        captureDisabled={!desktopOverlay || isUnreachable}
+        recording={recordingRuntimeTabId !== null}
+        onPictureInPicture={previewBridge && tabId ? handlePictureInPicture : undefined}
+        pictureInPicture={miniPlayer?.tabId === tabId}
+        pictureInPictureDisabled={!desktopOverlay?.hasWebContents || isUnreachable}
+        onPickElement={previewBridge && tabId ? handlePickElement : undefined}
+        pickActive={pickActive}
+        // Disable when there's no tab (nothing to pick on) OR the page
+        // failed to load (a React overlay covers the webview, so the
+        // user wouldn't be able to actually click anything underneath).
+        pickDisabled={!tabId || isUnreachable}
+        pickDisabledReason={
+          isUnreachable ? "Page didn't load — pick unavailable until the page renders" : undefined
+        }
+        leadingActions={
+          // Only when it differs from the default: labelling every tab
+          // "Default" would be noise on the common case, while a tab in
+          // another profile is exactly what needs calling out.
+          activeProfileId !== browserDefaults.profileId ? (
+            // Capped: profile names run to 48 characters, and an unbounded
+            // badge in this row takes its width from the URL input, the only
+            // flexible element in the compact chrome. The cap sits on the
+            // badge and the truncation on an inner span, because `Badge` is an
+            // `inline-flex` with `whitespace-nowrap` — `text-overflow` never
+            // reaches a bare text node inside it, so the name would be cut off
+            // at both ends with no ellipsis.
+            <Tooltip>
+              <TooltipTrigger render={<Badge variant="outline" className="max-w-28 shrink-0" />}>
+                <span className="truncate">{activeProfileName}</span>
+              </TooltipTrigger>
+              <TooltipPopup side="top">{activeProfileName}</TooltipPopup>
+            </Tooltip>
+          ) : null
+        }
+        trailingActions={
+          previewBridge ? (
+            <PreviewMoreMenu
+              environmentId={threadRef.environmentId}
+              profileId={activeProfileId}
+              profileName={activeProfileName}
+              tabId={runtimeTabId}
+              hasWebContents={desktopOverlay?.hasWebContents ?? false}
+              zoomFactor={desktopOverlay?.zoomFactor ?? 1}
+              colorScheme={desktopOverlay?.colorScheme ?? "system"}
+              deviceToolbarVisible={viewport._tag !== "fill"}
+              onToggleDeviceToolbar={handleToggleDeviceToolbar}
+              nativePictureInPicture={desktopOverlay?.pictureInPicture ?? false}
+              onNativePictureInPicture={handleNativePictureInPicture}
+            />
+          ) : null
+        }
+      />
 
       <div className="relative min-h-0 flex-1 overflow-hidden">
         {runtimeTabId && snapshot && !showEmptyState ? (
@@ -805,7 +801,7 @@ export function PreviewView({
             controller={controller}
           />
         ) : null}
-        {controller !== "none" && (controller === "agent" || presentation?._tag !== "linear") ? (
+        {controller !== "none" ? (
           <div className="pointer-events-none absolute left-3 top-3 z-40 rounded-full border border-border/70 bg-background/90 px-2.5 py-1 text-[11px] font-medium shadow-sm backdrop-blur">
             {controller === "agent" ? "Agent controlling browser" : "Human control"}
           </div>

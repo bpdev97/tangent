@@ -1,6 +1,6 @@
 {
   "upstream": "pingdotgg/t3code",
-  "baseline": "cb9a6942363ed7f097c7d1fb075bf3a265fbf5d2",
+  "baseline": "2ebc9fa4ed24e389eef24039f27c73ae6633858f",
   "features": {
     "FORK-DIST-001": "docs/personal-distribution.md",
     "FORK-CHAT-001": "docs/fork/generic-chat.md",
@@ -8,7 +8,6 @@
     "FORK-PUSH-001": "docs/fork/personal-push-relay.md",
     "FORK-IMAGE-001": "docs/fork/image-normalization.md",
     "FORK-PALETTE-001": "FORK.md",
-    "FORK-LINEAR-001": "docs/fork/linear-pr-destinations.md",
     "FORK-MERMAID-001": "docs/fork/mermaid.md",
     "FORK-PREVIEW-001": "docs/fork/settled-preview-suspension.md",
     "FORK-SHORTCUTS-001": "docs/fork/ios-app-shortcuts.md",
@@ -100,33 +99,6 @@
       ]
     },
     {
-      "features": ["FORK-LINEAR-001"],
-      "paths": [
-        "apps/server/src/linear/LinearIntegration.test.ts",
-        "apps/server/src/linear/LinearIntegration.ts",
-        "apps/server/src/pullRequest/GitHubPullRequestCli.ts",
-        "apps/server/src/pullRequest/PullRequestService.ts",
-        "apps/web/src/components/linear/LinearPrBadge.test.tsx",
-        "apps/web/src/components/linear/LinearPrBadge.tsx",
-        "apps/web/src/components/linear/linearPrPrimaryDestinations.test.ts",
-        "apps/web/src/components/linear/linearPrPrimaryDestinations.ts",
-        "apps/web/src/components/linear/linearPreviewPresentation.test.ts",
-        "apps/web/src/components/linear/linearPreviewPresentation.ts",
-        "apps/web/src/components/linear/openLinearDestination.test.ts",
-        "apps/web/src/components/linear/openLinearDestination.ts",
-        "apps/web/src/components/linear/openLinearPreviewDestination.test.ts",
-        "apps/web/src/components/linear/openLinearPreviewDestination.ts",
-        "apps/web/src/components/pullRequest/pullRequestList.logic.ts",
-        "apps/web/src/components/settings/LinearIntegrationSettings.tsx",
-        "apps/web/src/components/settings/SourceControlSettings.tsx",
-        "docs/fork/linear-pr-destinations.md",
-        "docs/user/source-control.md",
-        "packages/contracts/src/linear.ts",
-        "packages/shared/src/linear.test.ts",
-        "packages/shared/src/linear.ts"
-      ]
-    },
-    {
       "features": ["FORK-MERMAID-001"],
       "paths": [
         "apps/web/src/components/ChatMarkdown.tsx",
@@ -142,22 +114,9 @@
     {
       "features": ["FORK-PREVIEW-001"],
       "paths": [
-        "apps/desktop/src/ipc/methods/preview.ts",
-        "apps/desktop/src/preview/BrowserSession.test.ts",
-        "apps/desktop/src/preview/BrowserSession.ts",
         "apps/web/src/browser/ElectronBrowserHost.tsx",
-        "apps/web/src/browser/HostedBrowserWebview.tsx",
         "apps/web/src/browser/browserSessionSuspension.test.ts",
         "apps/web/src/browser/browserSessionSuspension.ts",
-        "apps/web/src/browser/openFileInPreview.test.ts",
-        "apps/web/src/browser/openFileInPreview.ts",
-        "apps/web/src/browser/previewWebviewConfigState.test.ts",
-        "apps/web/src/components/RightPanelTabs.tsx",
-        "apps/web/src/components/preview/PreviewPanel.tsx",
-        "apps/web/src/components/preview/PreviewView.test.tsx",
-        "apps/web/src/components/preview/PreviewView.tsx",
-        "apps/web/src/rightPanelStore.test.ts",
-        "apps/web/src/rightPanelStore.ts",
         "docs/fork/settled-preview-suspension.md"
       ]
     },
@@ -338,8 +297,6 @@
         "apps/desktop/src/app/DesktopStatePaths.ts",
         "apps/desktop/src/electron/ElectronProtocol.test.ts",
         "apps/desktop/src/electron/ElectronProtocol.ts",
-        "apps/desktop/src/electron/ElectronShell.test.ts",
-        "apps/desktop/src/electron/ElectronShell.ts",
         "apps/desktop/src/main.ts",
         "apps/desktop/src/settings/DesktopClientSettings.test.ts",
         "apps/mobile/eas.json",
@@ -417,7 +374,7 @@
       "paths": ["apps/mobile/app.config.ts"]
     },
     {
-      "features": ["FORK-CHAT-001", "FORK-HERMES-001", "FORK-PUSH-001", "FORK-LINEAR-001"],
+      "features": ["FORK-CHAT-001", "FORK-HERMES-001", "FORK-PUSH-001"],
       "paths": [
         "apps/mobile/src/Stack.tsx",
         "apps/mobile/src/features/settings/SettingsRouteScreen.tsx",
@@ -480,10 +437,6 @@
       ]
     },
     {
-      "features": ["FORK-PREVIEW-001"],
-      "paths": ["apps/web/src/browser/HostedBrowserWebview.test.tsx"]
-    },
-    {
       "features": ["FORK-MAINT-001"],
       "paths": [
         "apps/server/src/provider/providerMaintenance.test.ts",
@@ -491,6 +444,20 @@
         "apps/server/src/provider/Drivers/CodexDriver.test.ts",
         "apps/server/src/project/AgentSessionScanner.ts",
         "apps/server/src/project/AgentSessionScanner.test.ts"
+      ]
+    },
+    {
+      "features": ["FORK-CHAT-001"],
+      "paths": [
+        "apps/server/src/orchestration/Layers/CheckpointReactor.ts",
+        "apps/server/src/orchestration/Layers/CheckpointReactor.test.ts"
+      ]
+    },
+    {
+      "features": ["FORK-DIST-001"],
+      "paths": [
+        "apps/server/src/server.test.ts",
+        "apps/desktop/src/app/DesktopPreReadyPlatform.test.ts"
       ]
     }
   ]

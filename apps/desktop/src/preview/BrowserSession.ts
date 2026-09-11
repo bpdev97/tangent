@@ -10,18 +10,6 @@ import * as Schema from "effect/Schema";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 
 const PREVIEW_PARTITION_PREFIX = "persist:t3code-preview-";
-const CHROME_USER_AGENT_PRODUCTS = new Set(["Mozilla", "AppleWebKit", "Chrome", "Safari"]);
-const USER_AGENT_PRODUCT_PATTERN = /(^|\s)([A-Za-z][A-Za-z0-9._-]*\/[^\s()]+)(?=\s|$)/g;
-
-export function normalizePreviewUserAgent(userAgent: string): string {
-  return userAgent.replace(
-    USER_AGENT_PRODUCT_PATTERN,
-    (match, _prefix: string, product: string) => {
-      const separator = product.indexOf("/");
-      return CHROME_USER_AGENT_PRODUCTS.has(product.slice(0, separator)) ? match : "";
-    },
-  );
-}
 /**
  * Incognito partitions deliberately omit the `persist:` prefix, which is what
  * makes Chromium keep them in memory and discard them with the process. They
@@ -51,7 +39,7 @@ const ALLOWED_PREVIEW_PERMISSIONS: ReadonlySet<string> = new Set([
   // picker runs in the main window session, which is unaffected by this list.
 ]);
 
-export class BrowserSessionPartitionDerivationError extends Schema.TaggedErrorClass<BrowserSessionPartitionDerivationError>()(
+export class BrowserSessionPartitionDerivationError extends Schema.TaggedError<BrowserSessionPartitionDerivationError>()(
   "BrowserSessionPartitionDerivationError",
   {
     scope: Schema.String,
@@ -63,7 +51,7 @@ export class BrowserSessionPartitionDerivationError extends Schema.TaggedErrorCl
   }
 }
 
-export class BrowserSessionCreationError extends Schema.TaggedErrorClass<BrowserSessionCreationError>()(
+export class BrowserSessionCreationError extends Schema.TaggedError<BrowserSessionCreationError>()(
   "BrowserSessionCreationError",
   {
     scope: Schema.String,
@@ -76,7 +64,7 @@ export class BrowserSessionCreationError extends Schema.TaggedErrorClass<Browser
   }
 }
 
-export class BrowserSessionStorageClearError extends Schema.TaggedErrorClass<BrowserSessionStorageClearError>()(
+export class BrowserSessionStorageClearError extends Schema.TaggedError<BrowserSessionStorageClearError>()(
   "BrowserSessionStorageClearError",
   {
     partition: Schema.String,
@@ -88,7 +76,7 @@ export class BrowserSessionStorageClearError extends Schema.TaggedErrorClass<Bro
   }
 }
 
-export class BrowserSessionCacheClearError extends Schema.TaggedErrorClass<BrowserSessionCacheClearError>()(
+export class BrowserSessionCacheClearError extends Schema.TaggedError<BrowserSessionCacheClearError>()(
   "BrowserSessionCacheClearError",
   {
     partition: Schema.String,
@@ -171,6 +159,7 @@ const encodeScopeForDigest = (scope: string): Uint8Array =>
       ),
   );
 
+/** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* BrowserSessionMake() {
   const crypto = yield* Crypto.Crypto;
   const sessionsRef = yield* SynchronizedRef.make<ReadonlyMap<string, Session>>(new Map());
@@ -208,7 +197,11 @@ export const make = Effect.gen(function* BrowserSessionMake() {
       return Effect.try({
         try: () => {
           const browserSession = session.fromPartition(partition);
-          browserSession.setUserAgent(normalizePreviewUserAgent(browserSession.getUserAgent()));
+          const userAgent = browserSession
+            .getUserAgent()
+            .replace(/Electron\/[\d.]+ /, "")
+            .replace(/\s*t3code\/[\d.]+/, "");
+          browserSession.setUserAgent(userAgent);
           browserSession.setPermissionRequestHandler((_webContents, permission, callback) => {
             callback(ALLOWED_PREVIEW_PERMISSIONS.has(permission));
           });

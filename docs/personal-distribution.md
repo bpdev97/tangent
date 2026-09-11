@@ -6,6 +6,9 @@ LAN or a tailnet.
 
 Tangent is the installed-app and release identity used to keep the fork separate from upstream.
 The in-app product identity, wordmarks, icons, and feature names remain T3 Code.
+The server’s development CORS policy must allow the custom renderer origins derived from
+`downstream/config.ts` alongside upstream origins; otherwise a branded desktop opens but cannot
+finish authentication.
 
 Notifications and Live Activities can optionally use the fork-owned homelab relay. See
 [`docs/fork/personal-push-relay.md`](fork/personal-push-relay.md); it does not add Clerk or expose

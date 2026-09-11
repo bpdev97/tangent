@@ -26,7 +26,7 @@ export interface VerifiedServerReleaseArtifact {
   readonly installIdentity: string;
 }
 
-export class ServerReleaseArtifactError extends Schema.TaggedErrorClass<ServerReleaseArtifactError>()(
+export class ServerReleaseArtifactError extends Schema.TaggedError<ServerReleaseArtifactError>()(
   "ServerReleaseArtifactError",
   {
     step: Schema.String,
@@ -38,7 +38,7 @@ export class ServerReleaseArtifactError extends Schema.TaggedErrorClass<ServerRe
   }
 }
 
-class ServerReleaseTransferError extends Schema.TaggedErrorClass<ServerReleaseTransferError>()(
+class ServerReleaseTransferError extends Schema.TaggedError<ServerReleaseTransferError>()(
   "ServerReleaseTransferError",
   {
     detail: Schema.String,

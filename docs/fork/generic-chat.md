@@ -8,6 +8,9 @@ provider-session invariants. Every server ensures one project with the reserved 
 scratch directory at `<baseDir>/workspaces/generic-chat`; it is an implementation detail, not user
 content.
 
+Checkpoint capture and post-turn Git refresh skip the reserved project ID, even when a development
+scratch directory is nested under a Git worktree. Git discovery alone cannot distinguish that case.
+
 The reserved project ID is the capability marker. Do not detect generic chats by title or path:
 both can be repaired or vary between environments, while the ID is stable and intentionally groups
 the same logical `Chats` entry across servers.

@@ -313,6 +313,10 @@ export async function startServer(
 
         if (request.method === "POST" && url.pathname === "/v1/devices") {
           const registration = await decodeBody(request, decodeDevice);
+          if (registration.platform !== "ios") {
+            json(response, 422, { error: "unsupported_platform" });
+            return;
+          }
           if (
             (registration.bundleId && registration.bundleId !== config.apns.bundleId) ||
             (registration.apsEnvironment && registration.apsEnvironment !== config.apns.environment)

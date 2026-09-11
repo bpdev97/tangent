@@ -185,6 +185,26 @@ describe("personal push relay HTTP integration", () => {
       NodeFS.rmSync(directory, { recursive: true, force: true });
   });
 
+  it("rejects Android registrations without sending FCM tokens to APNs", async () => {
+    const apns = new RecordingApnsClient();
+    server = await startServer(config, { apns });
+    const result = await request(server, "/v1/devices", {
+      method: "POST",
+      body: {
+        deviceId: "android-device",
+        label: "Android",
+        platform: "android",
+        androidApiLevel: 35,
+        pushToken: "fcm-token",
+        preferences,
+      },
+    });
+    expect(result).toEqual({ status: 422, body: { error: "unsupported_platform" } });
+    await publish(server, "waiting_for_approval");
+    expect(apns.notifications).toHaveLength(0);
+    expect(apns.liveActivities).toHaveLength(0);
+  });
+
   it("delivers one notification when a thread enters an enabled phase", async () => {
     const apns = new RecordingApnsClient();
     server = await startServer(config, { apns });

@@ -16,6 +16,7 @@ import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnap
 
 function projectionQuery(project: Option.Option<OrchestrationProjectShell>) {
   return ProjectionSnapshotQuery.of({
+    getTurnStartMessage: () => Effect.die("unused"),
     getCommandReadModel: () => Effect.die("unused"),
     getSnapshot: () => Effect.die("unused"),
     getShellSnapshot: () => Effect.die("unused"),

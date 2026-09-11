@@ -34,7 +34,7 @@ const EMPTY_CAPABILITIES: ModelCapabilities = createModelCapabilities({ optionDe
 const VERSION_PROBE_TIMEOUT_MS = 4_000;
 const MODEL_DISCOVERY_TIMEOUT_MS = 20_000;
 
-export function describeHermesDiscoveryFailure(
+function describeHermesDiscoveryFailure(
   error: ProviderAdapterError | undefined,
   profile: string,
 ): {

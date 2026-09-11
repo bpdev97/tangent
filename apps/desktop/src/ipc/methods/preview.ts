@@ -33,7 +33,6 @@ import * as Schema from "effect/Schema";
 import * as NodeURL from "node:url";
 
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
-import { normalizePreviewUserAgent } from "../../preview/BrowserSession.ts";
 import * as BrowserImport from "../../preview/BrowserImport/BrowserImport.ts";
 import * as PreviewManager from "../../preview/Manager.ts";
 import { PREVIEW_WEBVIEW_PREFERENCES } from "../../preview/WebviewPreferences.ts";
@@ -280,10 +279,9 @@ export const getPreviewConfig = DesktopIpc.makeIpcMethod({
     // Creating the session first is what installs the UA rewrite and permission
     // handlers; a guest that attached to an untouched partition would run with
     // Electron's default UA and Chromium's default permission behaviour.
-    const browserSession = yield* manager.getBrowserSession(scope, persistent, namespace);
+    yield* manager.getBrowserSession(scope, persistent, namespace);
     return {
       partition: yield* manager.getBrowserPartition(scope, persistent, namespace),
-      userAgent: normalizePreviewUserAgent(browserSession.getUserAgent()),
       webPreferences: PREVIEW_WEBVIEW_PREFERENCES,
       preloadUrl: NodeURL.pathToFileURL(`${__dirname}/preview-pick-preload.cjs`).href,
     };
