@@ -899,12 +899,13 @@ export function NewTaskDraftScreen(props: {
   });
   const showBranchLoading = flow.branchesLoading && flow.availableBranches.length === 0;
 
-  async function handlePickMedia(): Promise<void> {
+  async function handlePickMedia(source?: "library" | "camera"): Promise<void> {
     if (isComposerInteractionLocked || voiceInput.isBusy) {
       return;
     }
     const capabilities = selectedEnvironmentServerConfig?.environment.capabilities;
     const result = await pickComposerMedia({
+      source,
       existingCount: flow.attachments.length,
       maxVideoBytes:
         capabilities?.attachmentUploads === true
@@ -955,10 +956,11 @@ export function NewTaskDraftScreen(props: {
   const handleNativePasteImages = useCallback(
     async (uris: ReadonlyArray<string>) => {
       try {
-        const images = await convertPastedImagesToAttachments({
+        const { images, error } = await convertPastedImagesToAttachments({
           uris,
           existingCount: flow.attachments.length,
         });
+        if (error) Alert.alert("Could not attach image", error);
         if (images.length > 0) {
           flow.appendAttachments(images);
         }

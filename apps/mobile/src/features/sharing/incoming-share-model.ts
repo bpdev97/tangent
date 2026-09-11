@@ -6,14 +6,16 @@ import {
   isProviderSendTurnSupportedImageMimeType,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
-  PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import type { ResolvedSharePayload, SharePayload } from "expo-sharing";
 
 import { DraftComposerAttachmentSchema } from "../../lib/composer-image-schema";
 import type { DraftComposerAttachment } from "../../lib/composerImages";
-import { estimateBase64ByteSize } from "../../lib/base64";
+import {
+  MAX_COMPOSER_IMAGE_SOURCE_BYTES,
+  prepareComposerImage,
+} from "../../lib/prepareComposerImage";
 
 export interface IncomingShareDraft {
   readonly schemaVersion: 1;
@@ -396,10 +398,10 @@ export async function buildIncomingShareDraft(input: {
     if (
       resolved?.contentSize !== null &&
       resolved?.contentSize !== undefined &&
-      resolved.contentSize > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES
+      resolved.contentSize > MAX_COMPOSER_IMAGE_SOURCE_BYTES
     ) {
       warnings.push(
-        `'${resolved.originalName ?? fallbackName(uri, index, mimeType)}' exceeds the 10 MB attachment limit.`,
+        `'${resolved.originalName ?? fallbackName(uri, index, mimeType)}' exceeds the 50 MB image processing limit.`,
       );
       await releaseOwnedFiles(input.fileReader, [uri, payload.value]);
       continue;
@@ -407,27 +409,18 @@ export async function buildIncomingShareDraft(input: {
 
     try {
       const base64 = await input.fileReader.readBase64(uri);
-      const sizeBytes = resolved?.contentSize ?? estimateBase64ByteSize(base64);
-      if (sizeBytes <= 0 || sizeBytes > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
-        warnings.push(
-          `'${resolved?.originalName ?? fallbackName(uri, index, mimeType)}' exceeds the 10 MB attachment limit.`,
-        );
-        continue;
-      }
-      const dataUrl = `data:${mimeType};base64,${base64}`;
-      attachments.push({
-        id: `${input.id}:image:${index}`,
-        type: "image",
-        name: resolved?.originalName ?? fallbackName(uri, index, mimeType),
+      const prepared = await prepareComposerImage({
+        base64,
         mimeType,
-        sizeBytes,
-        dataUrl,
-        // The share provider's file is temporary. A data-backed preview keeps
-        // the composer valid after its source file and App Group entry are gone.
-        previewUri: dataUrl,
+        name: resolved?.originalName ?? fallbackName(uri, index, mimeType),
       });
-    } catch {
-      warnings.push(`Could not read '${fallbackName(uri, index, mimeType)}'.`);
+      attachments.push({ id: `${input.id}:image:${index}`, type: "image", ...prepared });
+    } catch (cause) {
+      warnings.push(
+        cause instanceof Error
+          ? cause.message
+          : `Could not read '${fallbackName(uri, index, mimeType)}'.`,
+      );
     } finally {
       await releaseOwnedFiles(input.fileReader, [uri, payload.value]);
     }

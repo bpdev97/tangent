@@ -19,7 +19,12 @@ before an upload finishes requires you to attach that file again.
 You can drag or paste images into the web or desktop composer. HEIC and HEIF
 photos are converted to JPEG there and when selected from the iOS photo library;
 the image limit applies after conversion. On mobile, you can also send files to
-T3 Code through another app's system share sheet.
+T3 Code through another app's system share sheet. Choose **Camera** from the attachment menu to
+take a photo, or **Photo Library** to select an existing one.
+
+Mobile automatically shrinks oversized photos and PNG images to fit the 10 MB limit, including
+pasted and shared images. Images already within the limit stay unchanged. Images over 50 MB and
+GIF/WebP images over 10 MB must be resized before attaching.
 
 See [images and videos](#images-and-videos-in-messages) for previewing and saving media.
 

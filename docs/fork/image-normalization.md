@@ -1,7 +1,7 @@
-# Provider-safe HEIC/HEIF upload normalization
+# Image normalization and mobile capture
 
 `FORK-IMAGE-001` makes HEIC and HEIF uploads usable across providers without teaching each provider
-adapter about Apple image containers.
+adapter about Apple image containers. It also owns mobile image shrinking and camera capture.
 
 ## Decision
 
@@ -14,6 +14,32 @@ This is a fork-level compatibility boundary rather than a Hermes adapter workaro
 0.19.0 rejects `.heic` and `.heif` in `image.attach` before its later image-routing code can inspect
 or transcode the bytes. Other providers and browser previews also benefit from receiving the same
 widely supported persisted format.
+
+## Mobile preparation boundary
+
+Mobile must shrink oversized images before upload: increasing the server limit would retain costly
+phone transfers and base64 draft allocations. Library selection, camera capture, clipboard paste,
+and incoming shares use the same [preparation helper](../../apps/mobile/src/lib/prepareComposerImage.ts).
+The existing 10 MiB wire contract remains unchanged, including for older servers and remote hosts.
+Images within that cap retain their bytes; oversized inputs up to 50 MiB get bounded native encoding
+attempts. Photos try JPEG quality reduction before resizing. PNG stays PNG to retain transparency;
+oversized GIF and WebP are rejected because the native encoder cannot promise animation retention.
+Temporary output files and native references must be released on success and failure.
+
+The attachment menu opts into `fixedOrder` in the existing native menu patch. UIKit otherwise
+reverses actions when a menu opens upward, moving Camera above Photo Library. Preserve the default
+ordering behavior for other menus; Android already uses declaration order.
+
+The camera uses the same picker-result handling as the library and participates in foreground handoff
+so Android activity transitions cannot restart the client mid-capture. Permission denial and camera
+cancellation add no attachment. Keep the camera available in image-only destinations, including question answers, review
+comments, and older servers. Expo ImageManipulator and camera permission configuration require a new
+native iOS build on the personal channel; an OTA-only release cannot introduce them.
+
+Run `vp test run apps/mobile/src/lib/prepareComposerImage.test.ts apps/mobile/src/lib/composerImages.test.ts
+apps/mobile/src/lib/composerFiles.test.ts apps/mobile/src/features/sharing/incoming-share-model.test.ts`,
+then the required check/typecheck/mobile lint commands and an integrated mobile pass. A simulator can
+verify compression and camera failure handling; successful physical camera capture requires a device.
 
 ## Architecture
 
@@ -34,7 +60,7 @@ client data URL
 Upstream's web compressor and attachment queue own the current web path. Provider adapters remain
 consumers of canonical attachments and must not add their own HEIC conversion.
 
-Files that are not HEIC/HEIF remain byte-for-byte pass-through. Detection accepts a declared
+On the server, files that are not HEIC/HEIF remain byte-for-byte pass-through. Detection accepts a declared
 HEIC/HEIF MIME type or a valid ISO-BMFF `ftyp` box containing a known HEIC major or compatible brand:
 `heic`, `heix`, `hevc`, `hevx`, `heim`, `heis`, `hevm`, or `hevs`. This catches files whose generic
 major brand is `mif1`/`msf1` but whose compatible list identifies HEIC. An
@@ -90,10 +116,13 @@ URL parsing, image MIME inference, the shared orchestration normalizer, attachme
 serving, and provider image APIs. Keep conversion before persistence and provider dispatch.
 Preserve pass-through behavior for JPEG, PNG, GIF, WebP, and AVIF.
 
-Remove `FORK-IMAGE-001` only when every supported client normalizes before upload, or upstream adds
+Remove the server normalization portion only when every supported client normalizes before upload, or upstream adds
 equivalent server ingestion for inline clients, and HEIC/HEIF works end to end across persistence,
 browser assets, and providers that reject HEIC/HEIF paths or MIME types. Upstream's web-only
 conversion does not cover mobile or older clients and is not yet an equivalent replacement.
+
+Remove the mobile portion when upstream supplies equivalent preparation across all input paths and
+camera capture across the same composers.
 
 ## Compatibility baseline
 

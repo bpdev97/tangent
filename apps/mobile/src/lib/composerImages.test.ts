@@ -58,7 +58,7 @@ describe("native pasted image cleanup", () => {
       "file:///private/var/mobile/Containers/Data/Application/app/tmp/t3-composer-paste/id.png";
     files.set(uri, { base64: "aGVsbG8=", deleted: false });
 
-    const attachments = await convertPastedImagesToAttachments({
+    const { images: attachments } = await convertPastedImagesToAttachments({
       uris: [uri],
       existingCount: 0,
     });

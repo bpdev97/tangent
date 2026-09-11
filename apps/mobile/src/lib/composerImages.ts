@@ -6,12 +6,11 @@ import {
   isProviderSendTurnSupportedImageMimeType,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
-  PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
   type EnvironmentId,
   type UploadChatImageAttachment,
 } from "@t3tools/contracts";
 import type { DocumentPickerResult } from "expo-document-picker";
-import { estimateBase64ByteSize } from "./base64";
+import { prepareComposerImage } from "./prepareComposerImage";
 import {
   COMPOSER_ATTACHMENT_DIRECTORY,
   isComposerAttachmentFileRetained,
@@ -286,7 +285,10 @@ async function loadClipboard() {
   }
 }
 
-export async function pickComposerImages(input: { readonly existingCount: number }): Promise<{
+export async function pickComposerImages(input: {
+  readonly existingCount: number;
+  readonly source?: "library" | "camera";
+}): Promise<{
   readonly images: ReadonlyArray<DraftComposerImageAttachment>;
   readonly error: string | null;
 }> {
@@ -301,6 +303,7 @@ export async function pickComposerImages(input: { readonly existingCount: number
 export async function pickComposerMedia(input: {
   readonly existingCount: number;
   readonly maxVideoBytes?: number;
+  readonly source?: "library" | "camera";
 }): Promise<{
   readonly attachments: ReadonlyArray<DraftComposerAttachment>;
   readonly error: string | null;
@@ -328,18 +331,33 @@ export async function pickComposerMedia(input: {
   const endHandoff = beginForegroundHandoff();
   let result: Awaited<ReturnType<typeof imagePicker.launchImageLibraryAsync>>;
   try {
-    result = await imagePicker.launchImageLibraryAsync({
-      mediaTypes: input.maxVideoBytes === undefined ? ["images"] : ["images", "videos"],
-      allowsMultipleSelection: true,
-      selectionLimit: remainingSlots,
-      base64: true,
-      quality: 1,
-      shouldDownloadFromNetwork: true,
-    });
+    if (input.source === "camera") {
+      const permission = await imagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        return {
+          attachments: [],
+          error: "Camera access is required to take a photo. Allow camera access in Settings.",
+        };
+      }
+      result = await imagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        base64: true,
+        quality: 1,
+      });
+    } else {
+      result = await imagePicker.launchImageLibraryAsync({
+        mediaTypes: input.maxVideoBytes === undefined ? ["images"] : ["images", "videos"],
+        allowsMultipleSelection: true,
+        selectionLimit: remainingSlots,
+        base64: true,
+        quality: 1,
+        shouldDownloadFromNetwork: true,
+      });
+    }
   } catch (error) {
     return {
       attachments: [],
-      error: error instanceof Error ? error.message : "Could not open the photo library.",
+      error: error instanceof Error ? error.message : "Could not open the photo picker.",
     };
   } finally {
     endHandoff();
@@ -424,22 +442,12 @@ export async function pickComposerMedia(input: {
       continue;
     }
 
-    const sizeBytes = estimateBase64ByteSize(base64);
-    if (sizeBytes <= 0 || sizeBytes > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
-      error = `'${asset.fileName ?? "image"}' exceeds the 10 MB attachment limit.`;
-      continue;
+    try {
+      const prepared = await prepareComposerImage({ base64, mimeType, name });
+      attachments.push({ id: uuidv4(), type: "image", ...prepared });
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : `Could not prepare '${name}'.`;
     }
-
-    const dataUrl = `data:${mimeType};base64,${base64}`;
-    attachments.push({
-      id: uuidv4(),
-      type: "image",
-      name,
-      mimeType,
-      sizeBytes,
-      dataUrl,
-      previewUri: mimeType === asset.mimeType?.toLowerCase() ? asset.uri : dataUrl,
-    });
   }
 
   return {
@@ -483,31 +491,20 @@ export async function pasteComposerClipboard(input: { readonly existingCount: nu
       };
     }
 
-    const base64 = image.data.split(",")[1] ?? "";
-    const sizeBytes = estimateBase64ByteSize(base64);
-    if (sizeBytes <= 0 || sizeBytes > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
+    try {
+      const prepared = await prepareComposerImage({
+        base64: image.data.split(",")[1] ?? "",
+        mimeType: "image/png",
+        name: "pasted-image.png",
+      });
+      return { images: [{ id: uuidv4(), type: "image", ...prepared }], text: null, error: null };
+    } catch (cause) {
       return {
         images: [],
         text: null,
-        error: "Clipboard image exceeds the 10 MB attachment limit.",
+        error: cause instanceof Error ? cause.message : "Could not prepare clipboard image.",
       };
     }
-
-    return {
-      images: [
-        {
-          id: uuidv4(),
-          type: "image",
-          name: "pasted-image.png",
-          mimeType: "image/png",
-          sizeBytes,
-          dataUrl: image.data,
-          previewUri: image.data,
-        },
-      ],
-      text: null,
-      error: null,
-    };
   }
 
   if (await clipboard.hasStringAsync()) {
@@ -563,10 +560,14 @@ export function isOwnedPastedImageUri(uri: string): boolean {
 export async function convertPastedImagesToAttachments(input: {
   readonly uris: ReadonlyArray<string>;
   readonly existingCount: number;
-}): Promise<ReadonlyArray<DraftComposerImageAttachment>> {
+}): Promise<{
+  readonly images: ReadonlyArray<DraftComposerImageAttachment>;
+  readonly error: string | null;
+}> {
   const { File } = await import("expo-file-system");
   const remainingSlots = PROVIDER_SEND_TURN_MAX_ATTACHMENTS - input.existingCount;
   const results: DraftComposerImageAttachment[] = [];
+  const errors: string[] = [];
 
   for (const [index, uri] of input.uris.entries()) {
     const ownedTemporaryFile = isOwnedPastedImageUri(uri);
@@ -576,22 +577,15 @@ export async function convertPastedImagesToAttachments(input: {
       }
       const file = new File(uri);
       const base64 = await file.base64();
-      const sizeBytes = estimateBase64ByteSize(base64);
-      if (sizeBytes <= 0 || sizeBytes > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
-        continue;
-      }
       const mimeType = mimeTypeFromUri(uri);
-      results.push({
-        id: uuidv4(),
-        type: "image",
-        name: `pasted-image.${mimeType.split("/")[1] ?? "png"}`,
+      const prepared = await prepareComposerImage({
+        base64,
         mimeType,
-        sizeBytes,
-        dataUrl: `data:${mimeType};base64,${base64}`,
-        previewUri: ownedTemporaryFile ? `data:${mimeType};base64,${base64}` : uri,
+        name: `pasted-image.${mimeType.split("/")[1] ?? "png"}`,
       });
+      results.push({ id: uuidv4(), type: "image", ...prepared });
     } catch (error) {
-      console.warn("Failed to read pasted image", uri, error);
+      errors.push(error instanceof Error ? error.message : "Could not prepare pasted image.");
     } finally {
       if (ownedTemporaryFile) {
         try {
@@ -606,5 +600,5 @@ export async function convertPastedImagesToAttachments(input: {
     }
   }
 
-  return results;
+  return { images: results, error: errors.length > 0 ? errors.join("\n") : null };
 }

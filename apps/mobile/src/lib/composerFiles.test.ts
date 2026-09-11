@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { PROVIDER_SEND_TURN_MAX_IMAGE_BYTES } from "@t3tools/contracts";
+import { MAX_COMPOSER_IMAGE_SOURCE_BYTES } from "./prepareComposerImage";
 import type { ImagePickerAsset } from "expo-image-picker";
 
 const mocks = vi.hoisted(() => ({
@@ -172,7 +172,7 @@ describe("composer file attachments", () => {
 
     it("checks the converted JPEG size even when the HEIC source was smaller", async () => {
       const oversized =
-        jpeg.slice(0, 4) + "A".repeat(Math.ceil(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / 3) * 4);
+        jpeg.slice(0, 4) + "A".repeat(Math.ceil(MAX_COMPOSER_IMAGE_SOURCE_BYTES / 3) * 4);
       mocks.pickMedia.mockResolvedValue({
         canceled: false,
         assets: [{ ...photo, fileSize: 42, base64: oversized }],
@@ -180,7 +180,7 @@ describe("composer file attachments", () => {
 
       await expect(pickComposerImages({ existingCount: 0 })).resolves.toEqual({
         images: [],
-        error: "'photo.HEIC' exceeds the 10 MB attachment limit.",
+        error: "'photo.jpg' exceeds the 50 MB image processing limit.",
       });
     });
 

@@ -325,13 +325,20 @@ const config: ExpoConfig = {
     [
       "expo-camera",
       {
-        cameraPermission: `Allow ${personalMobile.appName} to access your camera so you can scan pairing QR codes.`,
+        cameraPermission: `Allow ${personalMobile.appName} to access your camera so you can take photos and scan pairing QR codes.`,
         microphonePermission: false,
         barcodeScannerEnabled: true,
         recordAudioAndroid: false,
       },
     ],
-    ["expo-image-picker", { photosPermission: false, microphonePermission: false }],
+    [
+      "expo-image-picker",
+      {
+        photosPermission: false,
+        cameraPermission: `Allow ${personalMobile.appName} to access your camera so you can take photos and scan pairing QR codes.`,
+        microphonePermission: false,
+      },
+    ],
     [
       "expo-splash-screen",
       {

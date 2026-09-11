@@ -91,6 +91,7 @@ minimumReleaseAgeExclude:
   - expo-widgets@57.0.15
   - electron@44.1.0
   - "@anthropic-ai/claude-agent-sdk@0.3.260"
+  - expo-image-manipulator@57.0.17
 
 overrides:
   # libheif-js 1.23.2 rejects valid tiled HEIC fixtures; retain the verified decoder.

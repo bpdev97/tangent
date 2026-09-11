@@ -123,10 +123,19 @@
     {
       "features": ["FORK-IMAGE-001"],
       "paths": [
-        "knip.jsonc",
-        "scripts/lib/cli-external-packages.ts",
+        "apps/mobile/src/components/ComposerAttachmentButton.tsx",
+        "apps/mobile/src/features/review/ReviewCommentComposerSheet.tsx",
+        "apps/mobile/src/features/sharing/incoming-share-model.test.ts",
+        "apps/mobile/src/features/sharing/incoming-share-model.ts",
+        "apps/mobile/src/features/threads/NewTaskDraftScreen.tsx",
+        "apps/mobile/src/features/threads/QuestionAttachments.tsx",
+        "apps/mobile/src/features/threads/ThreadComposer.tsx",
         "apps/mobile/src/lib/composerFiles.test.ts",
+        "apps/mobile/src/lib/composerImages.test.ts",
         "apps/mobile/src/lib/composerImages.ts",
+        "apps/mobile/src/lib/prepareComposerImage.test.ts",
+        "apps/mobile/src/lib/prepareComposerImage.ts",
+        "apps/mobile/src/state/use-thread-composer-state.ts",
         "apps/server/src/imageNormalization.test.ts",
         "apps/server/src/imageNormalization.ts",
         "apps/server/src/orchestration/Normalizer.test.ts",
@@ -134,10 +143,14 @@
         "apps/server/src/testFixtures/heic.ts",
         "apps/web/src/lib/imageCompression.test.ts",
         "docs/fork/image-normalization.md",
+        "docs/user/composer.md",
         "docs/user/images/chats/desktop-chats.png",
         "docs/user/images/chats/ios-home-before.jpg",
         "docs/user/images/chats/ios-home.png",
-        "docs/user/images/chats/ios-model-settings.png"
+        "docs/user/images/chats/ios-model-settings.png",
+        "knip.jsonc",
+        "patches/@react-native-menu__menu@2.0.0.patch",
+        "scripts/lib/cli-external-packages.ts"
       ]
     },
     {

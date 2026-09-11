@@ -92,11 +92,12 @@ export function QuestionAttachments(props: {
       uris,
       existingCount: appAtomRegistry.get(composerDraftsAtom)[key]?.attachments.length ?? 0,
     })
-      .then(async (images) => {
+      .then(async ({ images, error }) => {
         if (
           scope?.active &&
           (appAtomRegistry.get(questionAttachmentPreparationAtom)[key] ?? 0) > 0
         ) {
+          if (error) Alert.alert("Could not paste image", error);
           if (append(key, images) > 0)
             Alert.alert("Could not paste image", "Too many attachments.");
         } else await releaseUnusedComposerAttachmentFiles(images);
@@ -117,7 +118,7 @@ export function QuestionAttachments(props: {
     props.question.id,
   );
   const attachments = drafts[key]?.attachments ?? [];
-  const pick = async (kind: "media" | "files") => {
+  const pick = async (kind: "media" | "files" | "camera") => {
     const scope = pickerScope.current;
     changeQuestionAttachmentPreparation(key, 1);
     try {
@@ -129,6 +130,7 @@ export function QuestionAttachments(props: {
               maxBytes: capabilities?.fileAttachments?.maxUploadBytes,
             })
           : await pickComposerMedia({
+              source: kind === "camera" ? "camera" : "library",
               existingCount,
               maxVideoBytes: capabilities?.fileAttachments?.maxUploadBytes,
             });
@@ -156,7 +158,7 @@ export function QuestionAttachments(props: {
         <ComposerAttachmentButton
           disabled={props.disabled}
           supportsFiles={Boolean(capabilities?.fileAttachments)}
-          onPickMedia={() => pick("media")}
+          onPickMedia={(source) => pick(source === "camera" ? "camera" : "media")}
           onPickFiles={() => pick("files")}
         />
       ) : null}
