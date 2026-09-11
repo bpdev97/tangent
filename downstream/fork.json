@@ -123,6 +123,8 @@
     {
       "features": ["FORK-IMAGE-001"],
       "paths": [
+        "knip.jsonc",
+        "scripts/lib/cli-external-packages.ts",
         "apps/mobile/src/lib/composerFiles.test.ts",
         "apps/mobile/src/lib/composerImages.ts",
         "apps/server/src/imageNormalization.test.ts",

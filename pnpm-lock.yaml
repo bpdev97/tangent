@@ -543,6 +543,9 @@ importers:
       jpeg-js:
         specifier: 0.4.4
         version: 0.4.4
+      libheif-js:
+        specifier: 1.19.8
+        version: 1.19.8
       msgpackr-extract:
         specifier: 3.0.4
         version: 3.0.4

@@ -70,10 +70,14 @@ container metadata are intentionally not persisted.
 
 The server declares `heic-decode` and `jpeg-js` as direct runtime dependencies. `heic-decode` brings
 the `libheif-js` WASM decoder transitively. Keep these dependencies on the server package: the
-worker resolves them at runtime from the packaged server installation.
+worker resolves them at runtime from the packaged server installation. Register the decoder,
+encoder, and WASM dependency in the shared CLI runtime-external list so desktop staging retains
+them. Declare the pinned WASM decoder as a direct server dependency as well: npm ignores overrides
+declared by an installed dependency, so a workspace-only decoder pin does not protect a fresh
+server installation. Verify the version resolved from `heic-decode` in an isolated archive install.
 
 Keep `heic-decode` on `libheif-js` 1.19.8 until its tiled-image regression is fixed: during the
-2026-09-11 sync, 1.23.2 rejected the valid 80×80 fixture because its internal 160×64 tile exceeded
+2026-09-11 sync, 1.23.2 rejected the valid 16×16 fixture because its internal 160×64 tile exceeded
 the decoder’s derived 6,400-pixel limit. Revalidate the real fixture before lifting this override.
 
 When changing server bundling or dependency externalization, build the server bundle and verify
