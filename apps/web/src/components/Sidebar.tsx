@@ -4747,16 +4747,18 @@ export default function Sidebar() {
           // header and would otherwise paint across the search row's outline.
           <SidebarGroup className="relative z-[1] p-[var(--sidebar-content-inset)] pt-1">
             {genericChatProjectGroup ? (
-              <div className="flex items-center gap-1">
+              <div className={cn("flex items-center gap-1", compact && "flex-col")}>
                 <SidebarMenuButton
                   type="button"
+                  size={compact ? "icon" : "default"}
                   isActive={scopedProjectIsGenericChat}
-                  className="min-w-0 flex-1"
+                  className={cn("min-w-0", compact ? "shrink-0" : "flex-1")}
                   onClick={openChats}
                   aria-label="Open chats"
+                  tooltip="Open chats"
                 >
                   <MessageSquareIcon className="size-4 shrink-0" />
-                  <span className="flex min-w-0 flex-1 items-baseline">
+                  <span className={cn("flex min-w-0 flex-1 items-baseline", compact && "sr-only")}>
                     <span className="shrink-0 truncate text-sm">Chats</span>
                     <span className="ml-auto min-w-0 truncate text-[11px] font-normal text-sidebar-muted-foreground">
                       {chatHostLabel}
