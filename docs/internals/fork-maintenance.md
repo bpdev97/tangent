@@ -34,3 +34,9 @@ Personal CI installs upstream's native build prerequisites and limits concurrent
 runs for GitHub-hosted runners. Keep those prerequisites aligned with upstream CI when syncing.
 Upstream publishing workflows stay disabled; personal release workflows publish Tangent artifacts.
 Fork SQL changes belong in the independent ledger described in [fork migrations](fork-migrations.md).
+
+Tangent carries two temporary upstream test-fixture corrections because macOS releases run the
+server suite: GitManager's ambiguous fork-PR test uses the existing local remote rewrite helper,
+and UsageService canonicalizes its temporary home before comparing paths or observing scan starts.
+This avoids real SSH traffic and macOS `/var` symlink mismatches without changing runtime behavior.
+Remove these exceptions when upstream includes equivalent fixture isolation.

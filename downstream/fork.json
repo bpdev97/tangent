@@ -1,6 +1,6 @@
 {
   "upstream": "pingdotgg/t3code",
-  "baseline": "2ebc9fa4ed24e389eef24039f27c73ae6633858f",
+  "baseline": "df7ccc8fd01f5d2a1d8ec21bef8f9c59398fe913",
   "features": {
     "FORK-DIST-001": "docs/personal-distribution.md",
     "FORK-CHAT-001": "docs/fork/generic-chat.md",
@@ -455,7 +455,6 @@
       "features": ["FORK-MAINT-001"],
       "paths": [
         "apps/server/src/provider/providerMaintenance.test.ts",
-        "apps/web/src/components/files/fileEditorLanguageReadiness.test.ts",
         "apps/server/src/provider/Drivers/CodexDriver.test.ts",
         "apps/server/src/project/AgentSessionScanner.ts",
         "apps/server/src/project/AgentSessionScanner.test.ts"
@@ -473,6 +472,17 @@
       "paths": [
         "apps/server/src/server.test.ts",
         "apps/desktop/src/app/DesktopPreReadyPlatform.test.ts"
+      ]
+    },
+    {
+      "features": ["FORK-IMAGE-001", "FORK-MERMAID-001"],
+      "paths": ["third-party-licenses.config.json"]
+    },
+    {
+      "features": ["FORK-MAINT-001"],
+      "paths": [
+        "apps/server/src/git/GitManager.test.ts",
+        "apps/server/src/usage/UsageService.test.ts"
       ]
     }
   ]

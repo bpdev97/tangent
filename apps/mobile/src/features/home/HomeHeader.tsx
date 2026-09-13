@@ -424,7 +424,7 @@ function IosHomeHeader(props: HomeHeaderProps) {
               },
               type: "menu" as const,
             }),
-          ].toReversed()
+          ].reverse()
         : [],
     [
       filterMenu.items,

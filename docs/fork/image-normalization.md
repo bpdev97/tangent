@@ -21,8 +21,10 @@ Mobile must shrink oversized images before upload: increasing the server limit w
 phone transfers and base64 draft allocations. Library selection, camera capture, clipboard paste,
 and incoming shares use the same [preparation helper](../../apps/mobile/src/lib/prepareComposerImage.ts).
 The existing 10 MiB wire contract remains unchanged, including for older servers and remote hosts.
-Images within that cap retain their bytes; oversized inputs up to 50 MiB get bounded native encoding
-attempts. Photos try JPEG quality reduction before resizing. PNG stays PNG to retain transparency;
+Supported images within that cap retain their bytes; oversized inputs up to 50 MiB get bounded native encoding
+attempts. Library and camera picks stay file-backed until their size is measured. Photos that require
+conversion follow upstream’s 2048-pixel edge bound; clipboard and share images try JPEG quality
+reduction before resizing. PNG stays PNG to retain transparency;
 oversized GIF and WebP are rejected because the native encoder cannot promise animation retention.
 Temporary output files and native references must be released on success and failure.
 

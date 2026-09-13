@@ -48,6 +48,12 @@ command cannot reach the app, start or update the desktop app and try again.
 
 Install Tangent from its personal TestFlight distribution, then connect it to your server over LAN or Tailscale with a pairing URL. See [remote access](./remote-access.md).
 
+If the app crashes during launch, open Settings → Diagnostics on the next launch
+that succeeds. It lists startup crashes from the last 7 days with the error and
+component stack that store crash reports leave out. Copy the report and paste it
+into a GitHub issue. Error messages can quote values from the app, so read it over
+before sharing.
+
 ## Providers
 
 Open **Settings → Providers** in the web or desktop app, select the environment,

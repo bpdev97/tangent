@@ -26,6 +26,7 @@ function projectionQuery(project: Option.Option<OrchestrationProjectShell>) {
     getImportedAgentSessionSources: () => Effect.die("unused"),
     getEventReplayStats: () => Effect.die("unused"),
     getActiveProjectByWorkspaceRoot: () => Effect.die("unused"),
+    getProjectShells: () => Effect.die("unused"),
     getProjectShellById: () => Effect.succeed(project),
     getFirstActiveThreadIdByProjectId: () => Effect.die("unused"),
     getThreadCheckpointContext: () => Effect.die("unused"),

@@ -22,6 +22,9 @@ vi.mock("expo-image-manipulator", () => ({
 vi.mock("expo-file-system", () => ({
   File: class {
     constructor(readonly uri: string) {}
+    get size() {
+      return PROVIDER_SEND_TURN_MAX_IMAGE_BYTES + 1;
+    }
     get exists() {
       return true;
     }
