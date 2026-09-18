@@ -2310,7 +2310,14 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       prefix: `t3code-review-index-${process.pid}-`,
     });
     const indexExists = yield* fileSystem.exists(indexPath);
-    if (indexExists) yield* fileSystem.copyFile(indexPath, tempIndexPath);
+    let indexTime = 1;
+    if (indexExists) {
+      const { mtime } = yield* fileSystem.stat(indexPath);
+      if (Option.isSome(mtime)) {
+        indexTime = Math.max(1, Math.floor((mtime.value.getTime() - 1) / 1000));
+      }
+      yield* fileSystem.copyFile(indexPath, tempIndexPath);
+    }
     const env = { GIT_INDEX_FILE: tempIndexPath } satisfies NodeJS.ProcessEnv;
     const tempIndexConfig = [
       "-c",
@@ -2327,6 +2334,8 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       [...tempIndexConfig, "update-index", "--no-split-index"],
       { env },
     );
+    // Copying and expanding the index must not hide same-size edits from Git's racy check.
+    if (indexExists) yield* fileSystem.utimes(tempIndexPath, indexTime, indexTime);
     yield* executeGit(
       "GitVcsDriver.readUnifiedWorkingTreeReviewDiff.addUntracked",
       cwd,

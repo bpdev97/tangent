@@ -429,6 +429,8 @@
     {
       "features": ["FORK-MAINT-001"],
       "paths": [
+        "apps/server/src/vcs/GitVcsDriverCore.ts",
+        "apps/server/src/vcs/GitVcsDriverCore.test.ts",
         "apps/server/src/provider/AntigravityInstallation.test.ts",
         "apps/server/src/provider/Layers/CursorProvider.test.ts",
         "apps/server/src/textGeneration/CodexTextGeneration.test.ts"

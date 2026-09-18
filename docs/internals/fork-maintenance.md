@@ -40,3 +40,9 @@ server suite: GitManager's ambiguous fork-PR test uses the existing local remote
 and UsageService canonicalizes its temporary home before comparing paths or observing scan starts.
 This avoids real SSH traffic and macOS `/var` symlink mismatches without changing runtime behavior.
 Remove these exceptions when upstream includes equivalent fixture isolation.
+
+Review previews preserve the original index timestamp when preparing a temporary Git index, using
+the same conservative timestamp rule as upstream checkpoint capture. A fresh copy timestamp can
+hide same-size working-tree edits from Git's racy-index detection when untracked files are present.
+This correctness fix and its regression tests remain until upstream's review-index preparation
+preserves that detection too; the user's real index must remain unchanged.

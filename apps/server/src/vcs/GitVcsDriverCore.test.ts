@@ -1370,6 +1370,43 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
       }),
     );
 
+    for (const timestamp of [1_700_000_000, 1_700_000_000.9999]) {
+      it.effect(`preserves same-size edits with racy review index timestamps (${timestamp})`, () =>
+        Effect.gen(function* () {
+          const cwd = yield* makeTmpDir();
+          yield* initRepoWithCommit(cwd);
+          const driver = yield* GitVcsDriver.GitVcsDriver;
+          const fileSystem = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const filePath = path.join(cwd, "racy.txt");
+          const indexPath = path.join(cwd, ".git", "index");
+          yield* git(cwd, ["config", "core.trustctime", "false"]);
+          yield* writeTextFile(cwd, "racy.txt", "before\n");
+          yield* fileSystem.utimes(filePath, timestamp, timestamp);
+          yield* git(cwd, ["add", "racy.txt"]);
+          yield* git(cwd, ["commit", "-m", "record racy file"]);
+          yield* fileSystem.utimes(indexPath, timestamp, timestamp);
+          const originalIndex = yield* fileSystem.readFile(indexPath);
+          const originalMtime = (yield* fileSystem.stat(indexPath)).mtime;
+          yield* writeTextFile(cwd, "racy.txt", "after!\n");
+          yield* fileSystem.utimes(filePath, timestamp, timestamp);
+          yield* writeTextFile(cwd, "untracked.txt", "new\n");
+
+          const preview = yield* driver.getReviewDiffPreview({ cwd });
+          const dirty = preview.sources.find((source) => source.kind === "working-tree")!;
+
+          assert.deepStrictEqual(dirty.files, [
+            { path: "racy.txt", previousPath: null, additions: 1, deletions: 1 },
+            { path: "untracked.txt", previousPath: null, additions: 1, deletions: 0 },
+          ]);
+          assert.include(dirty.diff, "-before");
+          assert.include(dirty.diff, "+after!");
+          assert.deepEqual(yield* fileSystem.readFile(indexPath), originalIndex);
+          assert.deepEqual((yield* fileSystem.stat(indexPath)).mtime, originalMtime);
+        }),
+      );
+    }
+
     it.effect("preserves renames, unusual paths, modes, and binary statistics", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();
