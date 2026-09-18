@@ -31,20 +31,26 @@ The offered action depends on how the server runs:
 | **Update the desktop app** | Update the desktop app on the machine running the server, then reopen it if needed.                                                                                                             |
 | **Copy update command**    | Stop the command-line server on its host and relaunch with the copied command, keeping your usual startup options.                                                                              |
 
-For a background service, run the matching version's CLI on the host:
+On the host, run `t3 update <version>` with the version shown in the notice.
+It updates the installed CLI and offers to restart the background service.
+For a foreground server, stop and relaunch it after updating, preserving options
+such as `--host` or `--tailscale-serve`.
+
+### Upgrading from 0.1.55 or earlier
+
+These releases used a Node.js package and an older service launcher. Install the
+[standalone Tangent CLI](./install.md#command-line), then run:
 
 ```sh
-npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v<version>/tangent-server-<version>.tgz service update
+~/.local/bin/t3 service install
 ```
 
-Replace `<version>` with the version shown in the notice. An older
-service launcher may require this local update before it supports remote updates
-and rollback.
+Finish active work first. This replaces the launcher and restarts the service;
+projects, threads, settings, and pairing remain under `~/.bpdev-code`.
+The older server cannot install this release through its remote update button.
+Desktop installations can use their normal in-app update.
 
-For a foreground server, the copied command is `npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v<version>/tangent-server-<version>.tgz`. Add
-`serve` if you normally run without a browser, and preserve options such as
-`--host` or `--tailscale-serve`. See
-[background services](./background-service.md) for service management.
+See [background services](./background-service.md) for service management.
 
 ## If an update fails
 
@@ -57,7 +63,7 @@ update can roll back to the previous version. If the update still fails:
 
 ## Mobile updates
 
-Install App Store or Google Play releases as usual. The mobile app can also
+Install native Tangent updates from TestFlight. The mobile app can also
 download updates in the background and apply them when you next leave the app.
 It saves drafts and queued messages before restarting. If you keep the app open
 for a long time, it may ask to install immediately; choosing **Later** leaves the

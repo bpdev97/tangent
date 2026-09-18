@@ -88,19 +88,29 @@ application with hardened runtime support and notarizes it through Apple.
 
 ## Server release artifacts
 
-Every personal macOS release also publishes `tangent-server-X.Y.Z.tgz` and its SHA-256 sidecar.
-Manual launch, SSH launch, background-service installation, and self-update must resolve that exact
-GitHub Release asset. They must not fall back to the upstream npm package merely because its version
-matches.
+Every personal release publishes standalone server archives for `darwin-arm64`,
+`linux-arm64`, `linux-x64`, `win32-arm64`, and `win32-x64`, plus `SHA256SUMS`.
+Names are `tangent-server-X.Y.Z-<platform>.tar.gz` (ZIP on Windows), under the
+`personal-vX.Y.Z` tag. The archive format, installer, service launcher, and CLI update
+flow follow upstream. Native binaries and their resource monitor ship inside each
+archive; Node.js is not required on the target host. macOS archives are signed and notarized.
 
-The server archive includes upstream's four native resource monitors. pnpm normalizes archive
-permissions, so the POSIX binaries must remain listed in `publishConfig.executableFiles`, including
-in the temporary publish manifest. The release workflow checks the extracted archive before publishing.
+The fork changes only the distribution source, artifact prefix, state roots, service
+identity, and download constraints. `packages/shared/src/cliRelease.ts` derives server
+release identity from `downstream/config.ts`. The standalone shell installers mirror
+these values because they run without Node. A matching version from upstream is never
+a valid cached Tangent install: the install sentinel records both version and release URL.
+SSH, CLI updates, and service installation use the same identity.
 
-The self-updater streams the archive into a unique temporary file while enforcing the 200 MiB limit
-and computing SHA-256. It renames the file into place only after the sidecar checksum matches,
-removes failed temporary files, and keeps the current archive plus one previous download under
-`<Tangent home>/runtime/downloads`.
+The server installer streams the archive into a unique temporary file, enforces a 200 MiB
+limit, and computes SHA-256 before renaming it. Interrupted downloads are removed; the
+current and one prior verified archive remain under `<Tangent home>/runtime/archives`.
+These bounds preserve predictable memory and disk usage on remote hosts.
+
+Launcher protocol 3 uses the standalone executable layout. Services from 0.1.55 and earlier
+need the one-time local launcher replacement in [Updating Tangent](user/updating.md).
+The old npm archive is retired; keeping two runtime installers would defeat the shared
+upstream implementation. Desktop updates keep their existing feed and data directory.
 
 ## Upstream synchronization
 

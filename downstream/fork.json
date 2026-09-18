@@ -1,6 +1,6 @@
 {
   "upstream": "pingdotgg/t3code",
-  "baseline": "df7ccc8fd01f5d2a1d8ec21bef8f9c59398fe913",
+  "baseline": "9ea9c3d5d2c444133e3ddff40eecf38737951589",
   "features": {
     "FORK-DIST-001": "docs/personal-distribution.md",
     "FORK-CHAT-001": "docs/fork/generic-chat.md",
@@ -224,7 +224,8 @@
         "packages/client-runtime/src/state/projectGrouping.genericChat.test.ts",
         "packages/client-runtime/src/state/projectGrouping.ts",
         "packages/shared/src/genericChat.test.ts",
-        "packages/shared/src/genericChat.ts"
+        "packages/shared/src/genericChat.ts",
+        "apps/web/src/hooks/useActiveProjectTarget.ts"
       ]
     },
     {
@@ -344,8 +345,6 @@
         "apps/server/src/cloud/pinnedRuntime.ts",
         "apps/server/src/cloud/selfUpdate.test.ts",
         "apps/server/src/cloud/selfUpdate.ts",
-        "apps/server/src/cloud/serverRelease.test.ts",
-        "apps/server/src/cloud/serverRelease.ts",
         "apps/server/src/cloud/servicePreflight.ts",
         "apps/server/src/cloud/serviceProtocol.ts",
         "apps/server/src/config.ts",
@@ -373,7 +372,6 @@
         "packages/client-runtime/package.json",
         "packages/contracts/src/ipc.ts",
         "packages/shared/package.json",
-        "packages/shared/src/serverRelease.ts",
         "packages/ssh/src/command.test.ts",
         "packages/ssh/src/command.ts",
         "scripts/build-desktop-artifact.test.ts",
@@ -381,7 +379,8 @@
         "scripts/dev-runner.ts",
         "scripts/personal-release-version.test.ts",
         "scripts/personal-release-version.ts",
-        "scripts/raycast-tangent-quick-chat.sh"
+        "scripts/raycast-tangent-quick-chat.sh",
+        "apps/server/src/cloud/servicePreflight.test.ts"
       ]
     },
     {
@@ -483,6 +482,36 @@
       "paths": [
         "apps/server/src/git/GitManager.test.ts",
         "apps/server/src/usage/UsageService.test.ts"
+      ]
+    },
+    {
+      "features": ["FORK-CHAT-001"],
+      "paths": [
+        "apps/mobile/src/components/AppSymbol.tsx",
+        "apps/mobile/src/features/settings/SettingsThreadsRouteScreen.tsx"
+      ]
+    },
+    {
+      "features": ["FORK-PUSH-001"],
+      "paths": ["apps/mobile/src/features/settings/SettingsNotificationsRouteScreen.tsx"]
+    },
+    {
+      "features": ["FORK-DIST-001"],
+      "paths": [
+        ".github/workflows/desktop-macos-preview-publish.yml",
+        "apps/mobile/src/lib/appLinking.test.ts",
+        "apps/mobile/src/lib/appLinking.ts",
+        "apps/server/src/cli/update.ts",
+        "packages/shared/src/cliRelease.test.ts",
+        "packages/shared/src/cliRelease.ts",
+        "packages/ssh/src/tunnel.test.ts",
+        "packages/ssh/src/tunnel.ts",
+        "scripts/build-cli-archive.ts",
+        "scripts/build-npm-platform-packages.test.ts",
+        "scripts/install.ps1",
+        "scripts/install.sh",
+        "scripts/install.test.ts",
+        "scripts/mobile-native-client.ts"
       ]
     }
   ]

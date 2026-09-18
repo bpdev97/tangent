@@ -16,6 +16,8 @@ import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnap
 
 function projectionQuery(project: Option.Option<OrchestrationProjectShell>) {
   return ProjectionSnapshotQuery.of({
+    listActivitiesByKind: () => Effect.die("unused"),
+    getDeletedWorktreeThreads: () => Effect.die("unused"),
     getTurnStartMessage: () => Effect.die("unused"),
     getCommandReadModel: () => Effect.die("unused"),
     getSnapshot: () => Effect.die("unused"),

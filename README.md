@@ -26,16 +26,17 @@ We wanted something performant, remote-ready, and truly open. If we ever go the 
 > - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
 > - Antigravity: enable it in Settings, then use **Install Antigravity** and **Sign in with Google**. No CLI is required.
 
-### Run the server without installing
+### Command line
 
-Download `tangent-server-X.Y.Z.tgz` from the matching
-[Tangent release](https://github.com/bpdev97/tangent/releases), then run:
+Install the standalone CLI from the [Tangent release](https://github.com/bpdev97/tangent/releases):
 
 ```bash
-npx --yes ./tangent-server-X.Y.Z.tgz
+curl -fsSL https://raw.githubusercontent.com/bpdev97/tangent/main/scripts/install.sh | sh
+t3
 ```
 
-Use `npx --yes ./tangent-server-X.Y.Z.tgz --help` for the full CLI reference.
+Use `t3 --help` for the full CLI reference. See [installation](docs/user/install.md)
+for Windows and manual archive installation.
 
 ### Desktop app
 

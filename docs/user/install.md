@@ -5,20 +5,31 @@ desktop, web, or mobile app. Set up the machine where the agents will work first
 
 ## Requirements
 
-Command-line use, SSH hosts, and WSL backends need Node.js 22.16+ (22.x), 23.11+
-(23.x), or 24.10 and later. The native desktop app includes its server runtime.
-
 You need an installed, authenticated provider before starting a thread. You can
 launch Tangent and configure providers afterwards.
 
-## Run without installing
+## Command line
+
+On macOS Apple Silicon or Linux, install the standalone CLI:
 
 ```bash
-npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v<version>/tangent-server-<version>.tgz
+curl -fsSL https://raw.githubusercontent.com/bpdev97/tangent/main/scripts/install.sh | sh
+t3
 ```
 
+On Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/bpdev97/tangent/main/scripts/install.ps1 | iex
+t3
+```
+
+The CLI uses `~/.bpdev-code` and requires no separate Node.js installation.
+Set `T3CODE_VERSION` to install an exact version. Archives and checksums are also
+available from [Tangent Releases](https://github.com/bpdev97/tangent/releases).
+
 This starts the server and opens the local web app. Run
-`npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v<version>/tangent-server-<version>.tgz --help` for command-line options.
+`t3 --help` for command-line options.
 
 ## Desktop app
 
@@ -27,7 +38,7 @@ Download the macOS Apple Silicon DMG from [Tangent Releases](https://github.com/
 ### Windows Subsystem for Linux
 
 Choose a WSL distro in **Settings → Connections** to run agents and projects
-there. Install Node.js and provider CLIs inside that distro. Tangent installs its
+there. Install your provider CLIs inside that distro. Tangent installs its
 matching server runtime there automatically; the first launch after an app
 update can take longer.
 
@@ -36,11 +47,11 @@ update can take longer.
 With the desktop app already running on the same machine:
 
 ```bash
-npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v<version>/tangent-server-<version>.tgz app
+t3 app
 ```
 
 This opens a new thread for the current directory, adding the project if needed.
-Pass a path, such as `npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v<version>/tangent-server-<version>.tgz app ../my-project`, to open another directory. It requires
+Pass a path, such as `t3 app ../my-project`, to open another directory. It requires
 the desktop app, so a standalone server or an SSH session is not enough. If the
 command cannot reach the app, start or update the desktop app and try again.
 

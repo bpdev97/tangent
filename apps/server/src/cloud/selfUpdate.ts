@@ -6,16 +6,21 @@ import {
   type ServerSelfUpdateResult,
   type ThreadId,
 } from "@t3tools/contracts";
-import { HostProcessExecutablePath } from "@t3tools/shared/hostProcess";
+import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Cause from "effect/Cause";
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HashSet from "effect/HashSet";
+import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { HttpClient } from "effect/unstable/http";
+
+import { CLI_RELEASE_BASE_URL_ENV } from "@t3tools/shared/cliRelease";
 
 import { PERSONAL_DISTRIBUTION } from "../../../../downstream/config.ts";
 import * as ServerConfig from "../config.ts";
@@ -23,15 +28,11 @@ import * as DesktopAppUpdate from "../desktopUpdate/DesktopAppUpdate.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import {
   ensurePinnedRuntimeInstalled,
+  pinnedRuntimeCommand,
   PinnedRuntimeInstallError,
   PinnedRuntimePreflightBlockedError,
 } from "./pinnedRuntime.ts";
 import { decodeServicePreflightResult } from "./servicePreflight.ts";
-import {
-  downloadPersonalServerRelease,
-  type ServerReleaseArtifactError,
-  type VerifiedServerReleaseArtifact,
-} from "./serverRelease.ts";
 import * as ServiceLauncherClient from "./serviceLauncherClient.ts";
 import { isExactServiceVersion, SERVICE_LAUNCHER_PROTOCOL } from "./serviceProtocol.ts";
 
@@ -169,27 +170,22 @@ export const withRunningThreadContinuation = Effect.fn(
   });
 });
 
-export const make = Effect.fn("cloud.server_self_update.make")(function* (options?: {
-  readonly downloadRelease?: (input: {
-    readonly baseDir: string;
-    readonly version: string;
-  }) => Effect.Effect<VerifiedServerReleaseArtifact, ServerReleaseArtifactError>;
-}) {
+export const make = Effect.fn("cloud.server_self_update.make")(function* () {
   const serverConfig = yield* ServerConfig.ServerConfig;
   const desktopAppUpdate = yield* DesktopAppUpdate.DesktopAppUpdate;
   const launcher = yield* ServiceLauncherClient.ServiceLauncherClient;
   const runner = yield* ProcessRunner.ProcessRunner;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const execPath = yield* HostProcessExecutablePath;
+  const platform = yield* HostProcessPlatform;
+  const arch = yield* HostProcessArchitecture;
+  // Archive-distributed targets download from GitHub Releases. The client is
+  // optional so callers without one (tests, npm-only hosts) still construct.
+  const httpClient = yield* HttpClient.HttpClient;
+  const releaseBaseUrl = Option.getOrUndefined(
+    yield* Config.String(CLI_RELEASE_BASE_URL_ENV).pipe(Config.option),
+  );
   const inFlight = yield* Ref.make(false);
-  const downloadRelease =
-    options?.downloadRelease ??
-    ((input: { readonly baseDir: string; readonly version: string }) =>
-      downloadPersonalServerRelease(input).pipe(
-        Effect.provideService(FileSystem.FileSystem, fs),
-        Effect.provideService(Path.Path, path),
-      ));
 
   const capability: ServerSelfUpdateCapability | null =
     serverConfig.mode === "desktop" ? "desktop-managed" : launcher.managed ? "boot-service" : null;
@@ -220,9 +216,7 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* (option
 
     const targetVersion = input.targetVersion.trim();
     if (!isExactServiceVersion(targetVersion)) {
-      return yield* failWith(
-        `'${targetVersion}' is not an exact ${PERSONAL_DISTRIBUTION.connect.displayName} version.`,
-      );
+      return yield* failWith(`'${targetVersion}' is not an exact t3 version.`);
     }
     if (yield* Ref.getAndSet(inFlight, true)) {
       return yield* failWith("A server update is already in progress.");
@@ -230,31 +224,22 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* (option
 
     return yield* Effect.gen(function* () {
       yield* reportProgress("downloading");
-      const releaseArtifact = yield* downloadRelease({
-        baseDir: serverConfig.baseDir,
-        version: targetVersion,
-      }).pipe(
-        Effect.mapError((error) =>
-          failWith(
-            `Could not download the requested ${PERSONAL_DISTRIBUTION.connect.displayName} GitHub Release.`,
-            error,
-          ),
-        ),
-      );
       const paths = yield* ensurePinnedRuntimeInstalled({
         baseDir: serverConfig.baseDir,
         version: targetVersion,
-        packageSpecifier: releaseArtifact.packagePath,
-        installIdentity: releaseArtifact.installIdentity,
         fs,
         path,
         runner,
+        httpClient,
+        platform,
+        arch,
+        releaseBaseUrl,
         validate: (runtime) =>
           runner
             .run({
-              command: execPath,
+              command: pinnedRuntimeCommand(runtime).command,
               args: [
-                runtime.entryPath,
+                ...pinnedRuntimeCommand(runtime).args,
                 "__service-preflight",
                 "--database-path",
                 serverConfig.dbPath,
@@ -322,10 +307,7 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* (option
         Effect.mapError((error) =>
           error._tag === "PinnedRuntimePreflightBlockedError"
             ? failWith(error.reason, error)
-            : failWith(
-                `Could not prepare ${PERSONAL_DISTRIBUTION.connect.displayName} ${targetVersion}.`,
-                error,
-              ),
+            : failWith(`Could not prepare t3@${targetVersion}.`, error),
         ),
       );
 

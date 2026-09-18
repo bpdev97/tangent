@@ -7,20 +7,33 @@ to keep a terminal open.
 
 Run these commands on the machine that will host Tangent:
 
-| Task                            | Command                                                                                                                             |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Install and start               | `npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v<version>/tangent-server-<version>.tgz service install`   |
-| Inspect status and log location | `npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v<version>/tangent-server-<version>.tgz service status`    |
-| Update or repair                | `npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v<version>/tangent-server-<version>.tgz service update`    |
-| Stop and remove from startup    | `npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v<version>/tangent-server-<version>.tgz service uninstall` |
+| Task                            | Command                |
+| ------------------------------- | ---------------------- |
+| Install and start               | `t3 service install`   |
+| Inspect status and log location | `t3 service status`    |
+| Update or repair                | `t3 service update`    |
+| Stop and remove from startup    | `t3 service uninstall` |
 
 Uninstalling the service leaves your projects, threads, and settings intact.
+Running `t3 service install` again repairs a service that `t3 service status`
+reports as broken.
 
-Replace `<version>` with a version from [Tangent Releases](https://github.com/bpdev97/tangent/releases). Install and update use that exact CLI version. An older CLI refuses to replace a newer service unless you explicitly add `--allow-downgrade`.
+Install the [Tangent CLI](./install.md#command-line) first. `t3 update <version>` updates the CLI and installed service to an exact release; `t3 service install` repairs the service using the running CLI version. An older CLI refuses to replace a newer service unless you explicitly add `--allow-downgrade`.
 
 Updating restarts the server. Finish active work first, and wait for any remote
 update already in progress. To match a remote client's version, follow
 [Updating Tangent](./updating.md).
+
+Pass an exact version (`t3 update 0.0.42`) to pin one, `--channel nightly` to
+switch trains, or `--allow-downgrade` to move backwards. `preview` is a
+maintainers' test train: its builds can be broken and are never offered as
+updates, so the installer and `t3 update` ask for confirmation before
+installing one.
+
+`t3 uninstall` removes the background service, the `t3` launcher, and the
+downloaded versions after showing you the list and asking once. Your projects,
+threads, and settings under `~/.bpdev-code/userdata` are kept. Pass `--yes` from a
+script.
 
 ## Platform support
 
@@ -70,7 +83,7 @@ that session open.
 
 On macOS, check **System Settings → General → Login Items** if the service no
 longer starts at login. If agent work cannot access Desktop, Documents, or
-Downloads, it may need Full Disk Access for the Node executable listed in
+Downloads, it may need Full Disk Access for the `t3` executable listed in
 `ProgramArguments` in
 `~/Library/LaunchAgents/com.bpdev97.tangent.service.plist`.
 

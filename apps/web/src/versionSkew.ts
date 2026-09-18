@@ -1,10 +1,8 @@
 import type { EnvironmentId, ServerConfig, ServerSelfUpdateCapability } from "@t3tools/contracts";
-import { resolveServerReleaseArtifact } from "@t3tools/shared/serverRelease";
 import type { ServerUpdateState } from "@t3tools/client-runtime/state/server";
 import { compareSemverVersions, parseSemver } from "@t3tools/shared/semver";
 import * as Schema from "effect/Schema";
 
-import { PERSONAL_DISTRIBUTION } from "../../../downstream/config.ts";
 import { APP_BASE_NAME, APP_VERSION } from "./branding";
 import { getLocalStorageItem, setLocalStorageItem } from "./hooks/useLocalStorage";
 
@@ -118,14 +116,7 @@ export function supportsServerUpdateThreadContinuation(
 
 /** The command to hand users whose server cannot update itself. */
 export function manualServerUpdateCommand(targetVersion: string): string {
-  const artifact = resolveServerReleaseArtifact(
-    {
-      repository: PERSONAL_DISTRIBUTION.repository,
-      ...PERSONAL_DISTRIBUTION.serverRelease,
-    },
-    targetVersion,
-  );
-  return `npx --yes ${artifact.artifactUrl}`;
+  return `t3 update ${targetVersion}`;
 }
 
 export function serverUpdateGuidance(capability: ServerSelfUpdateCapability): string {

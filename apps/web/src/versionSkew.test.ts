@@ -220,8 +220,6 @@ describe("versionSkew", () => {
   });
 
   it("builds manual update commands from Tangent GitHub Releases", () => {
-    expect(manualServerUpdateCommand("1.2.3")).toBe(
-      "npx --yes https://github.com/bpdev97/tangent/releases/download/personal-v1.2.3/tangent-server-1.2.3.tgz",
-    );
+    expect(manualServerUpdateCommand("1.2.3")).toBe("t3 update 1.2.3");
   });
 });

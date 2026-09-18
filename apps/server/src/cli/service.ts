@@ -2,9 +2,9 @@ import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { resolveServerReleaseArtifact } from "@t3tools/shared/serverRelease";
 import * as Terminal from "effect/Terminal";
 import { Command, Flag, GlobalFlag, Prompt } from "effect/unstable/cli";
+import { FetchHttpClient } from "effect/unstable/http";
 
 import { PERSONAL_DISTRIBUTION } from "../../../../downstream/config.ts";
 import packageJson from "../../package.json" with { type: "json" };
@@ -16,8 +16,6 @@ import { projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
 
 const SERVICE_IDENTITY = PERSONAL_DISTRIBUTION.connect;
 const SERVICE_DISPLAY_NAME = SERVICE_IDENTITY.displayName;
-const serviceUpdateCommandForVersion = (version: string) =>
-  `npx --yes ${resolveServerReleaseArtifact({ repository: PERSONAL_DISTRIBUTION.repository, ...PERSONAL_DISTRIBUTION.serverRelease }, version).artifactUrl} service update`;
 
 export const bootServiceLayer = (config: ServerConfig.ServerConfig["Service"]) =>
   BootService.layer({
@@ -25,7 +23,11 @@ export const bootServiceLayer = (config: ServerConfig.ServerConfig["Service"]) =
     logsDir: config.logsDir,
     cliVersion: packageJson.version,
     identity: SERVICE_IDENTITY,
-  }).pipe(Layer.provide(ProcessRunner.layer));
+  }).pipe(
+    Layer.provide(ProcessRunner.layer),
+    // Archive-distributed versions download the release archive here.
+    Layer.provide(FetchHttpClient.layer),
+  );
 
 export type ServiceReconcileResult =
   | {
@@ -41,6 +43,7 @@ export type ServiceReconcileResult =
 /** Install, update, or repair the service using the CLI version running this command. */
 export const reconcileService = Effect.fn("cli.service.reconcile")(function* (options?: {
   readonly allowDowngrade?: boolean;
+  readonly start?: boolean;
 }) {
   const service = yield* BootService.BootService;
   const status = yield* service.status;
@@ -91,7 +94,7 @@ export function formatServiceStatus(
       `  Unit: ${status.unitPath}`,
       `  Logs: ${status.logPath}`,
       ...problems,
-      `  Next: Run \`${serviceUpdateCommandForVersion(installedVersion)}\` to repair it, or pass \`--allow-downgrade\` explicitly.`,
+      `  Next: Run \`t3 update ${installedVersion}\` to match it, or pass \`--allow-downgrade\` to \`t3 service install\` explicitly.`,
     ].join("\n");
   }
   return [
@@ -100,7 +103,7 @@ export function formatServiceStatus(
     `  Unit: ${status.unitPath}`,
     `  Logs: ${status.logPath}`,
     ...problems,
-    ...(status.current ? [] : [`  Next: Run \`${serviceUpdateCommandForVersion(cliVersion)}\`.`]),
+    ...(status.current ? [] : ["  Next: Run `t3 service install` to repair it."]),
   ].join("\n");
 }
 
@@ -115,7 +118,7 @@ const runServiceCommand = Effect.fn("cli.service.run")(function* <A, E>(
 
 const serviceReconcileFlags = {
   ...projectLocationFlags,
-  allowDowngrade: Flag.boolean("allow-downgrade").pipe(
+  allowDowngrade: Flag.Boolean("allow-downgrade").pipe(
     Flag.withDescription("Allow replacing a newer installed service with this older CLI version."),
     Flag.withDefault(false),
   ),
@@ -142,14 +145,18 @@ const serviceInstallCommand = Command.make("install", serviceReconcileFlags).pip
   ),
 );
 
+// Kept one release for muscle memory and old docs. It did what `t3 service
+// install` does; the way to move to a newer release is `t3 update`.
 const serviceUpdateCommand = Command.make("update", serviceReconcileFlags).pipe(
-  Command.withDescription(
-    `Update or repair the ${SERVICE_DISPLAY_NAME} background service using this CLI version.`,
-  ),
+  Command.withDescription("Deprecated. Run `t3 update` to move to a newer release."),
+  Command.unlisted,
   Command.withHandler((flags) =>
     runServiceCommand(
       flags,
       Effect.gen(function* () {
+        yield* Console.log(
+          "`t3 service update` is deprecated: run `t3 update` to move to a newer release, or `t3 service install` to repair the service. Repairing now.",
+        );
         const result = yield* reconcileService({ allowDowngrade: flags.allowDowngrade });
         if (!result.changed) {
           yield* Console.log(
@@ -159,6 +166,27 @@ const serviceUpdateCommand = Command.make("update", serviceReconcileFlags).pipe(
         }
         yield* Console.log(
           `${result.previouslyInstalled ? "Updated" : "Installed"} ${SERVICE_DISPLAY_NAME} service with version ${packageJson.version}.\nLogs: ${result.plan.logPath}`,
+        );
+      }),
+    ),
+  ),
+);
+
+const serviceRestartCommand = Command.make("restart", projectLocationFlags).pipe(
+  Command.withDescription(
+    "Restart the background service. Picks up a version installed by `t3 update` that was not restarted at the time.",
+  ),
+  Command.withHandler((flags) =>
+    runServiceCommand(
+      flags,
+      Effect.gen(function* () {
+        const service = yield* BootService.BootService;
+        const status = yield* service.status;
+        const restarted = yield* service.restart;
+        yield* Console.log(
+          restarted
+            ? `Restarted the T3 Code service${status.installedVersion === undefined ? "" : ` on t3@${status.installedVersion}`}.`
+            : "T3 Code service is not installed.",
         );
       }),
     ),
@@ -231,7 +259,7 @@ export const offerServiceDuringOnboarding = Effect.gen(function* () {
   // enable-linger equivalent on macOS. Do not promise more than that.
   const platform = yield* HostProcessPlatform;
   const wanted = yield* Prompt.run(
-    Prompt.confirm({
+    Prompt.Confirm({
       message: installed
         ? `The installed ${SERVICE_DISPLAY_NAME} service needs an update or repair. Update it now?`
         : platform === "darwin"
@@ -279,8 +307,9 @@ export const serviceCommand = Command.make("service").pipe(
   Command.withDescription(`Manage the ${SERVICE_DISPLAY_NAME} background service.`),
   Command.withSubcommands([
     serviceInstallCommand,
+    serviceRestartCommand,
     serviceUninstallCommand,
-    serviceUpdateCommand,
     serviceStatusCommand,
+    serviceUpdateCommand,
   ]),
 );
