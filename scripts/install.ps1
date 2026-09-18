@@ -199,7 +199,7 @@ if ((Test-Path $marker) -and ((Get-Content $marker -Raw) -eq "$version`n$baseUrl
 
     & (Join-Path $staging "t3.exe") --version | Out-Null
     if ($LASTEXITCODE -ne 0) { Fail "the downloaded executable does not run" }
-    Set-Content -Path (Join-Path $staging ".install-complete") -Value "$version`n$baseUrl/personal-v$version`n" -NoNewline -Encoding utf8
+    [System.IO.File]::WriteAllText((Join-Path $staging ".install-complete"), "$version`n$baseUrl/personal-v$version`n", (New-Object System.Text.UTF8Encoding $false))
 
     if (Test-Path $targetDir) { Remove-Item $targetDir -Recurse -Force }
     Move-Item $staging $targetDir

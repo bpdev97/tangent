@@ -63,7 +63,7 @@ describe.skipIf(HostProcessPlatform.defaultValue() !== "linux")("installer termi
           T3CODE_VERSION: version,
           T3CODE_HOME: NodePath.join(root, "home"),
           T3CODE_INSTALL_BIN_DIR: NodePath.join(root, "bin"),
-          T3CODE_RELEASE_BASE_URL: `http://127.0.0.1:${address.port}`,
+          T3CODE_RELEASE_BASE_URL: `http://127.0.0.1:${address.port}/`,
         },
         stdio: ["ignore", "pipe", "pipe"],
       });

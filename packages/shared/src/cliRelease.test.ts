@@ -72,6 +72,7 @@ describe("cliRelease", () => {
 
   it("picks the newest non-draft release on the requested channel", () => {
     const releases = [
+      { tag_name: "v99.0.0" },
       { tag_name: "personal-v1.2.4-preview.20260912.9", draft: true },
       { tag_name: "personal-v1.2.4-preview.20260912.8" },
       { tag_name: "personal-v1.2.4-nightly.20260912.7" },

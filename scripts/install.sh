@@ -19,6 +19,7 @@ set -eu
 
 repo="bpdev97/tangent"
 base_url="${T3CODE_RELEASE_BASE_URL:-https://github.com/${repo}/releases/download}"
+base_url="$(printf '%s' "$base_url" | sed 's:/*$::')"
 t3_home="${T3CODE_HOME:-$HOME/.bpdev-code}"
 bin_dir="${T3CODE_INSTALL_BIN_DIR:-$HOME/.local/bin}"
 
