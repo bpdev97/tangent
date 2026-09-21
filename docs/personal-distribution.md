@@ -115,6 +115,6 @@ upstream implementation. Desktop updates keep their existing feed and data direc
 ## Upstream synchronization
 
 The personal upstream-sync workflow runs once each Monday and opens a PR from
-`sync/upstream-main`. It does not auto-merge and never receives Expo or Apple credentials. Conflicts
+`sync/upstream-<commit>`. It does not auto-merge and never receives Expo or Apple credentials. Conflicts
 are resolved on the sync branch, all required checks run, and the resulting merge is reviewed before
 entering `main`.

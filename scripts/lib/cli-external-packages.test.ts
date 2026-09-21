@@ -9,9 +9,10 @@ import * as Schema from "effect/Schema";
 
 import serverPackageJson from "../../apps/server/package.json" with { type: "json" };
 
+import { findEsmImportsOfExternalPackages } from "./cli-executable-imports.ts";
+
 import {
   CLI_RUNTIME_EXTERNAL_PREFIXES,
-  findEsmImportsOfExternalPackages,
   findInlinedExternalPackages,
   selectCliRuntimeExternalDependencies,
   shouldBundleCliDependency,
@@ -305,6 +306,27 @@ describe("findEsmImportsOfExternalPackages", () => {
   it("flags side-effect imports and re-exports too", () => {
     const source = ['import "heic-decode";', 'export { load } from "ffi-rs";'].join("\n");
     assert.deepStrictEqual(findEsmImportsOfExternalPackages(source), ["ffi-rs", "heic-decode"]);
+  });
+
+  it("ignores imports inside generated extension source and comments", () => {
+    const source = [
+      'const extension = `import { Type } from "typebox";\nimport type { ExtensionAPI } from "@earendil-works/pi-coding-agent";`;',
+      '// import "comment-only";',
+      "const example = 'import(\"string-only\")';",
+      'const interpolated = `source ${import("real-package")}`;',
+    ].join("\n");
+    assert.deepStrictEqual(findEsmImportsOfExternalPackages(source), ["real-package"]);
+  });
+
+  it("allows optional dynamic Bun built-ins but rejects static imports", () => {
+    assert.deepStrictEqual(
+      findEsmImportsOfExternalPackages('const load = () => import("bun:sqlite");'),
+      [],
+    );
+    assert.deepStrictEqual(
+      findEsmImportsOfExternalPackages('import { Database } from "bun:sqlite";'),
+      ["bun:sqlite"],
+    );
   });
 
   it("does not mistake createRequire calls for imports", () => {

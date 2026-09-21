@@ -139,4 +139,47 @@ describe("canonicalizeClientCommandTimestamps", () => {
       expect(Array.from(persistedBytes.slice(0, 3))).toEqual([0xff, 0xd8, 0xff]);
     }).pipe(Effect.provide(normalizerTestLayer)),
   );
+  it.effect("enforces the aggregate limit after HEIC conversion and removes earlier uploads", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const serverConfig = yield* ServerConfig.ServerConfig;
+      const tenMiB = 10 * 1024 * 1024;
+      const fullImage = `data:image/png;base64,${Buffer.alloc(tenMiB).toString("base64")}`;
+      const command: ClientOrchestrationCommand = {
+        type: "thread.turn.start",
+        commandId: CommandId.make("command-heic-overflow"),
+        threadId: ThreadId.make("thread-heic-overflow"),
+        message: {
+          messageId: MessageId.make("message-heic-overflow"),
+          role: "user",
+          text: "Inspect these photos",
+          attachments: [
+            ...Array.from({ length: 8 }, (_, index) => ({
+              type: "image" as const,
+              name: `image-${index}.png`,
+              mimeType: "image/png",
+              sizeBytes: 1,
+              dataUrl:
+                index < 7
+                  ? fullImage
+                  : `data:image/png;base64,${Buffer.alloc(tenMiB - 1).toString("base64")}`,
+            })),
+            {
+              type: "image",
+              name: "camera.heic",
+              mimeType: "image/heic",
+              sizeBytes: 1,
+              dataUrl: `data:image/heic;base64,${HEIC_FIXTURE_BASE64}`,
+            },
+          ],
+        },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        createdAt: clientCreatedAt,
+      };
+      const error = yield* normalizeDispatchCommand(command).pipe(Effect.flip);
+      expect(error.message).toContain("80 MiB");
+      expect(yield* fileSystem.readDirectory(serverConfig.attachmentsDir)).toEqual([]);
+    }).pipe(Effect.provide(normalizerTestLayer)),
+  );
 });

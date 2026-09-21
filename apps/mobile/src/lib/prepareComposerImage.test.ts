@@ -248,9 +248,9 @@ describe("mobile image entry points", () => {
     expect(isForegroundHandoffActive()).toBe(false);
   });
   it("does not request permission when the draft is full", async () => {
-    const result = await pickComposerMedia({ existingCount: 8, source: "camera" });
+    const result = await pickComposerMedia({ existingCount: 100, source: "camera" });
     expect(result.attachments).toEqual([]);
-    expect(result.error).toContain("8 attachments");
+    expect(result.error).toContain("100 attachments");
     expect(native.permission).not.toHaveBeenCalled();
   });
   it("shrinks clipboard images", async () => {

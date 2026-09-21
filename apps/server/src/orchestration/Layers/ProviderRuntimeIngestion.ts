@@ -14,8 +14,8 @@ import {
   type OrchestrationCheckpointSummary,
   type OrchestrationThreadActivity,
   type ProjectId,
-  type ProviderRuntimeEvent,
   type ProviderRequestKind,
+  type ProviderRuntimeEvent,
   type ResponseStreamingMode,
   RuntimeRequestId,
 } from "@t3tools/contracts";
@@ -413,6 +413,8 @@ function requestKindFromCanonicalRequestType(
       return "file-change";
     case "mcp_elicitation_approval":
       return "mcp-elicitation";
+    case "permission_approval":
+      return "permission";
     default:
       return undefined;
   }
@@ -495,7 +497,9 @@ export function runtimeEventToActivities(
                   ? "File-change approval requested"
                   : requestKind === "mcp-elicitation"
                     ? "App access approval requested"
-                    : "Approval requested",
+                    : requestKind === "permission"
+                      ? "App permission approval requested"
+                      : "Approval requested",
           payload: {
             requestId: toApprovalRequestId(event.requestId),
             ...(requestKind ? { requestKind } : {}),

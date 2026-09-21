@@ -1,6 +1,6 @@
 {
   "upstream": "pingdotgg/t3code",
-  "baseline": "9ea9c3d5d2c444133e3ddff40eecf38737951589",
+  "baseline": "371b52d9dad76876f84609a4cd0f80eaa757b69c",
   "features": {
     "FORK-DIST-001": "docs/personal-distribution.md",
     "FORK-CHAT-001": "docs/fork/generic-chat.md",
@@ -225,7 +225,9 @@
         "packages/client-runtime/src/state/projectGrouping.ts",
         "packages/shared/src/genericChat.test.ts",
         "packages/shared/src/genericChat.ts",
-        "apps/web/src/hooks/useActiveProjectTarget.ts"
+        "apps/web/src/hooks/useActiveProjectTarget.ts",
+        "apps/mobile/src/features/home/HomeHeader.types.ts",
+        "apps/mobile/src/features/threads/useThreadHeaderOptions.tsx"
       ]
     },
     {
@@ -255,7 +257,6 @@
     {
       "features": ["FORK-MAINT-001"],
       "paths": [
-        ".agents/skills/ios-debugger-agent/SKILL.md",
         ".agents/skills/test-t3-app/SKILL.md",
         ".agents/skills/test-t3-mobile/SKILL.md",
         ".agents/skills/test-t3-mobile/scripts/pair-client.sh",
@@ -321,7 +322,6 @@
         "apps/mobile/src/App.tsx",
         "apps/mobile/src/branding.ts",
         "apps/mobile/src/components/T3Wordmark.tsx",
-        "apps/mobile/src/features/cloud/linkEnvironment.test.ts",
         "apps/mobile/src/features/connection/pairing.test.ts",
         "apps/mobile/src/features/connection/pairing.ts",
         "apps/mobile/src/features/updates/app-updates.test.ts",

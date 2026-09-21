@@ -35,11 +35,11 @@ for (const id of [36, 39, 41, 44, 45]) {
       });
       yield* sql`INSERT INTO future_upstream (id) VALUES ('upstream ran')`;
       assert.deepEqual(yield* sql`SELECT id FROM future_upstream`, [{ id: "upstream ran" }]);
-    }).pipe(Effect.provide(NodeSqliteClient.layerMemory())),
+    }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );
 }
 
-const layer = it.layer(Layer.mergeAll(NodeSqliteClient.layerMemory()));
+const layer = it.layer(Layer.mergeAll(NodeSqliteClient.layer({ filename: ":memory:" })));
 
 layer("ForkMigrations", (it) => {
   it.effect("closes only orphaned Hermes prompts whose turns are terminal", () =>
@@ -191,7 +191,9 @@ layer("ForkMigrations", (it) => {
   );
 });
 
-const compatibilityLayer = it.layer(Layer.mergeAll(NodeSqliteClient.layerMemory()));
+const compatibilityLayer = it.layer(
+  Layer.mergeAll(NodeSqliteClient.layer({ filename: ":memory:" })),
+);
 
 compatibilityLayer("ForkMigrations legacy ledger", (it) => {
   it.effect("repairs databases that already used Tangent migration IDs 36, 39, and 41", () =>

@@ -1317,7 +1317,8 @@ function extractWorkLogRequestKind(
     payload?.requestKind === "command" ||
     payload?.requestKind === "file-read" ||
     payload?.requestKind === "file-change" ||
-    payload?.requestKind === "mcp-elicitation"
+    payload?.requestKind === "mcp-elicitation" ||
+    payload?.requestKind === "permission"
   ) {
     return payload.requestKind;
   }

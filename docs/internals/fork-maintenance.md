@@ -46,3 +46,8 @@ the same conservative timestamp rule as upstream checkpoint capture. A fresh cop
 hide same-size working-tree edits from Git's racy-index detection when untracked files are present.
 This correctness fix and its regression tests remain until upstream's review-index preparation
 preserves that detection too; the user's real index must remain unchanged.
+
+Mobile verification follows upstream’s Device panel and AgentDevice workflow. The pairing helper
+derives Tangent’s iOS bundle ID and URL scheme from the mobile distribution config; copying
+upstream’s literal development identity would open the official app instead. Keep the worktree
+state boundary and never test against the installed `~/.bpdev-code/userdata` database.
