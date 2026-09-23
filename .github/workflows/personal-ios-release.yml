@@ -1,0 +1,132 @@
+name: Tangent iOS Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Queue a native TestFlight build, publish an OTA update, or choose automatically"
+        required: true
+        type: choice
+        default: update
+        options:
+          - update
+          - build
+          - auto
+      message:
+        description: "Release message"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: personal-ios-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: iOS ${{ inputs.mode }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: personal-release
+    env:
+      APP_VARIANT: production
+      NODE_OPTIONS: --max-old-space-size=8192
+    steps:
+      - name: Validate release configuration
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [[ "$GITHUB_REF" != refs/heads/main ]]; then
+            echo "Personal releases must run from main." >&2
+            exit 1
+          fi
+          if [[ -z "$EXPO_TOKEN" ]]; then
+            echo "Missing GitHub Actions secret: EXPO_TOKEN" >&2
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
+      - name: Expose pnpm
+        run: |
+          pnpm_version="$(node --print "require('./package.json').packageManager.split('@').pop()")"
+          vp_pnpm_bin="$HOME/.vite-plus/package_manager/pnpm/$pnpm_version/pnpm/bin"
+          echo "$vp_pnpm_bin" >> "$GITHUB_PATH"
+          "$vp_pnpm_bin/pnpm" --version
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+          packager: npm
+
+      - name: Pull production environment
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas env:pull production --path .env.local --non-interactive
+
+      - name: Check
+        run: vp check
+
+      - name: Typecheck
+        run: vp run typecheck
+
+      # auto ships an OTA update when an iOS build with this native fingerprint already exists
+      # (production builds use the fingerprint runtime policy) and queues a native build otherwise.
+      - name: Choose update or build
+        id: mode
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          REQUESTED_MODE: ${{ inputs.mode }}
+        run: |
+          if [[ "$REQUESTED_MODE" != auto ]]; then
+            echo "mode=$REQUESTED_MODE" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          runtime="$(npx expo-updates runtimeversion:resolve --platform ios | node -e 'let s="";process.stdin.on("data",(d)=>(s+=d)).on("end",()=>{const v=JSON.parse(s).runtimeVersion;if(!v)process.exit(1);console.log(v)})')"
+          matches="$(eas build:list --platform ios --non-interactive --json --limit 50 | RUNTIME="$runtime" node -e 'let s="";process.stdin.on("data",(d)=>(s+=d)).on("end",()=>{const builds=JSON.parse(s);console.log(builds.filter((b)=>b.buildProfile==="personal"&&b.runtimeVersion===process.env.RUNTIME&&!["ERRORED","CANCELED"].includes(b.status)).length)})')"
+          if [[ "$matches" -gt 0 ]]; then mode=update; else mode=build; fi
+          echo "Runtime $runtime has $matches personal iOS builds; choosing $mode." >> "$GITHUB_STEP_SUMMARY"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
+      - name: Queue native build and TestFlight submission
+        if: steps.mode.outputs.mode == 'build'
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          eas build \
+            --platform ios \
+            --profile personal \
+            --auto-submit-with-profile personal \
+            --non-interactive \
+            --no-wait
+
+      - name: Publish OTA update
+        if: steps.mode.outputs.mode == 'update'
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          RELEASE_MESSAGE: ${{ inputs.message || format('Personal OTA ({0})', github.sha) }}
+        run: |
+          eas update \
+            --channel personal \
+            --environment production \
+            --platform ios \
+            --message "$RELEASE_MESSAGE" \
+            --non-interactive

@@ -18,6 +18,8 @@ import { Argument, Command, Flag } from "effect/cli";
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
+import { PERSONAL_MOBILE_DISTRIBUTION } from "../downstream/mobile-config.ts";
+
 export type NativePlatform = "ios" | "android";
 const NativeClientRecord = Schema.Struct({ fingerprint: Schema.String, binary: Schema.String });
 const encodeRecord = Schema.encodeEffect(Schema.fromJsonString(NativeClientRecord));
@@ -135,6 +137,9 @@ export const hashBundle = Effect.fn("hashBundle")(function* (root: string) {
 type FileSystemError = import("effect/PlatformError").PlatformError;
 
 const bundleId = "com.t3tools.t3code.dev";
+// Tangent(FORK-DIST-001): the iOS dev client uses the personal bundle and native project name.
+const iosBundleId = `${PERSONAL_MOBILE_DISTRIBUTION.iosBundleIdentifier}.dev`;
+const nativeName = PERSONAL_MOBILE_DISTRIBUTION.developmentAppName.replace(/ /g, "");
 const roots = Effect.gen(function* () {
   const path = yield* Path.Path;
   const repo = yield* path.fromFileUrl(new URL("../", import.meta.url));
@@ -344,9 +349,9 @@ export const installedBinary = Effect.fn("installedBinary")(function* (
 ) {
   if (platform === "ios") {
     const apps = yield* run("xcrun", ["simctl", "listapps", device]);
-    if (!apps.includes(`"${bundleId}"`)) return null;
+    if (!apps.includes(`"${iosBundleId}"`)) return null;
     return yield* hashBundle(
-      yield* run("xcrun", ["simctl", "get_app_container", device, bundleId, "app"]),
+      yield* run("xcrun", ["simctl", "get_app_container", device, iosBundleId, "app"]),
     );
   }
   const installed = yield* run("adb", ["-s", device, "shell", "pm", "list", "packages", bundleId]);
@@ -403,7 +408,7 @@ export const prebuildAndroid = Effect.fn("nativeClient.prebuildAndroid")(functio
   );
 });
 
-const artifactNames = { ios: "T3CodeDev.app", android: "app-debug.apk" } as const;
+const artifactNames = { ios: `${nativeName}.app`, android: "app-debug.apk" } as const;
 // R2 requires equal-sized parts and Workers cap request bodies at 100 MB.
 const partSize = 64 * 1024 * 1024;
 const RemoteCredentials = Schema.fromJsonString(
@@ -715,9 +720,9 @@ const build = Effect.fn("nativeClient.build")(function* (
         [
           "xcodebuild",
           "-workspace",
-          path.join(mobile, "ios/T3CodeDev.xcworkspace"),
+          path.join(mobile, `ios/${nativeName}.xcworkspace`),
           "-scheme",
-          "T3CodeDev",
+          nativeName,
           "-configuration",
           "Debug",
           "-destination",
@@ -940,6 +945,7 @@ const installIntoSession = Effect.fn("nativeClient.installIntoSession")(function
   // agent-device scopes session ownership to the workspace (working directory) it runs in.
   const workspace = yield* HostProcess.WorkingDirectory;
   const deviceAbi = platform === "android" ? abi : null;
+  const sessionBundleId = platform === "ios" ? iosBundleId : bundleId;
   const task = deviceAbi ? `native-client:android-${deviceAbi}` : `native-client:${platform}`;
   const current = yield* fingerprint(platform);
   const key = `${platform}/${deviceAbi ? `development-${deviceAbi}` : "development"}/${current}`;
@@ -981,7 +987,7 @@ const installIntoSession = Effect.fn("nativeClient.installIntoSession")(function
         yield* Console.error(`Installing into agent-device session ${session}...`);
         yield* command(
           node,
-          [agentDevice, "install", bundleId, local.file, "--session", session],
+          [agentDevice, "install", sessionBundleId, local.file, "--session", session],
           true,
           workspace,
         );
@@ -994,8 +1000,8 @@ const installIntoSession = Effect.fn("nativeClient.installIntoSession")(function
       [
         agentDevice,
         "open",
-        bundleId,
-        `t3code-dev://expo-development-client/?url=${url}&disableOnboarding=1&disableFab=1&disableAutoLaunch=1`,
+        sessionBundleId,
+        `${PERSONAL_MOBILE_DISTRIBUTION.developmentScheme}://expo-development-client/?url=${url}&disableOnboarding=1&disableFab=1&disableAutoLaunch=1`,
         "--session",
         session,
       ],
