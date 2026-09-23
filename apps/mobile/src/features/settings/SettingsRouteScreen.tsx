@@ -124,6 +124,8 @@ function LocalSettingsRouteScreen() {
             valuePosition="trailing"
             target="SettingsEnvironments"
           />
+          {/* Tangent(FORK-PUSH-001) */}
+          <SettingsRow icon="bell.badge" label="Notifications" target="SettingsNotifications" />
         </SettingsSection>
 
         <SettingsIndexSections />
