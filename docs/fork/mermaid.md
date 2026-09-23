@@ -23,11 +23,17 @@ renderer is strictly sandboxed and never touches the server, providers, or mobil
 
 ## Upstream hooks
 
-Planned: `apps/web/src/components/ChatMarkdown.tsx`, at the fenced-code boundary, sends completed
-`mermaid` fences to the diagram component. Also the web package manifest, lockfile, and third-party
-license list for the dependency.
+- `apps/web/src/components/ChatMarkdown.tsx`: one branch at the fenced-code boundary in the `pre`
+  renderer, marked `Tangent(FORK-MERMAID-001)`, sends completed `mermaid` fences to the diagram
+  component, plus its import.
+- `apps/web/package.json` and `pnpm-lock.yaml`: the `mermaid` dependency.
+- `docs/README.md`: the link to the user guide.
+- `third-party-licenses.config.json`: notices for Mermaid's `fastdom`, `strictdom`, and `khroma`
+  dependencies, which ship without usable license files.
 
-Fork-owned: `apps/web/src/components/MermaidDiagram.tsx` and its test.
+Fork-owned: `apps/web/src/components/MermaidDiagram.tsx`, its test, its stylesheet
+`MermaidDiagram.css` (imported by the component, so `index.css` stays upstream's), and
+`docs/user/mermaid-diagrams.md`.
 
 ## Resolving conflicts
 
