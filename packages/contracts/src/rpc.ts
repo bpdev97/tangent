@@ -352,6 +352,7 @@ import {
   ServerSettingsError,
   ServerSettingsPatch,
 } from "./settings.ts";
+import { PersonalPushRelayTestResult } from "./personalPush.ts";
 import {
   ScheduledTaskDeleteInput,
   ScheduledTaskDeleteResult,
@@ -503,6 +504,7 @@ export const WS_METHODS = {
   peerLinksUnlink: "peerLinks.unlink",
   peerLinksAnswerRequest: "peerLinks.answerRequest",
   serverUpdateSettings: "server.updateSettings",
+  serverTestPersonalPushRelay: "server.testPersonalPushRelay", // Tangent(FORK-PUSH-001)
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverSearchAcpRegistry: "server.searchAcpRegistry",
   serverPrepareAcpRegistryAgent: "server.prepareAcpRegistryAgent",
@@ -806,6 +808,13 @@ const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSettings, {
     providerInstanceMutation: Schema.optionalKey(ProviderInstanceMutation),
   }),
   success: ServerSettings,
+  error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
+});
+
+// Tangent(FORK-PUSH-001): checks the saved relay URL and password from the server.
+const WsServerTestPersonalPushRelayRpc = Rpc.make(WS_METHODS.serverTestPersonalPushRelay, {
+  payload: Schema.Struct({}),
+  success: PersonalPushRelayTestResult,
   error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
 });
 
@@ -1965,6 +1974,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsPeerLinksLinkRpc,
   WsPeerLinksUnlinkRpc,
   WsPeerLinksAnswerRequestRpc,
+  WsServerTestPersonalPushRelayRpc,
   WsServerDiscoverSourceControlRpc,
   WsServerSearchAcpRegistryRpc,
   WsServerPrepareAcpRegistryAgentRpc,
