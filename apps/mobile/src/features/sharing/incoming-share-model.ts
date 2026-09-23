@@ -3,18 +3,18 @@ import {
   fileAttachmentTooLargeMessage,
 } from "@t3tools/client-runtime/state/attachments";
 import {
-  isProviderSendTurnSupportedImageMimeType,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
-  PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import type { ResolvedSharePayload, SharePayload } from "expo-sharing";
 
 import { DraftComposerAttachmentSchema } from "../../lib/composer-image-schema";
-import { fitComposerImage } from "../../lib/composerImageFit";
 import type { DraftComposerAttachment } from "../../lib/composerImages";
-import { estimateBase64ByteSize } from "../../lib/base64";
+import {
+  MAX_COMPOSER_IMAGE_SOURCE_BYTES,
+  prepareComposerImage,
+} from "../../lib/prepareComposerImage";
 
 export interface IncomingShareDraft {
   readonly schemaVersion: 1;
@@ -358,56 +358,40 @@ export async function buildIncomingShareDraft(input: {
       await releaseOwnedFiles(input.fileReader, [uri, payload.value]);
       continue;
     }
-    if (!isProviderSendTurnSupportedImageMimeType(mimeType)) {
-      warnings.push(
-        `'${resolved?.originalName ?? fallbackName(uri, index, mimeType)}' is not a supported image type.`,
-      );
-      await releaseOwnedFiles(input.fileReader, [uri, payload.value]);
-      continue;
-    }
+    // Tangent(FORK-IMAGE-001): HEIC and oversized images are prepared below, up to 50 MB.
     if (
       resolved?.contentSize !== null &&
       resolved?.contentSize !== undefined &&
-      resolved.contentSize > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES
+      resolved.contentSize > MAX_COMPOSER_IMAGE_SOURCE_BYTES
     ) {
       warnings.push(
-        `'${resolved.originalName ?? fallbackName(uri, index, mimeType)}' exceeds the 10 MB attachment limit.`,
+        `'${resolved.originalName ?? fallbackName(uri, index, mimeType)}' exceeds the 50 MB image processing limit.`,
       );
       await releaseOwnedFiles(input.fileReader, [uri, payload.value]);
       continue;
     }
 
     try {
-      const sharedBase64 = await input.fileReader.readBase64(uri);
-      // Use already-read bytes because native image loaders may not read the provider's file.
-      const fitted = await fitComposerImage({
-        uri: `data:${mimeType};base64,${sharedBase64}`,
+      const base64 = await input.fileReader.readBase64(uri);
+      // Measured from the bytes; share metadata can under-report. The preview
+      // is data-backed because the share provider's file is temporary.
+      const prepared = await prepareComposerImage({
+        base64,
         mimeType,
-        base64: sharedBase64,
+        name: resolved?.originalName ?? fallbackName(uri, index, mimeType),
       });
-      const base64 = fitted?.base64 ?? sharedBase64;
-      const sizeBytes = fitted
-        ? estimateBase64ByteSize(base64)
-        : (resolved?.contentSize ?? estimateBase64ByteSize(base64));
-      if (sizeBytes <= 0 || sizeBytes > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
-        warnings.push(
-          `'${resolved?.originalName ?? fallbackName(uri, index, mimeType)}' exceeds the 10 MB attachment limit.`,
-        );
-        continue;
-      }
-      const dataUrl = `data:${mimeType};base64,${base64}`;
       attachments.push({
         id: `${input.id}:image:${index}`,
         type: "image",
-        name: resolved?.originalName ?? fallbackName(uri, index, mimeType),
-        mimeType,
-        sizeBytes,
-        dataUrl,
-        // Data-backed previews outlive temporary share files and App Group entries.
-        previewUri: dataUrl,
+        ...prepared,
+        previewUri: prepared.dataUrl,
       });
-    } catch {
-      warnings.push(`Could not read '${fallbackName(uri, index, mimeType)}'.`);
+    } catch (cause) {
+      warnings.push(
+        cause instanceof Error
+          ? cause.message
+          : `Could not read '${fallbackName(uri, index, mimeType)}'.`,
+      );
     } finally {
       await releaseOwnedFiles(input.fileReader, [uri, payload.value]);
     }
