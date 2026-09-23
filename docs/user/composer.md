@@ -58,6 +58,10 @@ also send files to T3 Code through another app's system share sheet.
 On Android, you can also drag images from another app into the message input
 in split screen.
 
+On mobile, choose **Camera** from the attachment menu to take a photo. Pasted and shared images are
+converted and shrunk to fit the image limit too. Images over 50 MB, and GIF or WebP images over the
+limit, must be resized before attaching.
+
 See [images and videos](#images-and-videos-in-messages) for previewing and saving media.
 
 ## Send while the agent is working
