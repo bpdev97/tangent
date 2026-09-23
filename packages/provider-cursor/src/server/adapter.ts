@@ -47,6 +47,8 @@ import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderS
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import { CursorTransportFailure } from "./transportFailure.ts";
 import { cursorContextWindowTokens, cursorSdkModelSelection } from "./sdkModel.ts";
+// Tangent(FORK-MCP-001)
+import { sharedHttpMcpServers } from "@t3tools/provider-core/server/sharedMcpServers";
 import {
   discoverCursorSkills,
   hasCursorSkillMention,
@@ -201,11 +203,15 @@ export function cursorRuntimeAgentPolicy(
 
 export function cursorMcpServers(
   session: McpProviderSession.McpProviderSessionConfig | undefined,
+  // Tangent(FORK-MCP-001): the thread whose shared MCP servers attach beside t3-code.
+  threadId: ThreadId | null = null,
 ): Record<string, McpServerConfig> | undefined {
+  const sharedMcpServers = sharedHttpMcpServers(threadId);
   if (session === undefined) {
-    return undefined;
+    return Object.keys(sharedMcpServers).length === 0 ? undefined : sharedMcpServers;
   }
   return {
+    ...sharedMcpServers, // Tangent(FORK-MCP-001)
     "t3-code": {
       type: "http",
       url: session.endpoint,
@@ -302,7 +308,7 @@ export function makeCursorAgentOptions(input: {
   readonly platform: NodeJS.Platform;
 }): AgentOptions {
   const policy = cursorRuntimeAgentPolicy(input.runtimePolicy, input.platform);
-  const mcpServers = cursorMcpServers(input.mcpSession);
+  const mcpServers = cursorMcpServers(input.mcpSession, input.threadId); // Tangent(FORK-MCP-001)
   return {
     model: cursorSdkModelSelection(input.modelSelection),
     name: `T3 Code ${input.threadId}`,
@@ -2301,7 +2307,8 @@ export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
               resolveAttachmentPath: host.resolveAttachmentPath,
               resolveExtractedTextPath: host.resolveExtractedTextPath,
             }),
-            hasT3Mcp: mcpServers !== undefined,
+            // Tangent(FORK-MCP-001): shared servers alone do not bring t3-code.
+            hasT3Mcp: mcpServers?.["t3-code"] !== undefined,
             hasDeviceTools,
             orchestrationDelivered: delivered.orchestration,
             deviceInstructionsDelivered: delivered.device,
@@ -2369,9 +2376,13 @@ export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
               runtimePolicy: turnInput.runtimePolicy,
             });
             const mcpSession = yield* mcpSessions.read(turnInput.threadId);
-            const mcpServers = cursorMcpServers(mcpSession);
+            const mcpServers = cursorMcpServers(
+              mcpSession,
+              turnInput.threadId, // Tangent(FORK-MCP-001)
+            );
             const hasDeviceTools =
-              mcpServers !== undefined && mcpSession?.capabilities?.has("device") === true;
+              mcpServers?.["t3-code"] !== undefined &&
+              mcpSession?.capabilities?.has("device") === true;
             const known = yield* Ref.get(told);
             // A conversation this process has not sent to was told on its first run.
             const delivered =
