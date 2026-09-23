@@ -18,7 +18,6 @@ import { useRef, useState, useSyncExternalStore } from "react";
 import { Linking, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AppText as Text } from "../../components/ui/AppText";
 import {
   isAtomCommandInterrupted,
   reportAtomCommandResult,
@@ -49,6 +48,7 @@ import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { resolveAgentAwarenessPlatformPresentation } from "./SettingsRouteScreen.logic";
+import { PersonalNotificationsSettingsScreen } from "./PersonalNotificationsSettings";
 
 /**
  * A policy that turns Connect off refuses relay links and preferences, which would fail the
@@ -110,18 +110,7 @@ function useDeviceRegistered(): boolean {
 
 export function SettingsNotificationsRouteScreen() {
   if (!hasCloudPublicConfig()) {
-    return (
-      <SettingsScreen title="Notifications">
-        <ScrollView
-          contentInsetAdjustmentBehavior="automatic"
-          contentContainerClassName="px-5 pt-4"
-        >
-          <Text className="text-base text-foreground-muted">
-            Notifications require T3 Connect in this app build.
-          </Text>
-        </ScrollView>
-      </SettingsScreen>
-    );
+    return <PersonalNotificationsSettingsScreen />; // Tangent(FORK-PUSH-001)
   }
 
   return <ConfiguredSettingsNotificationsRouteScreen />;
