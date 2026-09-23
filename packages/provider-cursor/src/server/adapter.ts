@@ -47,6 +47,8 @@ import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderS
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import { CursorTransportFailure } from "./transportFailure.ts";
 import { cursorSdkModelSelection } from "./sdkModel.ts";
+// Tangent(FORK-MCP-001)
+import { sharedHttpMcpServers } from "@t3tools/provider-core/server/sharedMcpServers";
 import {
   discoverCursorSkills,
   hasCursorSkillMention,
@@ -203,11 +205,15 @@ export function cursorRuntimeAgentPolicy(
 
 export function cursorMcpServers(
   session: McpProviderSession.McpProviderSessionConfig | undefined,
+  // Tangent(FORK-MCP-001): the thread whose shared MCP servers attach beside t3-code.
+  threadId: ThreadId | null = null,
 ): Record<string, McpServerConfig> | undefined {
+  const sharedMcpServers = sharedHttpMcpServers(threadId);
   if (session === undefined) {
-    return undefined;
+    return Object.keys(sharedMcpServers).length === 0 ? undefined : sharedMcpServers;
   }
   return {
+    ...sharedMcpServers, // Tangent(FORK-MCP-001)
     "t3-code": {
       type: "http",
       url: session.endpoint,
@@ -310,7 +316,7 @@ export function makeCursorAgentOptions(input: {
   readonly mcpSession: McpProviderSession.McpProviderSessionConfig | undefined;
 }): AgentOptions {
   const policy = cursorRuntimeAgentPolicy(input.runtimePolicy);
-  const mcpServers = cursorMcpServers(input.mcpSession);
+  const mcpServers = cursorMcpServers(input.mcpSession, input.threadId); // Tangent(FORK-MCP-001)
   return {
     model: cursorSdkModelSelection(input.modelSelection),
     name: `T3 Code ${input.threadId}`,
@@ -2140,7 +2146,8 @@ export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
               resolveAttachmentPath: host.resolveAttachmentPath,
             }),
             runOrdinal: turnInput.runOrdinal,
-            hasT3Mcp: mcpServers !== undefined,
+            // Tangent(FORK-MCP-001): shared servers alone do not bring t3-code.
+            hasT3Mcp: mcpServers?.["t3-code"] !== undefined,
           });
           const images = yield* Effect.forEach(
             turnInput.message.attachments.filter(isProviderNativeImageAttachment),
@@ -2202,7 +2209,10 @@ export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
               modelSelection: turnInput.modelSelection,
               runtimePolicy: turnInput.runtimePolicy,
             });
-            const mcpServers = cursorMcpServers(yield* mcpSessions.read(turnInput.threadId));
+            const mcpServers = cursorMcpServers(
+              yield* mcpSessions.read(turnInput.threadId),
+              turnInput.threadId, // Tangent(FORK-MCP-001)
+            );
             const message = yield* resolveUserMessage(turnInput, mcpServers);
             const pendingUpdates: Array<InteractionUpdate> = [];
             let context: ActiveCursorTurn | null = null;
