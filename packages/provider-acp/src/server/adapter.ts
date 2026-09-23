@@ -78,6 +78,11 @@ import { makeAcpMcpOverAcpBridge, type AcpMcpOverAcpBridge } from "./mcpOverAcpB
 import { mcpToolPresentation } from "@t3tools/provider-core/server/mcpToolPresentation";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
+// Tangent(FORK-MCP-001)
+import {
+  acpSharedHttpMcpServers,
+  acpSharedMcpServers,
+} from "@t3tools/provider-core/server/sharedMcpServers";
 import {
   applyAcpAgentTerminalUpdate,
   acpContentBlockDisplayText,
@@ -1054,13 +1059,19 @@ function acpMcpContext(
   mcpOverHttp: boolean | undefined,
   deferMcpTools: boolean | undefined,
   callLauncher: string | undefined,
+  // Tangent(FORK-MCP-001): agents that take MCP-over-ACP send only `acpServers`,
+  // and `mcpOverHttp` agents only `httpServers`, so shared servers ride in all three.
+  threadId: ThreadId | null = null,
 ): AcpMcpContext {
+  const shared = acpSharedMcpServers(threadId, self);
+  const sharedHttp = mcpOverHttp === true ? acpSharedHttpMcpServers(threadId) : [];
   if (session === undefined) {
-    return { servers: [], acpServers: [], httpServers: [] };
+    return { servers: shared, acpServers: shared, httpServers: sharedHttp };
   }
   // codex-acp 1.2.0 and pi-acp drop injected HTTP servers, so HTTP is opt-in per flavor.
   return {
     servers: [
+      ...shared, // Tangent(FORK-MCP-001)
       {
         name: "t3-code",
         command: self.command,
@@ -1072,10 +1083,11 @@ function acpMcpContext(
         ],
       },
     ],
-    acpServers: [{ type: "acp", name: "t3-code", serverId: "t3-code" }],
+    acpServers: [...shared, { type: "acp", name: "t3-code", serverId: "t3-code" }],
     httpServers:
       mcpOverHttp === true
         ? [
+            ...sharedHttp,
             {
               type: "http",
               name: "t3-code",
@@ -2041,13 +2053,19 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
       ? Effect.succeed(
           acpMcpContext(undefined, self, flavor.mcpOverHttp, flavor.deferMcpTools, callLauncher),
         )
-      : mcpSessions
-          .read(threadId)
-          .pipe(
-            Effect.map((session) =>
-              acpMcpContext(session, self, flavor.mcpOverHttp, flavor.deferMcpTools, callLauncher),
+      : mcpSessions.read(threadId).pipe(
+          // Tangent(FORK-MCP-001): the thread id brings the shared servers.
+          Effect.map((session) =>
+            acpMcpContext(
+              session,
+              self,
+              flavor.mcpOverHttp,
+              flavor.deferMcpTools,
+              callLauncher,
+              threadId,
             ),
-          );
+          ),
+        );
   const driver = flavor.driver;
   const continuationRequests = options.continuationRequests;
 
