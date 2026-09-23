@@ -106,6 +106,7 @@ import { mergeProviderInstanceEnvironment } from "../../provider/ProviderInstanc
 import { T3_CODE_ORCHESTRATION_INSTRUCTIONS } from "../../provider/T3OrchestrationInstructions.ts";
 import { buildRuntimeInstructions } from "../../provider/RuntimeInstructions.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import { sharedHttpMcpServers } from "../../sharedMcpServers/SharedMcpServerSessions.ts";
 import { IdAllocatorV2, type IdAllocatorV2Shape } from "../IdAllocator.ts";
 import { makeProviderFailure, makeProviderRetryTurnItem } from "../ProviderFailure.ts";
 import { turnScopedSelectionTransition } from "../ProviderSelectionTransition.ts";
@@ -820,7 +821,8 @@ export function makeClaudeQueryOptions(input: {
       preset: "claude_code" as const,
       append:
         buildRuntimeInstructions({ harness: "Claude Code" }) +
-        (input.mcpServers === undefined ? "" : T3_CODE_ORCHESTRATION_INSTRUCTIONS),
+        // Tangent(FORK-MCP-001): shared servers alone do not bring t3-code.
+        (input.mcpServers?.["t3-code"] === undefined ? "" : T3_CODE_ORCHESTRATION_INSTRUCTIONS),
     },
     ...(Object.keys(extraArgs).length === 0 ? {} : { extraArgs }),
   };
@@ -872,8 +874,13 @@ export function claudeMcpQueryOverrides(input: {
   readonly mcpServers?: ClaudeQueryOptions["mcpServers"];
 } {
   const session = McpProviderSession.readMcpProviderSession(input.threadId);
+  // Tangent(FORK-MCP-001)
+  const sharedMcpServers = sharedHttpMcpServers(input.threadId);
   if (session === undefined) {
-    return input.allowedTools === undefined ? {} : { allowedTools: input.allowedTools };
+    return {
+      ...(input.allowedTools === undefined ? {} : { allowedTools: input.allowedTools }),
+      ...(Object.keys(sharedMcpServers).length === 0 ? {} : { mcpServers: sharedMcpServers }),
+    };
   }
   const mcpAllowedTools = input.readOnlySandbox
     ? CLAUDE_READ_ONLY_T3_MCP_ALLOWED_TOOLS
@@ -881,6 +888,7 @@ export function claudeMcpQueryOverrides(input: {
   return {
     allowedTools: Array.from(new Set([...(input.allowedTools ?? []), ...mcpAllowedTools])),
     mcpServers: {
+      ...sharedMcpServers, // Tangent(FORK-MCP-001)
       "t3-code": {
         type: "http",
         url: session.endpoint,

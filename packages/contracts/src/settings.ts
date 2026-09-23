@@ -39,6 +39,7 @@ import {
 } from "./providerInstance.ts";
 import { PullRequestMergeMethod } from "./pullRequest.ts";
 import { PersonalPushRelaySettings, PersonalPushRelaySettingsPatch } from "./personalPush.ts";
+import { SharedMcpServers } from "./sharedMcpServers.ts";
 
 // ── Client Settings (local-only) ───────────────────────────────
 
@@ -1367,6 +1368,8 @@ export const ServerSettings = Schema.Struct({
   branchNameInstructions: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   // Tangent(FORK-PUSH-001): the password is stored in ServerSecretStore.
   personalPushRelay: PersonalPushRelaySettings,
+  // Tangent(FORK-MCP-001): header values are stored in ServerSecretStore.
+  mcpServers: SharedMcpServers.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   sourceControlWritingStyle: SourceControlWritingStyleSettings.pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
@@ -1661,6 +1664,7 @@ export const ServerSettingsPatch = Schema.Struct({
   branchNamePrefix: Schema.optionalKey(TrimmedString),
   branchNameInstructions: Schema.optionalKey(TrimmedString),
   personalPushRelay: Schema.optionalKey(PersonalPushRelaySettingsPatch), // Tangent(FORK-PUSH-001)
+  mcpServers: Schema.optionalKey(SharedMcpServers), // Tangent(FORK-MCP-001)
   sourceControlWritingStyle: Schema.optionalKey(
     Schema.Struct({
       mode: Schema.optionalKey(SourceControlWritingStyleMode),

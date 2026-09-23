@@ -43,6 +43,7 @@ import * as Stream from "effect/Stream";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import { sharedHttpMcpServers } from "../../sharedMcpServers/SharedMcpServerSessions.ts";
 import { CursorTransportFailure } from "../../provider/acp/CursorTransportFailure.ts";
 import { cursorSdkModelSelection } from "../../provider/cursorSdkModel.ts";
 import {
@@ -228,10 +229,13 @@ export function cursorRuntimeAgentPolicy(
 
 export function cursorMcpServers(threadId: ThreadId): Record<string, McpServerConfig> | undefined {
   const session = McpProviderSession.readMcpProviderSession(threadId);
+  // Tangent(FORK-MCP-001)
+  const sharedMcpServers = sharedHttpMcpServers(threadId);
   if (session === undefined) {
-    return undefined;
+    return Object.keys(sharedMcpServers).length === 0 ? undefined : sharedMcpServers;
   }
   return {
+    ...sharedMcpServers, // Tangent(FORK-MCP-001)
     "t3-code": {
       type: "http",
       url: session.endpoint,
@@ -2117,7 +2121,8 @@ export function makeCursorAdapterV2(
               attachmentsDir: serverConfig.attachmentsDir,
             }),
             runOrdinal: turnInput.runOrdinal,
-            hasT3Mcp: cursorMcpServers(turnInput.threadId) !== undefined,
+            // Tangent(FORK-MCP-001): shared servers alone do not bring t3-code.
+            hasT3Mcp: McpProviderSession.readMcpProviderSession(turnInput.threadId) !== undefined,
           });
           const images = yield* Effect.forEach(
             turnInput.message.attachments.filter(isProviderNativeImageAttachment),
