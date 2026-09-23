@@ -13,6 +13,7 @@ import {
   filterPinnedBrowseEntries,
   filterCommandPaletteGroups,
   findHighlightedCommandPaletteItem,
+  getCommandPaletteControlNavigationKey,
   reduceCommandPaletteUiState,
   type CommandPaletteActionItem,
   type CommandPaletteGroup,
@@ -892,5 +893,32 @@ describe("virtualized command palette rows", () => {
     expect(findHighlightedCommandPaletteItem(groups, "thread-b")?.value).toBe("thread-b");
     expect(findHighlightedCommandPaletteItem(groups, "offline")).toBeNull();
     expect(findHighlightedCommandPaletteItem(groups, null)).toBeNull();
+  });
+});
+
+describe("getCommandPaletteControlNavigationKey", () => {
+  const keyEvent = (key: string, overrides: Partial<KeyboardEvent> = {}) => ({
+    key,
+    ctrlKey: true,
+    altKey: false,
+    metaKey: false,
+    shiftKey: false,
+    isComposing: false,
+    ...overrides,
+  });
+
+  it("maps Control-N and Control-P to next and previous navigation", () => {
+    expect(getCommandPaletteControlNavigationKey(keyEvent("n"))).toBe("ArrowDown");
+    expect(getCommandPaletteControlNavigationKey(keyEvent("p"))).toBe("ArrowUp");
+    expect(getCommandPaletteControlNavigationKey(keyEvent("N"))).toBe("ArrowDown");
+  });
+
+  it("does not claim other keys, modified chords, or composing input", () => {
+    expect(getCommandPaletteControlNavigationKey(keyEvent("k"))).toBeNull();
+    expect(getCommandPaletteControlNavigationKey(keyEvent("n", { ctrlKey: false }))).toBeNull();
+    expect(getCommandPaletteControlNavigationKey(keyEvent("n", { altKey: true }))).toBeNull();
+    expect(getCommandPaletteControlNavigationKey(keyEvent("p", { metaKey: true }))).toBeNull();
+    expect(getCommandPaletteControlNavigationKey(keyEvent("p", { shiftKey: true }))).toBeNull();
+    expect(getCommandPaletteControlNavigationKey(keyEvent("n", { isComposing: true }))).toBeNull();
   });
 });
