@@ -186,6 +186,32 @@ export function enumerateCommandPaletteItems(
 
 export type CommandPaletteMode = "root" | "root-browse" | "submenu" | "submenu-browse";
 
+/**
+ * Tangent(FORK-PALETTE-001): Control-N and Control-P move to the next and
+ * previous item, as they do in macOS lists and Emacs-style editing. Returns
+ * the arrow key the palette's own navigation already handles.
+ */
+export function getCommandPaletteControlNavigationKey(input: {
+  readonly key: string;
+  readonly ctrlKey: boolean;
+  readonly altKey: boolean;
+  readonly metaKey: boolean;
+  readonly shiftKey: boolean;
+  readonly isComposing: boolean;
+}): "ArrowDown" | "ArrowUp" | null {
+  if (!input.ctrlKey || input.altKey || input.metaKey || input.shiftKey || input.isComposing) {
+    return null;
+  }
+  switch (input.key.toLowerCase()) {
+    case "n":
+      return "ArrowDown";
+    case "p":
+      return "ArrowUp";
+    default:
+      return null;
+  }
+}
+
 // A project as the palette shows it. `displayName` is the grouped label (for
 // example "owner/repo" when projects are merged across machines). Keep `title`
 // as the real project title: the automatic project icon is derived from it, and
