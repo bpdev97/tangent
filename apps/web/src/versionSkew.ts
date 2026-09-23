@@ -97,15 +97,10 @@ export function supportsDesktopAppUpdate(
 
 export function manualServerUpdateCommand(
   targetVersion: string,
-  installation?: ServerInstallation,
+  _installation?: ServerInstallation,
 ): string {
-  if (installation?.kind === "npm-global") {
-    const prefix = `'${installation.prefix.replaceAll("'", "'\\''")}'`;
-    return `npm install --global --prefix ${prefix} t3@${targetVersion}`;
-  }
-  const runner =
-    installation?.kind === "pnpm-dlx" ? "pnpm dlx" : installation?.kind === "bunx" ? "bunx" : "npx";
-  return `${runner} t3@${targetVersion}`;
+  // Tangent(FORK-DIST-001): every upstream command installs upstream's `t3` package, not Tangent.
+  return `t3 update ${targetVersion}`;
 }
 
 export function buildVersionMismatchDismissalKey(

@@ -21,13 +21,17 @@ it.each(["prod", ""])("rejects APP_VARIANT=%j before selecting production IDs", 
   );
 });
 
+// Tangent(FORK-DIST-001): the iOS identifiers are Tangent's; Android stays upstream's.
 it.each([
-  [undefined, "com.t3tools.t3code"],
-  ["development", "com.t3tools.t3code.dev"],
-  ["preview", "com.t3tools.t3code.preview"],
-  ["production", "com.t3tools.t3code"],
-])("keeps the iOS and Android identifiers for APP_VARIANT=%j", async (value, identifier) => {
-  const config = await loadConfig(value);
-  expect(config.ios?.bundleIdentifier).toBe(identifier);
-  expect(config.android?.package).toBe(identifier);
-});
+  [undefined, "com.bpdev97.t3code.ios", "com.t3tools.t3code"],
+  ["development", "com.bpdev97.t3code.ios.dev", "com.t3tools.t3code.dev"],
+  ["preview", "com.bpdev97.t3code.ios.preview", "com.t3tools.t3code.preview"],
+  ["production", "com.bpdev97.t3code.ios", "com.t3tools.t3code"],
+])(
+  "keeps the iOS and Android identifiers for APP_VARIANT=%j",
+  async (value, iosIdentifier, androidIdentifier) => {
+    const config = await loadConfig(value);
+    expect(config.ios?.bundleIdentifier).toBe(iosIdentifier);
+    expect(config.android?.package).toBe(androidIdentifier);
+  },
+);
