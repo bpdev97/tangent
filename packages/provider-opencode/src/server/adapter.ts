@@ -58,6 +58,8 @@ import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import { mcpToolPresentation } from "@t3tools/provider-core/server/mcpToolPresentation";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
+// Tangent(FORK-MCP-001)
+import { readSharedMcpServers } from "@t3tools/provider-core/server/sharedMcpServers";
 import {
   structuralProtocolMethod,
   summarizeNativeProtocolPayload,
@@ -970,6 +972,31 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
               },
             }),
           );
+        }
+        // Tangent(FORK-MCP-001): an external server is the user's to configure,
+        // exactly as t3-code is skipped there.
+        if (!connection.external) {
+          for (const server of readSharedMcpServers(input.threadId)) {
+            yield* OpenCodeRuntime.runOpenCodeSdk("mcp.add", () =>
+              client.mcp.add({
+                name: server.name,
+                config: {
+                  type: "remote",
+                  url: server.url,
+                  headers: { ...server.headers },
+                  oauth: false,
+                },
+              }),
+            ).pipe(
+              // An unreachable server must not keep the session from opening.
+              Effect.catch((cause) =>
+                Effect.logWarning("failed to attach shared MCP server", {
+                  server: server.name,
+                  cause,
+                }),
+              ),
+            );
+          }
         }
 
         const now = yield* DateTime.now;

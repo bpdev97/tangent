@@ -22,6 +22,10 @@
     "./personalPush": {
       "types": "./src/personalPush.ts",
       "import": "./src/personalPush.ts"
+    },
+    "./sharedMcpServers": {
+      "types": "./src/sharedMcpServers.ts",
+      "import": "./src/sharedMcpServers.ts"
     }
   },
   "scripts": {

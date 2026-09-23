@@ -147,6 +147,10 @@
       "types": "./src/server/snapshotSettings.ts",
       "import": "./src/server/snapshotSettings.ts"
     },
+    "./server/sharedMcpServers": {
+      "types": "./src/server/sharedMcpServers.ts",
+      "import": "./src/server/sharedMcpServers.ts"
+    },
     "./server/subagentProjection": {
       "types": "./src/server/subagentProjection.ts",
       "import": "./src/server/subagentProjection.ts"
