@@ -119,6 +119,27 @@ export function ProviderIcon(props: ProviderIconProps) {
     );
   }
 
+  // Tangent(FORK-HERMES-001)
+  if (props.provider === "hermes") {
+    const stroke = isDarkMode ? "#E5E5E5" : "#171717";
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path
+          d="M12 2.25 20.25 7v10L12 21.75 3.75 17V7L12 2.25Z"
+          stroke={stroke}
+          strokeWidth={1.8}
+          strokeLinejoin="round"
+        />
+        <Path
+          d="M8.25 7.5v9m7.5-9v9m-7.5-4.5h7.5"
+          stroke={stroke}
+          strokeWidth={1.8}
+          strokeLinecap="round"
+        />
+      </Svg>
+    );
+  }
+
   if (props.provider === "pi") {
     const foreground = isDarkMode ? "#F5F5F5" : "#0F0F0F";
     return (
