@@ -585,10 +585,12 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
               update.lockKey,
             );
             yield* setRunningMessage("Waiting for running provider work to finish.");
+            // Tangent(FORK-HERMES-001): optional provider guard around the command.
+            const run = runMaintenanceCommand(command, setRunningMessage);
             const result = yield* installationGate.update(
               sharingInstances,
               setRunningMessage(`Running ${describeCommand(command)}`).pipe(
-                Effect.andThen(runMaintenanceCommand(command, setRunningMessage)),
+                Effect.andThen(fresh.update.guard ? fresh.update.guard(run) : run),
               ),
             );
             const finishedAt = yield* nowIso;
