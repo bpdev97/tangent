@@ -41,6 +41,8 @@ function providerDisplayLabel(provider: {
   if (provider.driver === "codex") return "Codex";
   if (provider.driver === "claudeAgent") return "Claude";
   if (provider.driver === "pi") return "Pi";
+  // Tangent(FORK-HERMES-001)
+  if (provider.driver === "hermes") return "Hermes";
   return provider.instanceId;
 }
 
