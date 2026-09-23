@@ -64,6 +64,8 @@ import * as McpSessionRegistry from "./mcp/McpSessionRegistry.ts";
 import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
 import * as DeviceService from "./device/DeviceService.ts";
 import { deviceHubProxyRouteLayer } from "./device/DeviceHubProxy.ts";
+import { personalPushRouteLayer } from "./personalPush/http.ts";
+import * as PersonalAgentActivitySink from "./personalPush/PersonalAgentActivitySink.ts";
 import * as PreviewManager from "./preview/Manager.ts";
 import * as PortScanner from "./preview/PortScanner.ts";
 import * as ProcessRunner from "./processRunner.ts";
@@ -407,6 +409,7 @@ const ProjectFaviconResolverLayerLive = ProjectFaviconResolver.layer.pipe(
 
 const ServerEnvironmentLayerLive = ServerEnvironment.layer.pipe(
   Layer.provide(ServerSecretStore.layer),
+  Layer.provide(ServerSettingsLayerLive), // Tangent(FORK-PUSH-001): personal relay capability
 );
 
 const AuthLayerLive = EnvironmentAuth.layer.pipe(
@@ -485,7 +488,8 @@ const AntigravityInstallationRefreshLive = Layer.effectDiscard(
 );
 
 const RuntimeCoreDependenciesBaseLive = Layer.mergeAll(
-  AgentAwarenessRelay.layer,
+  // Tangent(FORK-PUSH-001): AgentAwarenessRelay hands activity to the personal sink.
+  AgentAwarenessRelay.layer.pipe(Layer.provide(PersonalAgentActivitySink.layer)),
   ThreadSettlementWorkerLive,
   Layer.effectDiscard(StorageCleanup.make.pipe(Effect.flatMap((service) => service.start()))).pipe(
     Layer.provide(ProjectionStoreV2.layer),
@@ -602,6 +606,7 @@ const makeRoutesLayer = Layer.mergeAll(
       Layer.provide(environmentAuthenticatedAuthLayer),
     ),
     otlpTracesProxyRouteLayer,
+    personalPushRouteLayer, // Tangent(FORK-PUSH-001)
     assetRouteLayer,
     attachmentUploadRouteLayer,
     deviceHubProxyRouteLayer,

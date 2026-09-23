@@ -19,6 +19,10 @@
       "types": "./src/relay.ts",
       "import": "./src/relay.ts"
     },
+    "./personalPush": {
+      "types": "./src/personalPush.ts",
+      "import": "./src/personalPush.ts"
+    },
     "./legacy-orchestration": {
       "types": "./src/orchestration.ts",
       "import": "./src/orchestration.ts"

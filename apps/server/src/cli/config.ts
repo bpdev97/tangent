@@ -156,6 +156,16 @@ const EnvServerConfig = Config.all({
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
+  // Tangent(FORK-PUSH-001): headless personal push relay; saved settings take precedence.
+  personalPushRelayUrl: Config.String("T3CODE_PERSONAL_PUSH_RELAY_URL").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  personalPushRelayToken: Config.Redacted("T3CODE_PERSONAL_PUSH_RELAY_TOKEN").pipe(
+    Config.option,
+    Config.map(Option.map(Redacted.value)),
+    Config.map(Option.getOrUndefined),
+  ),
 });
 
 const DevAuthTokenConfig = Config.Redacted("T3CODE_DEV_AUTH_TOKEN").pipe(
@@ -436,6 +446,8 @@ export const resolveServerConfig = (
       logWebSocketEvents,
       tailscaleServeEnabled,
       tailscaleServePort,
+      ...(env.personalPushRelayUrl ? { personalPushRelayUrl: env.personalPushRelayUrl } : {}),
+      ...(env.personalPushRelayToken ? { personalPushRelayToken: env.personalPushRelayToken } : {}),
     };
 
     return config;

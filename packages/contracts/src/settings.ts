@@ -38,6 +38,7 @@ import {
   type ProviderDriverKind,
 } from "./providerInstance.ts";
 import { PullRequestMergeMethod } from "./pullRequest.ts";
+import { PersonalPushRelaySettings, PersonalPushRelaySettingsPatch } from "./personalPush.ts";
 
 // ── Client Settings (local-only) ───────────────────────────────
 
@@ -1304,6 +1305,8 @@ export const ServerSettings = Schema.Struct({
       }),
     ),
   ),
+  // Tangent(FORK-PUSH-001): the password is stored in ServerSecretStore.
+  personalPushRelay: PersonalPushRelaySettings,
   sourceControlWritingStyle: SourceControlWritingStyleSettings.pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
@@ -1594,6 +1597,7 @@ export const ServerSettingsPatch = Schema.Struct({
   worktreeSubmodules: Schema.optionalKey(Schema.NullOr(WorktreeSubmodules)),
   addProjectBaseDirectory: Schema.optionalKey(TrimmedString),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
+  personalPushRelay: Schema.optionalKey(PersonalPushRelaySettingsPatch), // Tangent(FORK-PUSH-001)
   sourceControlWritingStyle: Schema.optionalKey(
     Schema.Struct({
       mode: Schema.optionalKey(SourceControlWritingStyleMode),

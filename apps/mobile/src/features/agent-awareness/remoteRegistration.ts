@@ -40,6 +40,7 @@ import { getAgentLiveActivities, startAgentLiveActivity } from "./agentLiveActiv
 import { resolveCloudPublicConfig } from "../cloud/publicConfig";
 import { supportsAgentAwarenessPush } from "./capabilities";
 import { makeRelayDeviceRegistrationRequest, resolveApsEnvironment } from "./registrationPayload";
+import * as PersonalPush from "./personalPush";
 
 const REMOTE_ACTIVITY_REGISTRATION_RETRY_MS = 15_000;
 
@@ -163,6 +164,21 @@ function canRegisterPushNotifications(): boolean {
   return Platform.OS === "ios" || Platform.OS === "android";
 }
 
+// Tangent(FORK-PUSH-001): personal servers are a second registration backend.
+function personalPushConnections(): ReadonlyArray<SavedRemoteConnection> {
+  return Platform.OS === "ios"
+    ? [...environmentConnections.values()].filter(PersonalPush.isPersonalPushConnection)
+    : [];
+}
+
+function hasAgentAwarenessBackend(): boolean {
+  return relayTokenProvider !== null || personalPushConnections().length > 0;
+}
+
+function logPersonalPushError(connection: SavedRemoteConnection, error: unknown): void {
+  logRegistrationError(`personal push request failed for ${connection.environmentLabel}`, error);
+}
+
 export function shouldRegisterAgentAwarenessDeviceForProvider(
   previousIdentity: string | null,
   identity: string | undefined,
@@ -193,6 +209,13 @@ export function setAgentAwarenessRelayTokenProvider(
   relayTokenProviderIdentity = provider ? (identity ?? null) : null;
   if (!provider) {
     clearAndroidAgentNotifications();
+    // Tangent(FORK-PUSH-001): personal servers keep delivering without an account.
+    if (personalPushConnections().length > 0) {
+      ensurePushTokenListener();
+      ensureAppStateListener();
+      enqueueDeviceRegistration({}, "personal device registration without cloud account failed");
+      return;
+    }
     pushTokenSubscription?.remove();
     pushTokenSubscription = null;
     appStateSubscription?.remove();
@@ -352,6 +375,17 @@ function registerDeviceWithRelay(
       });
       return;
     }
+    // Tangent(FORK-PUSH-001)
+    const personalRegistered = yield* PersonalPush.registerPersonalPushDevice(
+      personalPushConnections(),
+      body,
+      logPersonalPushError,
+    );
+    if (expectedGeneration !== deviceRegistrationGeneration) return;
+    if (personalRegistered && (!relayTokenProvider || !readRelayConfig())) {
+      setRegistrationStatus("registered");
+      return;
+    }
     const relayConfig = readRelayConfig();
     if (!relayConfig) {
       // Nothing is in flight and nothing can succeed until configuration
@@ -499,7 +533,7 @@ export function armAgentAwarenessLiveActivityForLocalWork(input: {
   readonly threadTitle: string;
   readonly projectTitle: string;
 }): void {
-  if (!canRegisterRemoteLiveActivities() || !relayTokenProvider) {
+  if (!canRegisterRemoteLiveActivities() || !hasAgentAwarenessBackend()) {
     return;
   }
   if (!environmentPublishesAgentActivity(input.environmentId)) {
@@ -567,6 +601,9 @@ function readAgentActivitySnapshot(): Effect.Effect<
   ManagedRelay.ManagedRelayClient
 > {
   return Effect.gen(function* () {
+    // Tangent(FORK-PUSH-001)
+    if (!relayTokenProvider)
+      return yield* PersonalPush.readPersonalPushSnapshot(personalPushConnections());
     if (!readRelayConfig()) return null;
     const token = yield* relayToken("read-live-activity-registration-relay-token");
     if (!token) {
@@ -588,6 +625,13 @@ function registerLiveActivityWithRelay(
   body: RelayLiveActivityRegistrationRequest,
 ): Effect.Effect<boolean, unknown, ManagedRelay.ManagedRelayClient> {
   return Effect.gen(function* () {
+    // Tangent(FORK-PUSH-001)
+    const personalRegistered = yield* PersonalPush.registerPersonalPushLiveActivity(
+      personalPushConnections(),
+      body,
+      logPersonalPushError,
+    );
+    if (personalRegistered && !relayTokenProvider) return true;
     if (!readRelayConfig()) return false;
     const token = yield* relayToken("read-live-activity-registration-relay-token");
     if (!token) {
@@ -879,6 +923,51 @@ export function unregisterAgentAwarenessConnection(environmentId: EnvironmentId)
   removeAgentAwarenessConnection(environmentId);
 }
 
+/**
+ * Tangent(FORK-PUSH-001): keeps personal push registrations in step with the
+ * saved environment catalog. Registers when an endpoint appears or changes,
+ * and tears down native listeners and cards when the last backend goes away.
+ */
+export function syncAgentAwarenessConnections(
+  connections: ReadonlyArray<SavedRemoteConnection>,
+): void {
+  if (!canRegisterPushNotifications()) return;
+  const { next, addedOrChanged, removed } = PersonalPush.reconcilePersonalPushConnections(
+    environmentConnections,
+    connections,
+  );
+  environmentConnections.clear();
+  for (const [environmentId, connection] of next)
+    environmentConnections.set(environmentId, connection);
+
+  if (!hasAgentAwarenessBackend()) {
+    if (!removed) return;
+    deviceRegistrationGeneration++;
+    activeDeviceRegistration = null;
+    pendingDeviceRegistration = null;
+    registeredActivityPushTokens.clear();
+    pushTokenSubscription?.remove();
+    pushTokenSubscription = null;
+    appStateSubscription?.remove();
+    appStateSubscription = null;
+    if (activeLiveActivityRegistrationRetry) {
+      clearTimeout(activeLiveActivityRegistrationRetry);
+      activeLiveActivityRegistrationRetry = null;
+    }
+    endLocalLiveActivities("live activity cleanup after final environment removal failed");
+    setRegistrationStatus("unknown");
+    return;
+  }
+  if (!addedOrChanged) return;
+  ensurePushTokenListener();
+  ensureAppStateListener();
+  enqueueDeviceRegistration({}, "device registration after environment catalog change failed");
+  runRegistrationInBackground(
+    refreshActiveLiveActivityRemoteRegistration(),
+    "active live activity registration after environment catalog change failed",
+  );
+}
+
 export function refreshAgentAwarenessRegistration(): Effect.Effect<
   void,
   never,
@@ -1049,7 +1138,7 @@ function registerLiveActivityPushTokenValue(input: {
 }
 
 function scheduleActiveLiveActivityRegistrationRetry(): void {
-  if (activeLiveActivityRegistrationRetry || !relayTokenProvider) {
+  if (activeLiveActivityRegistrationRetry || !hasAgentAwarenessBackend()) {
     return;
   }
 
@@ -1068,7 +1157,7 @@ export function refreshActiveLiveActivityRemoteRegistration(): Effect.Effect<
   ManagedRelay.ManagedRelayClient
 > {
   return Effect.gen(function* () {
-    if (!canRegisterRemoteLiveActivities() || !relayTokenProvider) {
+    if (!canRegisterRemoteLiveActivities() || !hasAgentAwarenessBackend()) {
       return;
     }
 
