@@ -47,7 +47,7 @@ const releaseHttpClient = (order: string[], urls: string[], beforeDownload?: Eff
         ).join("");
         return HttpClientResponse.fromWeb(
           request,
-          new Response(`${hex}  t3-1.1.0-linux-x64.tar.gz\n`),
+          new Response(`${hex}  tangent-server-1.1.0-linux-x64.tar.gz\n`),
         );
       }
       if (beforeDownload) yield* beforeDownload;
@@ -229,7 +229,7 @@ it.layer(NodeServices.layer)("server self update", (it) => {
       // The release comes from the policy's mirror, not GitHub.
       expect(urls.length).toBeGreaterThan(0);
       for (const url of urls)
-        expect(url).toMatch(/^https:\/\/updates\.example\.com\/t3code\/v1\.[12]\.0\//);
+        expect(url).toMatch(/^https:\/\/updates\.example\.com\/t3code\/personal-v1\.[12]\.0\//);
     }),
   );
 
