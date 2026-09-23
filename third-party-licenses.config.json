@@ -522,6 +522,27 @@
         ],
         "copyrights": ["Copyright (c) Kiril Vatev"]
       }
+    },
+    {
+      "name": "fastdom",
+      "version": "1.0.12",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) 2016 Wilson Page <wilsonpage@me.com>"]
+      }
+    },
+    {
+      "name": "strictdom",
+      "version": "1.0.1",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) 2013 Wilson Page <wilsonpage@me.com>"]
+      }
+    },
+    {
+      "name": "khroma",
+      "version": "2.1.0",
+      "license": "MIT"
     }
   ]
 }
