@@ -234,6 +234,7 @@ import * as PairingGrantStore from "./auth/PairingGrantStore.ts";
 import * as SessionStore from "./auth/SessionStore.ts";
 import { failEnvironmentAuthInvalid, failEnvironmentInternal } from "./auth/http.ts";
 import * as RelayClient from "@t3tools/shared/relayClient";
+import * as PersonalPushRelay from "./personalPush/PersonalPushRelayClient.ts";
 import {
   sameUsageLimitCommandCoverage,
   withUsageLimitsCommands,
@@ -2475,6 +2476,13 @@ const makeWsRpcLayer = (
             {
               "rpc.aggregate": "server",
             },
+          ),
+        // Tangent(FORK-PUSH-001)
+        [WS_METHODS.serverTestPersonalPushRelay]: (_input) =>
+          observeRpcEffect(
+            WS_METHODS.serverTestPersonalPushRelay,
+            PersonalPushRelay.testConnection(config, serverSettings),
+            { "rpc.aggregate": "server" },
           ),
         [WS_METHODS.serverDiscoverSourceControl]: (_input) =>
           observeRpcEffect(

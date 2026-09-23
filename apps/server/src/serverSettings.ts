@@ -61,6 +61,7 @@ import {
   isModelSelectionProviderEnabled,
 } from "@t3tools/shared/serverSettings";
 import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
+import * as PersonalPushSettingsSecret from "./personalPush/settingsSecret.ts";
 
 export { resolveSourceControlWriterModelSelection } from "@t3tools/shared/serverSettings";
 
@@ -190,7 +191,12 @@ export function redactServerSettingsForClient(settings: ServerSettings): ServerS
       },
     ]),
   );
-  return { ...settings, providerInstances, usageLimitSources };
+  // Tangent(FORK-PUSH-001)
+  return PersonalPushSettingsSecret.redactPersonalPushRelayForClient({
+    ...settings,
+    providerInstances,
+    usageLimitSources,
+  });
 }
 
 export function applyProviderInstanceMutation(
@@ -821,10 +827,21 @@ const make = Effect.gen(function* () {
           managementKey: Option.isSome(secret) ? textDecoder.decode(secret.value) : "",
         };
       }
+      // Tangent(FORK-PUSH-001)
+      const personalPushRelay =
+        yield* PersonalPushSettingsSecret.materializePersonalPushRelayPassword(
+          settings.personalPushRelay,
+          secretStore,
+        ).pipe(
+          Effect.mapError(
+            (cause) => new ServerSettingsError({ settingsPath, operation: "read-secret", cause }),
+          ),
+        );
       return {
         ...settings,
         providerInstances: providerInstances as ServerSettings["providerInstances"],
         usageLimitSources: usageLimitSources as ServerSettings["usageLimitSources"],
+        personalPushRelay,
       };
     });
 
@@ -966,11 +983,18 @@ const make = Effect.gen(function* () {
         });
       }
 
+      // Tangent(FORK-PUSH-001)
+      const personalPush = PersonalPushSettingsSecret.persistPersonalPushRelayPassword(
+        next.personalPushRelay,
+      );
+      changes.push(...personalPush.changes);
+
       return {
         settings: {
           ...next,
           providerInstances: providerInstances as ServerSettings["providerInstances"],
           usageLimitSources: usageLimitSources as ServerSettings["usageLimitSources"],
+          personalPushRelay: personalPush.relay,
         },
         changes,
       };
