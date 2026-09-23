@@ -185,6 +185,7 @@ import {
   filterPinnedBrowseEntries,
   getCommandPaletteInputPlaceholder,
   getCommandPaletteMode,
+  getCommandPaletteControlNavigationKey,
   ITEM_ICON_CLASS,
   RECENT_THREAD_LIMIT,
   createCommandPaletteSearchState,
@@ -2380,6 +2381,29 @@ function OpenCommandPaletteDialog(props: {
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
+    // Tangent(FORK-PALETTE-001): replay Control-N/P as the arrow keys the list handles.
+    const controlNavigationKey = getCommandPaletteControlNavigationKey({
+      key: event.key,
+      ctrlKey: event.ctrlKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+      isComposing: event.nativeEvent.isComposing,
+    });
+    if (controlNavigationKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.currentTarget.dispatchEvent(
+        new globalThis.KeyboardEvent("keydown", {
+          key: controlNavigationKey,
+          bubbles: true,
+          cancelable: true,
+          repeat: event.repeat,
+        }),
+      );
+      return;
+    }
+
     if (event.key === "Enter" && (event.nativeEvent.isComposing || event.keyCode === 229)) {
       // Confirming an IME candidate must not submit a path or select a row.
       (event as typeof event & { preventBaseUIHandler?: () => void }).preventBaseUIHandler?.();
