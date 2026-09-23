@@ -21,6 +21,7 @@ import { RootStack } from "./Stack";
 import { appAtomRegistry } from "./state/atom-registry";
 import { OverlayPortalHost } from "./components/OverlayPortal";
 import { PERSONAL_MOBILE_DISTRIBUTION } from "../../../downstream/mobile-config";
+import { AgentAwarenessConnectionBridge } from "./features/agent-awareness/AgentAwarenessConnectionBridge";
 import { shouldHandleAppLink } from "./lib/appLinking";
 import { useMobileNavigationTheme } from "./lib/useMobileNavigationTheme";
 import { SubscriptionUsageCoordinator } from "./widgets/SubscriptionUsageCoordinator";
@@ -82,6 +83,8 @@ function AppContent() {
     <>
       <SplashScreenCoordinator />
       <SubscriptionUsageCoordinator />
+      {/* Tangent(FORK-PUSH-001) */}
+      <AgentAwarenessConnectionBridge />
       <GestureHandlerRootView className="flex-1">
         <KeyboardProvider statusBarTranslucent>
           <SafeAreaProvider>
