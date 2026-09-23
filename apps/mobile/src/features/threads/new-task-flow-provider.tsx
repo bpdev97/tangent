@@ -18,6 +18,7 @@ import {
   T3_PROJECT_FILE_NAME,
   ThreadId,
 } from "@t3tools/contracts";
+import { GENERIC_CHAT_RUNTIME_MODE, isGenericChatProject } from "@t3tools/shared/genericChat";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { parseT3ProjectFile } from "@t3tools/shared/t3ProjectFile";
 import * as Arr from "effect/Array";
@@ -452,7 +453,11 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       ),
     [selectedEnvironmentServerConfig?.settings, selectedProject, t3ProjectFile],
   );
-  const defaultWorkspaceMode: WorkspaceMode = projectSettings.settings.defaultThreadEnvMode;
+  // Tangent(FORK-CHAT-001): chats run in their scratch directory and ask before acting.
+  const genericChat = isGenericChatProject(selectedProject);
+  const defaultWorkspaceMode: WorkspaceMode = genericChat
+    ? "local"
+    : projectSettings.settings.defaultThreadEnvMode;
   // While the file read is pending and nothing above it decided, the
   // resolved default is provisional. Nothing may write it into the draft
   // during that window (the auto-branch effect does), or the frozen interim
@@ -472,7 +477,9 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
     draftStartFromOrigin ?? projectSettings.settings.newWorktreesStartFromOrigin;
   const defaultRuntimeMode = editingPendingTask
     ? (editingPendingTask.runtimeMode ?? DEFAULT_RUNTIME_MODE)
-    : projectSettings.settings.defaultRuntimeMode;
+    : genericChat
+      ? GENERIC_CHAT_RUNTIME_MODE
+      : projectSettings.settings.defaultRuntimeMode;
   const runtimeMode = selectedProjectDraft.runtimeMode ?? defaultRuntimeMode;
 
   // Antigravity keeps unavailable selections so sign-out or a catalog change

@@ -22,6 +22,11 @@ import {
   getProjectOrderKey,
   selectProjectGroupingSettings,
 } from "../logicalProject";
+import {
+  excludeGenericChatProjects,
+  GENERIC_CHAT_RUNTIME_MODE,
+  isGenericChatProjectId,
+} from "@t3tools/shared/genericChat";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { readProjects, readThreadShell, useProjects, useThreadShell } from "../state/entities";
 import {
@@ -136,7 +141,10 @@ export function useNewThreadHandler() {
         project,
       );
       const projectDefaultModelSelection = projectSettings.settings.defaultModelSelection;
-      const defaultRuntimeMode = projectSettings.settings.defaultRuntimeMode;
+      // Tangent(FORK-CHAT-001): new chats ask before acting.
+      const defaultRuntimeMode = isGenericChatProjectId(projectRef.projectId)
+        ? GENERIC_CHAT_RUNTIME_MODE
+        : projectSettings.settings.defaultRuntimeMode;
       const resolveModelSelectionOverride = (destinationDraftId: DraftId) =>
         resolveNewThreadModelSelectionOverride({
           projectDefaultSelection: projectDefaultModelSelection ?? null,
@@ -464,12 +472,14 @@ export function useHandleNewThread() {
     });
   }, [projectOrder, projects]);
   const handleNewThread = useNewThreadHandler();
+  const defaultProject = excludeGenericChatProjects(orderedProjects)[0];
 
   return {
     activeDraftThread,
     activeThread,
-    defaultProjectRef: orderedProjects[0]
-      ? scopeProjectRef(orderedProjects[0].environmentId, orderedProjects[0].id)
+    // Tangent(FORK-CHAT-001): a plain new thread defaults to a user project, not Chats.
+    defaultProjectRef: defaultProject
+      ? scopeProjectRef(defaultProject.environmentId, defaultProject.id)
       : null,
     handleNewThread,
     routeDraftId,

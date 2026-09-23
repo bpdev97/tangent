@@ -2,6 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { clampFileAttachmentUploadBytes } from "@t3tools/client-runtime/state/attachments";
+import { isGenericChatProject } from "@t3tools/shared/genericChat";
 import {
   nextPastedTextFileName,
   pastedTextDisposition,
@@ -1591,7 +1592,10 @@ export function NewTaskDraftScreen(props: {
           />
         </View>
       ) : null}
-      <View className="pb-1">{workspaceControls}</View>
+      {/* Tangent(FORK-CHAT-001): chats have no checkout, worktree, or branch to choose. */}
+      {isGenericChatProject(selectedProject) ? null : (
+        <View className="pb-1">{workspaceControls}</View>
+      )}
 
       {modelUnavailable ? (
         <Pressable

@@ -1,5 +1,6 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
+import { isGenericChatThread } from "@t3tools/shared/genericChat";
 
 import { useProjects } from "~/state/entities";
 
@@ -30,7 +31,8 @@ export function useActiveProjectTarget(): ActiveProjectTarget | null {
     : null;
   const cwd = thread?.worktreePath ?? project?.workspaceRoot;
 
-  if (!thread || !threadId || !project || !cwd) return null;
+  // Tangent(FORK-CHAT-001): chats have no project files to pick or search.
+  if (!thread || isGenericChatThread(thread) || !threadId || !project || !cwd) return null;
 
   return {
     environmentId: project.environmentId,
