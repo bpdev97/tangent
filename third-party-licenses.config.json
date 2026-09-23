@@ -511,6 +511,17 @@
         "licenseId": "MIT",
         "copyrights": ["Copyright (c) 2025 opencode"]
       }
+    },
+    {
+      "name": "heic-decode",
+      "version": "2.1.0",
+      "generatedNotice": {
+        "licenseId": "ISC",
+        "preamble": [
+          "heic-decode 2.1.0 declares ISC licensing in its package manifest. Author: Kiril Vatev <vatev.1@gmail.com>."
+        ],
+        "copyrights": ["Copyright (c) Kiril Vatev"]
+      }
     }
   ]
 }

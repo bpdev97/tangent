@@ -50,12 +50,31 @@ Mobile:
 
 ## Upstream hooks
 
-Planned:
+Each is marked `Tangent(FORK-IMAGE-001)` where not self-evident:
 
-- `apps/server/src/ws.ts`: one call in `persistChatAttachments` before the bytes are written, plus
-  the HTTP upload route if it accepts images.
-- Mobile composers' attachment menus, the image inputs, and the menu-order patch.
-- The server package manifest, CLI external-package list, and lockfile.
+- `apps/server/src/ws.ts`: one `normalizeUploadedImage` call in `persistChatAttachments`, after
+  the payload is validated and before the attachment ID, metadata, path, and write. The HTTP upload
+  route (`http.ts`, `assets/AttachmentUpload.ts`) is not hooked: its token fixes the stored name,
+  type, and path before any bytes arrive, and both clients that use it convert HEIC first (web
+  upstream, mobile through `prepareComposerImage`), so a second conversion point would add nothing.
+- Server packaging: `apps/server/package.json` (`heic-decode`, `jpeg-js`, `libheif-js`),
+  `pnpm-workspace.yaml` (the `heic-decode>libheif-js` override), `pnpm-lock.yaml`,
+  `scripts/lib/cli-external-packages.ts` (kept external), `knip.jsonc` (`libheif-js` is an
+  indirect pin), `third-party-licenses.config.json` (the `heic-decode` notice).
+- Mobile inputs: `lib/composerImages.ts` routes library, camera, clipboard, and native paste
+  through `prepareComposerImage` (replacing upstream's library-only `renderPhotoAsJpeg`, which
+  covered one input path) and adds the `source: "camera"` picker path;
+  `features/sharing/incoming-share-model.ts` does the same for shared images.
+- Mobile composers: `components/ComposerAttachmentButton.tsx` (Camera below Photo Library, the
+  menu shown even without file uploads, `fixedOrder`), `state/use-thread-composer-state.ts`,
+  `features/threads/ThreadComposer.tsx` and `ThreadDetailScreen.tsx` (the picker source),
+  `features/threads/NewTaskDraftScreen.tsx`, `features/threads/QuestionAttachments.tsx`, and
+  `features/review/ReviewCommentComposerSheet.tsx`.
+- `patches/@react-native-menu__menu@2.0.0.patch`: the `fixedOrder` prop.
+- `apps/mobile/app.config.ts`: camera permission text for `expo-camera` and `expo-image-picker`.
+- Tests that follow the new behavior: `scripts/lib/cli-external-packages.test.ts`, and mobile
+  `lib/composerFiles.test.ts` and `features/sharing/incoming-share-model.test.ts`.
+- `docs/user/composer.md`: one paragraph on Camera and mobile shrinking.
 
 Fork-owned: `apps/server/src/imageNormalization.ts`, `apps/server/src/testFixtures/heic.ts`,
 `apps/mobile/src/lib/prepareComposerImage.ts`, and their tests.
@@ -85,7 +104,14 @@ Fork-owned: `apps/server/src/imageNormalization.ts`, `apps/server/src/testFixtur
 
 ## Verify
 
-Server tests with a real HEIC fixture (detection by MIME and by compatible brand, octet-stream
-ingestion, JPEG output, stored path and bytes) and pass-through for JPEG, PNG, GIF, WebP, and AVIF.
-Mobile tests for the preparation helper. Before shipping a dependency change, build the server
-bundle and confirm a packaged install resolves the decoder.
+```sh
+vp test run apps/server/src/imageNormalization.test.ts scripts/lib/cli-external-packages.test.ts \
+  apps/mobile/src/lib/prepareComposerImage.test.ts apps/mobile/src/lib/composerFiles.test.ts \
+  apps/mobile/src/lib/composerImages.test.ts apps/mobile/src/features/sharing/incoming-share-model.test.ts
+```
+
+The server tests use a real HEIC fixture (detection by MIME and by compatible brand, octet-stream
+input, JPEG output, the stored `.jpg` path) and check pass-through for JPEG, PNG, GIF, WebP, and
+AVIF. Before shipping a dependency change, build the server bundle and confirm a packaged install
+resolves the decoder. The camera permission and menu patch need a native iOS build; a successful
+camera capture needs a physical device.

@@ -35,6 +35,10 @@ export const CLI_RUNTIME_EXTERNAL_PREFIXES = [
   "@clerk/electron-passkeys",
   "node-gyp-build",
   "node-addon-api",
+  // Tangent(FORK-IMAGE-001): the HEIC worker resolves these from disk, including libheif's WASM.
+  "heic-decode",
+  "libheif-js",
+  "jpeg-js",
   // ws's optional accelerators. Nothing in this repo declares them, so they are
   // not in the staged production install and the packaged app does not ship
   // them either way -- ws wraps the require in try/catch and falls back to its
