@@ -3,6 +3,7 @@ import {
   ClaudeSettings,
   CodexSettings,
   defaultInstanceIdForDriver,
+  HermesSettings,
   disallowedProviderMessage,
   type ManagedProviderInstance,
   type ManagedProviderLimits,
@@ -72,6 +73,8 @@ const KNOWN_DRIVERS: ReadonlyMap<ProviderDriverKind, KnownDriver> = new Map([
   known("codex", "Codex", CodexSettings),
   known("claudeAgent", "Claude", ClaudeSettings),
   known("antigravity", "Antigravity", AntigravitySettings),
+  // Tangent(FORK-HERMES-001): instances are explicit, one per profile.
+  known("hermes", "Hermes", HermesSettings, false),
   ...PACKAGED_CLIENTS.map((client) =>
     known(client.driverKind, client.label, client.settingsSchema, client.hasDefaultInstance),
   ),
