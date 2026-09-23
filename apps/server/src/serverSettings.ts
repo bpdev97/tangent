@@ -61,6 +61,7 @@ import {
   readSecretFieldValues,
   sourceControlHostSecretName,
 } from "./sourceControl/sourceControlHostSecrets.ts";
+import * as PersonalPushSettingsSecret from "./personalPush/settingsSecret.ts";
 
 import {
   mapSettingsSecrets,
@@ -143,10 +144,13 @@ export function redactServerSettingsForClient(
   settings: ServerSettings,
   client: { readonly secretReferences: boolean },
 ): ServerSettings {
-  const redacted = mapSettingsSecrets(settings, (secret) =>
-    secret.sensitive
-      ? { value: "", redacted: secret.redacted || secret.value.length > 0 }
-      : { value: secret.value, redacted: false },
+  // Tangent(FORK-PUSH-001)
+  const redacted = PersonalPushSettingsSecret.redactPersonalPushRelayForClient(
+    mapSettingsSecrets(settings, (secret) =>
+      secret.sensitive
+        ? { value: "", redacted: secret.redacted || secret.value.length > 0 }
+        : { value: secret.value, redacted: false },
+    ),
   );
   // Older clients decode secret fields as strings and fail on a reference, so they see a saved secret.
   const shaped = client.secretReferences
@@ -964,13 +968,26 @@ const make = Effect.gen(function* () {
           Option.isSome(value) ? textDecoder.decode(value.value) : "",
         );
       }
-      return mapSettingsSecrets(settings, (secret) => ({
-        value:
-          secret.sensitive && secret.redacted
-            ? (storedSecrets.get(secret.secretName) ?? "")
-            : secret.value,
-        redacted: secret.sensitive && secret.kind === "environment" && secret.redacted,
-      }));
+      // Tangent(FORK-PUSH-001)
+      const personalPushRelay =
+        yield* PersonalPushSettingsSecret.materializePersonalPushRelayPassword(
+          settings.personalPushRelay,
+          secretStore,
+        ).pipe(
+          Effect.mapError(
+            (cause) => new ServerSettingsError({ settingsPath, operation: "read-secret", cause }),
+          ),
+        );
+      return {
+        ...mapSettingsSecrets(settings, (secret) => ({
+          value:
+            secret.sensitive && secret.redacted
+              ? (storedSecrets.get(secret.secretName) ?? "")
+              : secret.value,
+          redacted: secret.sensitive && secret.kind === "environment" && secret.redacted,
+        })),
+        personalPushRelay,
+      };
     },
   );
 
@@ -1098,12 +1115,19 @@ const make = Effect.gen(function* () {
             : {}),
         });
       }
+      // Tangent(FORK-PUSH-001)
+      const personalPush = PersonalPushSettingsSecret.persistPersonalPushRelayPassword(
+        next.personalPushRelay,
+      );
       return {
-        settings,
+        settings: { ...settings, personalPushRelay: personalPush.relay },
         // A redacted row still claims its stored secret, so a duplicate row must not remove it.
-        changes: changes.filter(
-          (change) => change.kind === "write" || !keptSecretNames.has(change.secretName),
-        ),
+        changes: [
+          ...changes.filter(
+            (change) => change.kind === "write" || !keptSecretNames.has(change.secretName),
+          ),
+          ...personalPush.changes,
+        ],
       };
     });
 
