@@ -101,6 +101,8 @@ type ThreadGitControlsProps = ThreadGitMenuProps & {
   };
   readonly canOpenTerminal: boolean;
   readonly canOpenFiles: boolean;
+  /** Tangent(FORK-CHAT-001): chats keep only the terminal. */
+  readonly genericChat?: boolean;
   readonly projectScripts: ReadonlyArray<ProjectScript>;
   readonly terminalSessions: ReadonlyArray<TerminalMenuSession>;
   readonly showActionControls?: boolean;
@@ -408,17 +410,25 @@ function useThreadGitHeaderActionItems(props: ThreadGitControlsProps): ThreadGit
 
 export function useThreadGitRightHeaderItems(props: ThreadGitControlsProps): HeaderItems {
   const actionItems = useThreadGitHeaderActionItems(props);
+  const genericChat = props.genericChat === true;
   return useMemo(
-    () => [actionItems.git, actionItems.files, actionItems.terminal] as HeaderItems,
-    [actionItems],
+    () =>
+      (genericChat
+        ? [actionItems.terminal]
+        : [actionItems.git, actionItems.files, actionItems.terminal]) as HeaderItems,
+    [actionItems, genericChat],
   );
 }
 
 export function useThreadGitCenterHeaderItems(props: ThreadGitControlsProps): HeaderItems {
   const actionItems = useThreadGitHeaderActionItems(props);
+  const genericChat = props.genericChat === true;
   return useMemo(
-    () => [actionItems.files, actionItems.git, actionItems.terminal] as HeaderItems,
-    [actionItems],
+    () =>
+      (genericChat
+        ? [actionItems.terminal]
+        : [actionItems.files, actionItems.git, actionItems.terminal]) as HeaderItems,
+    [actionItems, genericChat],
   );
 }
 
@@ -497,7 +507,7 @@ export function ThreadGitControls(props: ThreadGitControlsProps) {
           </NativeHeaderToolbar.MenuAction>
         </NativeHeaderToolbar.Menu>
       ) : null}
-      {showActionControls && props.showDirectFileControl ? (
+      {showActionControls && props.showDirectFileControl && !props.genericChat ? (
         <NativeHeaderToolbar.Button
           accessibilityLabel="Open files"
           disabled={!props.canOpenFiles}
@@ -506,7 +516,9 @@ export function ThreadGitControls(props: ThreadGitControlsProps) {
           separateBackground
         />
       ) : null}
-      {showActionControls ? createNativeHeaderMenu(threadGitMenuDefinition(props, model)) : null}
+      {showActionControls && !props.genericChat
+        ? createNativeHeaderMenu(threadGitMenuDefinition(props, model))
+        : null}
     </NativeHeaderToolbar>
   );
 }

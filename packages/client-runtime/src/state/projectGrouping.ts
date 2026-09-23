@@ -5,6 +5,10 @@ import type {
   SidebarProjectGroupingMode,
 } from "@t3tools/contracts";
 import type { ClientSettings } from "@t3tools/contracts/settings";
+import {
+  GENERIC_CHAT_LOGICAL_PROJECT_KEY,
+  isGenericChatProjectId,
+} from "@t3tools/shared/genericChat";
 
 import type { EnvironmentProject } from "./models.ts";
 import { normalizeProjectPathForComparison } from "./projects.ts";
@@ -128,6 +132,8 @@ export function deriveLogicalProjectKey(
     readonly groupingMode?: SidebarProjectGroupingMode;
   },
 ): string {
+  // Tangent(FORK-CHAT-001): every environment's Chats project is one logical entry.
+  if (isGenericChatProjectId(project.id)) return GENERIC_CHAT_LOGICAL_PROJECT_KEY;
   const groupingMode = options?.groupingMode ?? "repository";
   if (groupingMode === "separate") {
     return derivePhysicalProjectKey(project);

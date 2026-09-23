@@ -42,6 +42,7 @@ import { GitBranchesSheet } from "./features/threads/git/GitBranchesSheet";
 import { GitCommitSheet } from "./features/threads/git/GitCommitSheet";
 import { GitConfirmSheet } from "./features/threads/git/GitConfirmSheet";
 import { GitOverviewSheet } from "./features/threads/git/GitOverviewSheet";
+import { withProjectThreadRouteGuard } from "./features/threads/ProjectThreadRouteGuard";
 import { ThreadAgentsSheet } from "./features/threads/ThreadAgentsSheet";
 import { ThreadQueueSheet } from "./features/threads/ThreadQueueControl";
 import { ThreadRouteScreen } from "./features/threads/ThreadRouteScreen";
@@ -119,6 +120,19 @@ import { nativeHeaderScrollEdgeEffects } from "./native/StackHeader";
 import { FORM_SHEET_PRESENTATION_OPTIONS } from "./native/sheet-surface";
 import { useThreadOutboxDrain } from "./state/use-thread-outbox-drain";
 import { useComposerAttachmentUploadWorker } from "./state/composer-attachment-uploads";
+
+// Tangent(FORK-CHAT-001): chats have no files, Git, or review, even through deep links.
+const ProjectThreadFilesTreeScreen = withProjectThreadRouteGuard(ThreadFilesTreeScreen, "Files");
+const ProjectThreadFileScreen = withProjectThreadRouteGuard(ThreadFileScreen, "Files");
+const ProjectReviewSheet = withProjectThreadRouteGuard(ReviewSheet, "Review");
+const ProjectReviewCommentComposerSheet = withProjectThreadRouteGuard(
+  ReviewCommentComposerSheet,
+  "Review",
+);
+const ProjectGitOverviewSheet = withProjectThreadRouteGuard(GitOverviewSheet, "Git");
+const ProjectGitCommitSheet = withProjectThreadRouteGuard(GitCommitSheet, "Git");
+const ProjectGitBranchesSheet = withProjectThreadRouteGuard(GitBranchesSheet, "Git");
+const ProjectGitConfirmSheet = withProjectThreadRouteGuard(GitConfirmSheet, "Git");
 
 const HEADER_SCROLL_EDGE_EFFECTS = nativeHeaderScrollEdgeEffects(Platform.OS, Platform.Version);
 
@@ -688,12 +702,12 @@ const RootStackConfig = createNativeStackNavigator({
       },
     }),
     ThreadReview: createNativeStackScreen({
-      screen: ReviewSheet,
+      screen: ProjectReviewSheet,
       linking: `${THREAD_LINKING_PREFIX}/review`,
       options: SOLID_HEADER_OPTIONS,
     }),
     ThreadReviewComment: createNativeStackScreen({
-      screen: ReviewCommentComposerSheet,
+      screen: ProjectReviewCommentComposerSheet,
       linking: `${THREAD_LINKING_PREFIX}/review-comment`,
       options: {
         // Android cannot host the keyboard-driven comment composer inside a
@@ -706,7 +720,7 @@ const RootStackConfig = createNativeStackNavigator({
       },
     }),
     ThreadFiles: createNativeStackScreen({
-      screen: ThreadFilesTreeScreen,
+      screen: ProjectThreadFilesTreeScreen,
       linking: `${THREAD_LINKING_PREFIX}/files`,
       options: {
         ...GLASS_HEADER_OPTIONS,
@@ -714,7 +728,7 @@ const RootStackConfig = createNativeStackNavigator({
       },
     }),
     ThreadFile: createNativeStackScreen({
-      screen: ThreadFileScreen,
+      screen: ProjectThreadFileScreen,
       linking: `${THREAD_LINKING_PREFIX}/files/:path*`,
       options: SOLID_HEADER_OPTIONS,
     }),
@@ -764,7 +778,7 @@ const RootStackConfig = createNativeStackNavigator({
       },
     }),
     GitOverview: createNativeStackScreen({
-      screen: GitOverviewSheet,
+      screen: ProjectGitOverviewSheet,
       linking: `${THREAD_LINKING_PREFIX}/git`,
       options: {
         ...FORM_SHEET_PRESENTATION_OPTIONS,
@@ -773,7 +787,7 @@ const RootStackConfig = createNativeStackNavigator({
       },
     }),
     GitCommit: createNativeStackScreen({
-      screen: GitCommitSheet,
+      screen: ProjectGitCommitSheet,
       linking: `${THREAD_LINKING_PREFIX}/git/commit`,
       options: {
         ...FORM_SHEET_PRESENTATION_OPTIONS,
@@ -782,7 +796,7 @@ const RootStackConfig = createNativeStackNavigator({
       },
     }),
     GitBranches: createNativeStackScreen({
-      screen: GitBranchesSheet,
+      screen: ProjectGitBranchesSheet,
       linking: `${THREAD_LINKING_PREFIX}/git/branches`,
       options: {
         ...FORM_SHEET_PRESENTATION_OPTIONS,
@@ -791,7 +805,7 @@ const RootStackConfig = createNativeStackNavigator({
       },
     }),
     GitConfirm: createNativeStackScreen({
-      screen: GitConfirmSheet,
+      screen: ProjectGitConfirmSheet,
       linking: `${THREAD_LINKING_PREFIX}/git-confirm`,
       options: {
         ...FORM_SHEET_PRESENTATION_OPTIONS,

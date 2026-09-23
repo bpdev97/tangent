@@ -16,6 +16,7 @@ import {
   THREAD_SORT_OPTIONS,
 } from "./home-list-options";
 import type { HomeHeaderProps } from "./HomeHeader.types";
+import { useGenericChatHeaderItem } from "./useGenericChatHeaderItem";
 
 export type { HomeHeaderEnvironment } from "./HomeHeader.types";
 
@@ -34,6 +35,8 @@ export function HomeHeader(props: HomeHeaderProps) {
     return searchBarRef.current !== null;
   }, []);
   useHardwareKeyboardCommand("focusSearch", focusSearch);
+  // Tangent(FORK-CHAT-001)
+  const chatsItem = useGenericChatHeaderItem(props);
   const filterMenu = buildHomeListFilterMenu({
     ...props,
     listOrganization: !threadListV2Enabled,
@@ -42,12 +45,13 @@ export function HomeHeader(props: HomeHeaderProps) {
   return (
     <>
       <NativeStackScreenOptions
-        optionsVersion={filterMenu.items}
+        optionsVersion={[filterMenu.items, chatsItem]}
         options={{
           // Static header config (glass, title, fonts) lives in Stack.tsx
           // (GLASS_HEADER_OPTIONS). Only dynamic values are set here.
           headerTintColor: iconColor,
           unstable_headerRightItems: () => [
+            ...(chatsItem ? [chatsItem] : []),
             withNativeGlassHeaderItem({
               accessibilityLabel: "Open settings",
               icon: { name: "ellipsis", type: "sfSymbol" } as const,
