@@ -68,6 +68,8 @@
         "@t3tools/web",
         "@napi-rs/keyring",
         "ffi-rs",
+        // Tangent(FORK-IMAGE-001): pins heic-decode's WASM dependency for npm installs.
+        "libheif-js",
       ],
     },
     "apps/desktop": {
