@@ -1,3 +1,4 @@
+import { MermaidDiagram, shouldRenderMermaid } from "./MermaidDiagram";
 import { usePullRequestLinking } from "~/hooks/usePullRequestLinking";
 import { useAtomValue } from "@effect/atom-react";
 import {
@@ -3239,6 +3240,10 @@ const CHAT_MARKDOWN_COMPONENTS = {
     }
 
     const language = extractFenceLanguage(codeBlock.className);
+    // Tangent(FORK-MERMAID-001): completed Mermaid fences render as diagrams.
+    if (shouldRenderMermaid(language, isStreaming)) {
+      return <MermaidDiagram code={codeBlock.code} theme={resolvedTheme} />;
+    }
     const fenceTitle = extractFenceTitle(extractPreCodeMeta(node));
     return (
       <MarkdownCodeBlock

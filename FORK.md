@@ -47,7 +47,7 @@ commit the stack sits on.
 | `FORK-CHAT-001`    | Upstream threads always belong to a project; Tangent adds chats with no project attached                                                      | [generic chat](docs/fork/generic-chat.md)               | Active  |
 | `FORK-PUSH-001`    | The personal build has no Clerk or managed relay; a self-hosted relay delivers iOS notifications and Live Activities                          | [push relay](docs/fork/push-relay.md)                   | Active  |
 | `FORK-IMAGE-001`   | Photos from iPhones must work with every provider: HEIC conversion, mobile shrinking, and camera capture                                      | [image normalization](docs/fork/image-normalization.md) | Active  |
-| `FORK-MERMAID-001` | Agents often answer with Mermaid diagrams; web and desktop render them safely                                                                 | [Mermaid](docs/fork/mermaid.md)                         | Planned |
+| `FORK-MERMAID-001` | Agents often answer with Mermaid diagrams; web and desktop render them safely                                                                 | [Mermaid](docs/fork/mermaid.md)                         | Active  |
 | `FORK-PALETTE-001` | Control-N and Control-P move through the command palette, matching macOS and Emacs habits                                                     | [command palette](docs/fork/palette.md)                 | Planned |
 
 "Planned" means the record exists but the feature has not been ported to the v2 base yet.
