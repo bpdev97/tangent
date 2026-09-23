@@ -1,0 +1,36 @@
+services:
+  push-relay:
+    image: ${RELAY_IMAGE:-ghcr.io/bpdev97/bpdev-code-push-relay:latest}
+    restart: unless-stopped
+    init: true
+    environment:
+      APNS_TEAM_ID: ${APNS_TEAM_ID}
+      APNS_KEY_ID: ${APNS_KEY_ID}
+      APNS_BUNDLE_ID: ${APNS_BUNDLE_ID}
+      APNS_ENVIRONMENT: ${APNS_ENVIRONMENT:-production}
+      APNS_PRIVATE_KEY_FILE: /run/secrets/apns_key
+      RELAY_AUTH_TOKEN_FILE: /run/secrets/relay_password
+      DATABASE_PATH: /data/push-relay.sqlite
+    ports:
+      - "${TAILNET_BIND_ADDRESS}:8788:8788"
+    volumes:
+      - push-relay-data:/data
+    secrets:
+      - apns_key
+      - relay_password
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+
+volumes:
+  push-relay-data:
+
+secrets:
+  apns_key:
+    file: ${APNS_PRIVATE_KEY_PATH}
+  relay_password:
+    file: ${RELAY_PASSWORD_PATH}
