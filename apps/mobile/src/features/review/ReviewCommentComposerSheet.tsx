@@ -14,6 +14,7 @@ import { ControlPill } from "../../components/ui/ControlPill";
 import { cn } from "../../lib/cn";
 import type { DraftComposerImageAttachment } from "../../lib/composerImages";
 import { convertPastedImagesToAttachments, pickComposerImages } from "../../lib/composerImages";
+import { ComposerAttachmentButton } from "../threads/ComposerAttachmentButton";
 import { useNativePaste } from "../../lib/useNativePaste";
 import { setPendingConnectionError } from "../../state/use-remote-environment-registry";
 import { appendReviewCommentToDraft } from "../../state/use-thread-composer-state";
@@ -101,8 +102,8 @@ export function ReviewCommentComposerSheet(props: ReviewCommentComposerSheetProp
     })();
   });
 
-  async function handlePickImages(): Promise<void> {
-    const result = await pickComposerImages({ existingCount: attachments.length });
+  async function handlePickImages(source?: "library" | "camera"): Promise<void> {
+    const result = await pickComposerImages({ existingCount: attachments.length, source });
     if (result.images.length > 0) {
       setAttachments((current) => [...current, ...result.images]);
     }
@@ -133,11 +134,8 @@ export function ReviewCommentComposerSheet(props: ReviewCommentComposerSheetProp
         toolbar={
           target ? (
             <>
-              <ControlPill
-                accessibilityLabel="Add image"
-                icon="plus"
-                onPress={() => void handlePickImages()}
-              />
+              {/* Tangent(FORK-IMAGE-001): Photo Library and Camera. */}
+              <ComposerAttachmentButton supportsFiles={false} onPickMedia={handlePickImages} />
               <View className="flex-1" />
               <ControlPill
                 accessibilityLabel="Comment"
