@@ -13,6 +13,8 @@ process.env.EXPO_NO_TYPESCRIPT_SETUP = "1";
 
 const APP_VARIANT = resolveAppVariant(repoEnv.APP_VARIANT);
 const personalMobile = PERSONAL_MOBILE_DISTRIBUTION;
+const CAMERA_PERMISSION =
+  "Allow T3 Code to access your camera so you can take photos and scan pairing QR codes.";
 const isIosPersonalTeamBuild = repoEnv.T3CODE_IOS_PERSONAL_TEAM === "1";
 const runtimeVersionPolicy =
   process.env.MOBILE_VERSION_POLICY ??
@@ -394,7 +396,8 @@ const config: ExpoConfig = {
     [
       "expo-camera",
       {
-        cameraPermission: "Allow T3 Code to access your camera so you can scan pairing QR codes.",
+        // Tangent(FORK-IMAGE-001): the camera also captures composer photos.
+        cameraPermission: CAMERA_PERMISSION,
         microphonePermission: false,
         barcodeScannerEnabled: true,
         recordAudioAndroid: false,
@@ -404,6 +407,7 @@ const config: ExpoConfig = {
       "expo-image-picker",
       {
         photosPermission: false,
+        cameraPermission: CAMERA_PERMISSION,
         // `false` makes this plugin add RECORD_AUDIO to blockedPermissions, breaking Android dictation.
         microphonePermission: "Allow T3 Code to use your microphone for voice input.",
       },

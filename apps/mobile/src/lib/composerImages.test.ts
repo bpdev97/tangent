@@ -14,6 +14,7 @@ const manipulator = vi.hoisted(() => {
   const manipulate = vi.fn((source: string | { width: number; height: number }) => {
     let size = typeof source === "string" ? state.sourceSize : source;
     const context = {
+      release: vi.fn(), // Tangent(FORK-IMAGE-001): prepareComposerImage releases its context.
       resize: vi.fn((next: { width: number; height: number }) => {
         size = next;
         return context;
@@ -153,7 +154,7 @@ describe("native pasted image cleanup", () => {
 
     expect(attachments).toEqual([
       expect.objectContaining({
-        name: "pasted-image.jpeg",
+        name: "pasted-image.jpg", // Tangent(FORK-IMAGE-001): prepareComposerImage names JPEGs .jpg
         mimeType: "image/jpeg",
         dataUrl: "data:image/jpeg;base64,cmVuZGVyZWQ=",
         previewUri: "data:image/jpeg;base64,cmVuZGVyZWQ=",
