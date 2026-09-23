@@ -420,7 +420,9 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
                 }),
               );
             }
-            const result = yield* runMaintenanceCommand(command);
+            // Tangent(FORK-HERMES-001): optional provider guard around the command.
+            const run = runMaintenanceCommand(command);
+            const result = yield* fresh.update.guard ? fresh.update.guard(run) : run;
             const finishedAt = yield* nowIso;
             if (result.timedOut || result.exitCode !== 0) {
               return yield* finish(

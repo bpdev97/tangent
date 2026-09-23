@@ -63,6 +63,15 @@
         { "range": ">=0.80.5", "status": "supported" },
         { "range": "<0.80.5", "status": "unsupported" }
       ]
+    },
+    {
+      "driver": "hermes",
+      "t3CodeRange": ">=0.0.42",
+      "recommendedRange": ">=0.21.4",
+      "ranges": [
+        { "range": ">=0.21.4", "status": "supported" },
+        { "range": "<0.21.4", "status": "unknown" }
+      ]
     }
   ],
   "currentModels": {
