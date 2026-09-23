@@ -162,6 +162,7 @@ import {
   useSettingsSearchTargetId,
 } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
+import { PersonalPushRelaySettingsSection } from "./PersonalPushRelaySettings";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
 
@@ -3234,6 +3235,9 @@ export function GeneralSettingsPanel() {
           }
         />
       </SettingsSection>
+
+      {/* Tangent(FORK-PUSH-001) */}
+      <PersonalPushRelaySettingsSection />
 
       <SettingsSection id="about" title="About">
         {isElectron || HOSTED_APP_CHANNEL ? (
