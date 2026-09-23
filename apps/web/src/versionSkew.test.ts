@@ -15,6 +15,7 @@ import {
   dismissVersionMismatch,
   isServerUpdateFailureDismissed,
   isVersionMismatchDismissed,
+  manualServerUpdateCommand,
   resolveServerConfigVersionMismatch,
   resolveServerSelfUpdateCapability,
   resolveVersionMismatch,
@@ -226,5 +227,9 @@ describe("versionSkew", () => {
   it("matches version-drift guidance to the advertised update path", () => {
     expect(serverUpdateGuidance("respawn")).toBe("Update to stay in sync");
     expect(serverUpdateGuidance("desktop-managed")).toBe("Update the desktop app");
+  });
+
+  it("builds manual update commands that use Tangent's own updater", () => {
+    expect(manualServerUpdateCommand("1.2.3")).toBe("t3 update 1.2.3");
   });
 });

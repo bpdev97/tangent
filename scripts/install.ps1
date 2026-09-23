@@ -1,13 +1,13 @@
-# Installs the T3 Code CLI from a GitHub Release archive on Windows. Needs
+# Installs the Tangent CLI from a GitHub Release archive on Windows. Needs
 # only PowerShell 5.1+; no Node, npm, or compiler.
 #
-#   irm https://t3.codes/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/bpdev97/tangent/main/scripts/install.ps1 | iex
 #
 # Environment:
 #   T3CODE_CHANNEL           release train to follow: stable, nightly, or preview
 #                            (default: stable; preview is a maintainers' test train)
 #   T3CODE_VERSION           exact version to install (overrides T3CODE_CHANNEL)
-#   T3CODE_HOME              T3 home directory (default: ~\.t3)
+#   T3CODE_HOME              T3 home directory (default: ~\.bpdev-code)
 #   T3CODE_INSTALL_BIN_DIR   where t3.exe is linked (default: ~\.local\bin)
 #   T3CODE_RELEASE_BASE_URL  mirror for releases/download (default: GitHub)
 #
@@ -16,9 +16,9 @@
 $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$repo = "pingdotgg/t3code"
+$repo = "bpdev97/tangent"
 $baseUrl = if ($env:T3CODE_RELEASE_BASE_URL) { $env:T3CODE_RELEASE_BASE_URL.TrimEnd("/") } else { "https://github.com/$repo/releases/download" }
-$t3Home = if ($env:T3CODE_HOME) { $env:T3CODE_HOME } else { Join-Path $HOME ".t3" }
+$t3Home = if ($env:T3CODE_HOME) { $env:T3CODE_HOME } else { Join-Path $HOME ".bpdev-code" }
 $binDir = if ($env:T3CODE_INSTALL_BIN_DIR) { $env:T3CODE_INSTALL_BIN_DIR } else { Join-Path $HOME ".local\bin" }
 
 function Fail([string] $message) {
@@ -134,15 +134,15 @@ if (-not $version) {
   # stable. Only tags of the requested train are considered, so a stable
   # install can never pick up a nightly or preview build by accident.
   $tagPattern = switch ($channel) {
-    "stable" { '^v\d+\.\d+\.\d+$' }
-    "nightly" { '^v\d+\.\d+\.\d+-nightly\.\d+\.\d+$' }
-    "preview" { '^v\d+\.\d+\.\d+-preview\.\d+\.\d+$' }
+    "stable" { '^personal-v\d+\.\d+\.\d+$' }
+    "nightly" { '^personal-v\d+\.\d+\.\d+-nightly\.\d+\.\d+$' }
+    "preview" { '^personal-v\d+\.\d+\.\d+-preview\.\d+\.\d+$' }
     default { Fail "T3CODE_CHANNEL must be stable, nightly, or preview" }
   }
   $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases?per_page=100" -Headers @{ "User-Agent" = "t3-install" }
   $tag = ($releases | Where-Object { -not $_.draft -and $_.tag_name -match $tagPattern } | Select-Object -First 1).tag_name
   if (-not $tag) { Fail "could not find a $channel release; set T3CODE_VERSION" }
-  $version = $tag.Substring(1)
+  $version = $tag.Substring("personal-v".Length)
 }
 if ($version -match '-preview\.') {
   Write-Warning "t3 $version is a preview build. Preview builds are cut by maintainers from unreleased branches to exercise the release pipeline. They can be broken, receive no fixes, and are never offered as updates. Set T3CODE_CHANNEL=stable (the default) for a supported build."
@@ -151,7 +151,7 @@ if ($version -match '-preview\.') {
   }
 }
 
-$stem = "t3-$version-win32-$arch"
+$stem = "tangent-server-$version-win32-$arch"
 $archive = "$stem.zip"
 $versionsDir = Join-Path $t3Home "runtime\versions"
 $targetDir = Join-Path $versionsDir $version
@@ -168,15 +168,15 @@ if ((Test-Path $marker) -and ((Get-Content $marker -Raw).Trim() -eq $version)) {
     [Console]::Error.WriteLine("  ${muted}Installing$reset T3 Code $bold$version$reset`n")
     Step "Downloading..."
     try {
-      Fetch "$baseUrl/v$version/SHA256SUMS" (Join-Path $staging "SHA256SUMS")
+      Fetch "$baseUrl/personal-v$version/SHA256SUMS" (Join-Path $staging "SHA256SUMS")
     } catch {
       $status = $_.Exception.Response.StatusCode.value__
       if ($status -eq 404) {
-        Fail "t3 $version has no release archive for win32-$arch; releases before the self-contained CLI can only be installed with 'npm install -g t3@$version'"
+        Fail "t3 $version has no release archive for win32-$arch; use a Tangent release with standalone server archives"
       }
       throw
     }
-    Fetch "$baseUrl/v$version/$archive" (Join-Path $staging $archive) -progress
+    Fetch "$baseUrl/personal-v$version/$archive" (Join-Path $staging $archive) -progress
 
     Step "Verifying the download..."
 

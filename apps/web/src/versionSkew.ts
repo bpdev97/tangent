@@ -116,7 +116,8 @@ export function supportsServerUpdateThreadContinuation(
 
 /** The command to hand users whose server cannot update itself. */
 export function manualServerUpdateCommand(targetVersion: string): string {
-  return `npx t3@${targetVersion}`;
+  // Tangent(FORK-DIST-001): `npx t3` would install upstream's package instead of Tangent.
+  return `t3 update ${targetVersion}`;
 }
 
 export function serverUpdateGuidance(capability: ServerSelfUpdateCapability): string {

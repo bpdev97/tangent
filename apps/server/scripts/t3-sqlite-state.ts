@@ -14,7 +14,10 @@ import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
+import { PERSONAL_DISTRIBUTION } from "../../../downstream/config.ts";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+
+const sharedStateHomeDirectoryName = PERSONAL_DISTRIBUTION.macos.stateHomeDirectoryName;
 
 export const SqliteStateOperation = Schema.Literals(["query", "exec"]);
 export type SqliteStateOperation = typeof SqliteStateOperation.Type;
@@ -62,7 +65,7 @@ export class SqliteStateSharedHomeMutationError extends Schema.TaggedError<Sqlit
   {},
 ) {
   override get message(): string {
-    return "Refusing to mutate the shared ~/.t3 database. Use an isolated --base-dir.";
+    return `Refusing to mutate the shared ~/${sharedStateHomeDirectoryName} database. Use an isolated --base-dir.`;
   }
 }
 
@@ -181,7 +184,9 @@ export const runSqliteState = Effect.fn("runSqliteState")(function* (
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const baseDir = path.resolve(input.baseDir);
-  const sharedHome = path.resolve(options.sharedHome ?? path.join(NodeOS.homedir(), ".t3"));
+  const sharedHome = path.resolve(
+    options.sharedHome ?? path.join(NodeOS.homedir(), sharedStateHomeDirectoryName),
+  );
   const databasePath = path.join(baseDir, "userdata", "statev2.sqlite");
   const source = yield* resolveSqlSource(input.sql, input.file);
 
