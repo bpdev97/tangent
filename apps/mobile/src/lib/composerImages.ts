@@ -3,16 +3,14 @@ import {
   fileAttachmentTooLargeMessage,
 } from "@t3tools/client-runtime/state/attachments";
 import {
-  isProviderSendTurnSupportedImageMimeType,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
-  PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
   type EnvironmentId,
   type PastedTextAttachmentSource,
   type UploadChatImageAttachment,
 } from "@t3tools/contracts";
 import type { DocumentPickerResult } from "expo-document-picker";
-import { estimateBase64ByteSize } from "./base64";
+import { prepareComposerImage } from "./prepareComposerImage";
 import {
   COMPOSER_ATTACHMENT_DIRECTORY,
   isComposerAttachmentFileRetained,
@@ -20,7 +18,6 @@ import {
 } from "./composerAttachmentFiles";
 import { imageMimeType } from "@t3tools/shared/image";
 import { videoMimeType } from "@t3tools/shared/video";
-import { fitComposerImage, renderPhoto } from "./composerImageFit";
 import { beginForegroundHandoff } from "./foreground-handoff";
 import { uuidv4 } from "./uuid";
 import { writeFileAtomically } from "./atomic-file";
@@ -346,7 +343,10 @@ async function loadClipboard() {
   }
 }
 
-export async function pickComposerImages(input: { readonly existingCount: number }): Promise<{
+export async function pickComposerImages(input: {
+  readonly existingCount: number;
+  readonly source?: "library" | "camera";
+}): Promise<{
   readonly images: ReadonlyArray<DraftComposerImageAttachment>;
   readonly error: string | null;
 }> {
@@ -360,6 +360,8 @@ export async function pickComposerImages(input: { readonly existingCount: number
 export async function pickComposerMedia(input: {
   readonly existingCount: number;
   readonly maxVideoBytes?: number;
+  /** Tangent(FORK-IMAGE-001): capture one photo with the camera instead of the library. */
+  readonly source?: "library" | "camera";
 }): Promise<{
   readonly attachments: ReadonlyArray<DraftComposerAttachment>;
   readonly error: string | null;
@@ -387,21 +389,36 @@ export async function pickComposerMedia(input: {
   const endHandoff = beginForegroundHandoff();
   let result: Awaited<ReturnType<typeof imagePicker.launchImageLibraryAsync>>;
   try {
-    result = await imagePicker.launchImageLibraryAsync({
-      mediaTypes: input.maxVideoBytes === undefined ? ["images"] : ["images", "videos"],
-      allowsMultipleSelection: true,
-      selectionLimit: remainingSlots,
-      // Bytes stay in the picker's file until we know how much of them we need. Asking for
-      // base64 here made iOS decode and re-encode every camera photo at full resolution and
-      // hand JS a 10 MB+ string, which stalled the composer for seconds.
-      base64: false,
-      quality: 1,
-      shouldDownloadFromNetwork: true,
-    });
+    if (input.source === "camera") {
+      const permission = await imagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        return {
+          attachments: [],
+          error: "Camera access is required to take a photo. Allow camera access in Settings.",
+        };
+      }
+      result = await imagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        base64: false,
+        quality: 1,
+      });
+    } else {
+      result = await imagePicker.launchImageLibraryAsync({
+        mediaTypes: input.maxVideoBytes === undefined ? ["images"] : ["images", "videos"],
+        allowsMultipleSelection: true,
+        selectionLimit: remainingSlots,
+        // Bytes stay in the picker's file until we know how much of them we need. Asking for
+        // base64 here made iOS decode and re-encode every camera photo at full resolution and
+        // hand JS a 10 MB+ string, which stalled the composer for seconds.
+        base64: false,
+        quality: 1,
+        shouldDownloadFromNetwork: true,
+      });
+    }
   } catch (error) {
     return {
       attachments: [],
-      error: error instanceof Error ? error.message : "Could not open the photo library.",
+      error: error instanceof Error ? error.message : "Could not open the photo picker.",
     };
   } finally {
     endHandoff();
@@ -452,72 +469,18 @@ export async function pickComposerMedia(input: {
     }
 
     const name = asset.fileName?.trim() || "image";
-    // The picker's reported size is a hint, not a measurement: Android content streams can
-    // deliver more bytes than they advertise. Only a size read from the file itself decides
-    // whether the original bytes are safe to load into JS.
-    let sourceBytes: number | null = null;
+    // Tangent(FORK-IMAGE-001): the shared preparation step measures the file itself and
+    // re-encodes HEIC, unsupported, and oversized images.
     try {
-      const { File } = await import("expo-file-system");
-      sourceBytes = new File(asset.uri).size;
-    } catch {
-      sourceBytes = null;
+      const prepared = await prepareComposerImage({
+        uri: asset.uri,
+        mimeType: mimeType ?? "application/octet-stream",
+        name,
+      });
+      attachments.push({ id: uuidv4(), type: "image", ...prepared });
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : `Failed to read '${name}'.`;
     }
-    // Originals the provider can read and that fit the cap pass through byte for byte so
-    // transparency and animation survive.
-    const originalMimeType =
-      mimeType !== undefined &&
-      isProviderSendTurnSupportedImageMimeType(mimeType) &&
-      sourceBytes !== null &&
-      sourceBytes > 0 &&
-      sourceBytes <= PROVIDER_SEND_TURN_MAX_IMAGE_BYTES
-        ? mimeType
-        : null;
-
-    let image: { base64: string; mimeType: string; name: string; previewUri: string };
-    try {
-      if (originalMimeType !== null) {
-        const { File } = await import("expo-file-system");
-        const base64 = await new File(asset.uri).base64();
-        const fitted = await fitComposerImage({
-          uri: asset.uri,
-          mimeType: originalMimeType,
-          base64,
-        });
-        image = {
-          base64: fitted?.base64 ?? base64,
-          mimeType: originalMimeType,
-          name,
-          previewUri: fitted?.uri ?? asset.uri,
-        };
-      } else {
-        const rendered = await renderPhoto(asset.uri);
-        image = {
-          base64: rendered.base64,
-          mimeType: "image/jpeg",
-          name: /\.jpe?g$/i.test(name) ? name : `${name.replace(/\.[^.]+$/, "")}.jpg`,
-          previewUri: rendered.uri,
-        };
-      }
-    } catch {
-      error = `Failed to read '${name}'.`;
-      continue;
-    }
-
-    const sizeBytes = estimateBase64ByteSize(image.base64);
-    if (sizeBytes <= 0 || sizeBytes > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
-      error = `'${name}' exceeds the 10 MB attachment limit.`;
-      continue;
-    }
-
-    attachments.push({
-      id: uuidv4(),
-      type: "image",
-      name: image.name,
-      mimeType: image.mimeType,
-      sizeBytes,
-      dataUrl: `data:${image.mimeType};base64,${image.base64}`,
-      previewUri: image.previewUri,
-    });
   }
 
   return {
@@ -568,38 +531,21 @@ export async function pasteComposerClipboard(input: { readonly existingCount: nu
       };
     }
 
-    const pastedBase64 = image.data.split(",")[1] ?? "";
-    const fitted = await fitComposerImage({
-      uri: image.data,
-      mimeType: "image/png",
-      base64: pastedBase64,
-    });
-    const base64 = fitted?.base64 ?? pastedBase64;
-    const dataUrl = fitted ? `data:image/png;base64,${base64}` : image.data;
-    const sizeBytes = estimateBase64ByteSize(base64);
-    if (sizeBytes <= 0 || sizeBytes > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
+    // Tangent(FORK-IMAGE-001): oversized clipboard images are shrunk, not rejected.
+    try {
+      const prepared = await prepareComposerImage({
+        base64: image.data.split(",")[1] ?? "",
+        mimeType: "image/png",
+        name: "pasted-image.png",
+      });
+      return { images: [{ id: uuidv4(), type: "image", ...prepared }], text: null, error: null };
+    } catch (cause) {
       return {
         images: [],
         text: null,
-        error: "Clipboard image exceeds the 10 MB attachment limit.",
+        error: cause instanceof Error ? cause.message : "Could not prepare the clipboard image.",
       };
     }
-
-    return {
-      images: [
-        {
-          id: uuidv4(),
-          type: "image",
-          name: "pasted-image.png",
-          mimeType: "image/png",
-          sizeBytes,
-          dataUrl,
-          previewUri: dataUrl,
-        },
-      ],
-      text: null,
-      error: null,
-    };
   }
 
   if (await clipboard.hasStringAsync()) {
@@ -666,22 +612,20 @@ export async function convertPastedImagesToAttachments(input: {
         continue;
       }
       const file = new File(uri);
+      const base64 = await file.base64();
       const mimeType = mimeTypeFromUri(uri);
-      const pastedBase64 = await file.base64();
-      const fitted = await fitComposerImage({ uri, mimeType, base64: pastedBase64 });
-      const base64 = fitted?.base64 ?? pastedBase64;
-      const sizeBytes = estimateBase64ByteSize(base64);
-      if (sizeBytes <= 0 || sizeBytes > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
-        continue;
-      }
+      // Tangent(FORK-IMAGE-001): shrink or convert instead of dropping the image.
+      const prepared = await prepareComposerImage({
+        base64,
+        mimeType,
+        name: `pasted-image.${mimeType.split("/")[1] ?? "png"}`,
+      });
+      const passthrough = prepared.dataUrl === `data:${mimeType};base64,${base64}`;
       results.push({
         id: uuidv4(),
         type: "image",
-        name: `pasted-image.${mimeType.split("/")[1] ?? "png"}`,
-        mimeType,
-        sizeBytes,
-        dataUrl: `data:${mimeType};base64,${base64}`,
-        previewUri: ownedTemporaryFile ? `data:${mimeType};base64,${base64}` : (fitted?.uri ?? uri),
+        ...prepared,
+        previewUri: passthrough && !ownedTemporaryFile ? uri : prepared.previewUri,
       });
     } catch (error) {
       console.warn("Failed to read pasted image", uri, error);
