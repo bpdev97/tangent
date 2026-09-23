@@ -1216,6 +1216,15 @@ export function createServerEnvironmentAtoms<R, E>(
         key: ({ environmentId, input }) => `${environmentId}:${input.instanceId}`,
       },
     }),
+    // Tangent(FORK-PUSH-001)
+    testPersonalPushRelay: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:test-personal-push-relay",
+      tag: WS_METHODS.serverTestPersonalPushRelay,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId }) => environmentId,
+      },
+    }),
     signalProcess: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:signal-process",
       tag: WS_METHODS.serverSignalProcess,
