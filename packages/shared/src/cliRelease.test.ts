@@ -14,9 +14,9 @@ import {
 describe("cliRelease", () => {
   it("names archives by version and platform, zip only on Windows", () => {
     expect(cliArchiveFileName("1.2.3-preview.20260911.4", "linux-x64")).toBe(
-      "t3-1.2.3-preview.20260911.4-linux-x64.tar.gz",
+      "tangent-server-1.2.3-preview.20260911.4-linux-x64.tar.gz",
     );
-    expect(cliArchiveFileName("1.2.3", "win32-x64")).toBe("t3-1.2.3-win32-x64.zip");
+    expect(cliArchiveFileName("1.2.3", "win32-x64")).toBe("tangent-server-1.2.3-win32-x64.zip");
   });
 
   it("only maps platforms and architectures that have a release archive", () => {
@@ -33,10 +33,10 @@ describe("cliRelease", () => {
 
   it("resolves download URLs under the tagged release, honoring a mirror", () => {
     expect(cliReleaseDownloadBaseUrl("1.2.3")).toBe(
-      "https://github.com/pingdotgg/t3code/releases/download/v1.2.3",
+      "https://github.com/bpdev97/tangent/releases/download/personal-v1.2.3",
     );
     expect(cliReleaseDownloadBaseUrl("1.2.3", "https://mirror.example/t3/")).toBe(
-      "https://mirror.example/t3/v1.2.3",
+      "https://mirror.example/t3/personal-v1.2.3",
     );
   });
 
@@ -72,22 +72,22 @@ describe("cliRelease", () => {
 
   it("picks the newest non-draft release on the requested channel", () => {
     const releases = [
-      { tag_name: "v1.2.4-preview.20260912.9", draft: true },
-      { tag_name: "v1.2.4-preview.20260912.8" },
-      { tag_name: "v1.2.4-nightly.20260912.7" },
+      { tag_name: "personal-v1.2.4-preview.20260912.9", draft: true },
+      { tag_name: "personal-v1.2.4-preview.20260912.8" },
+      { tag_name: "personal-v1.2.4-nightly.20260912.7" },
       { tag_name: "desktop-preview" },
-      { tag_name: "v1.2.3" },
-      { tag_name: "v1.2.3-nightly.20260911.2" },
+      { tag_name: "personal-v1.2.3" },
+      { tag_name: "personal-v1.2.3-nightly.20260911.2" },
     ];
     expect(newestCliReleaseVersion(releases, "preview")).toBe("1.2.4-preview.20260912.8");
     expect(newestCliReleaseVersion(releases, "nightly")).toBe("1.2.4-nightly.20260912.7");
     expect(newestCliReleaseVersion(releases, "stable")).toBe("1.2.3");
-    expect(newestCliReleaseVersion([{ tag_name: "v1.2.3" }], "preview")).toBeUndefined();
+    expect(newestCliReleaseVersion([{ tag_name: "personal-v1.2.3" }], "preview")).toBeUndefined();
   });
 
   it("pages through the release index at the largest page GitHub allows", () => {
     expect(cliReleaseIndexPageUrl(1)).toBe(
-      "https://api.github.com/repos/pingdotgg/t3code/releases?per_page=100&page=1",
+      "https://api.github.com/repos/bpdev97/tangent/releases?per_page=100&page=1",
     );
     expect(cliReleaseIndexPageUrl(3)).toContain("page=3");
   });

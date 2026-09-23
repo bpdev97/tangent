@@ -117,9 +117,9 @@ describe("environment release checks", () => {
         .fn()
         .mockImplementation(async () =>
           Response.json([
-            { tag_name: "v2.0.0-nightly.20260923.1" },
-            { tag_name: "v1.2.0", draft: true },
-            { tag_name: "v1.1.0" },
+            { tag_name: "personal-v2.0.0-nightly.20260923.1" },
+            { tag_name: "personal-v1.2.0", draft: true },
+            { tag_name: "personal-v1.1.0" },
           ]),
         ),
     );
@@ -132,9 +132,9 @@ describe("environment release checks", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        Response.json(Array.from({ length: 100 }, () => ({ tag_name: "v2.0.0" }))),
+        Response.json(Array.from({ length: 100 }, () => ({ tag_name: "personal-v2.0.0" }))),
       )
-      .mockResolvedValueOnce(Response.json([{ tag_name: "v1.0.0-preview.20260923.2" }]));
+      .mockResolvedValueOnce(Response.json([{ tag_name: "personal-v1.0.0-preview.20260923.2" }]));
     vi.stubGlobal("fetch", fetchMock);
     expect(await findEnvironmentUpdate("1.0.0-preview.20260923.1", signal)).toBe(
       "1.0.0-preview.20260923.2",
