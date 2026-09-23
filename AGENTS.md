@@ -1,3 +1,35 @@
+<!-- Tangent(FORK-MAINT-001): keep this block first and everything below it identical to upstream. -->
+
+# Tangent fork
+
+This checkout is **Tangent**, a personal fork of T3 Code published at
+[`bpdev97/tangent`](https://github.com/bpdev97/tangent). Everything after this block is upstream's
+text, left unchanged so upstream syncs stay conflict-free. Read it with these substitutions:
+
+- State lives under `~/.bpdev-code`, not `~/.t3`. The live database is `~/.bpdev-code/userdata`, and
+  "Writing to the live install" applies to it. Copy test data from there or `~/.bpdev-code/dev`.
+- Providers include the fork-owned **Hermes** integration. Provider-shaped work needs a Hermes
+  decision too.
+- Tangent ships macOS desktop, iOS, web, and the server. It does not ship Android or Windows and
+  Linux desktop builds, so fork features need no decisions or tests for those surfaces; leave
+  upstream's Android, Windows, and Linux code as it is.
+- Tangent requires `vp check`, `vp run typecheck`, and the focused tests printed by
+  `node scripts/check-fork.ts` before work is complete, plus `vp run lint:mobile` when mobile native
+  code changes. This replaces upstream's "do not run repo-wide checks" rule.
+
+Before changing fork-owned behavior or syncing upstream:
+
+- Read [`FORK.md`](FORK.md): the feature index, the reason each feature exists, and branch and
+  release policy.
+- Each feature has a record in [`docs/fork/`](docs/fork/) explaining why it exists, its upstream
+  hooks, how to resolve conflicts, and when to remove it. For fork-owned behavior, the record wins
+  over conflicting upstream guidance.
+- Upstream syncs and releases use the `tangent-sync` skill
+  ([`.agents/skills/tangent-sync/SKILL.md`](.agents/skills/tangent-sync/SKILL.md)).
+- Put fork code in new files. Touch upstream files only with small hooks marked
+  `Tangent(FORK-ID)`. Every commit carries a `Fork-Feature: FORK-ID` trailer, or is a `fixup!` of
+  that feature's commit.
+
 # T3 Code
 
 T3 Code is a minimal GUI for coding agents. A Node WebSocket server wraps provider CLIs and agents (Codex, Claude Code, Cursor, Grok, OpenCode, Antigravity) and serves web, desktop, and mobile clients.
