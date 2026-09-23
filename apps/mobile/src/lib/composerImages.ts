@@ -4,7 +4,6 @@ import {
 } from "@t3tools/client-runtime/state/attachments";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import {
-  isProviderSendTurnSupportedImageMimeType,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
@@ -16,7 +15,7 @@ import type { AttachmentUploadStatus } from "@t3tools/client-runtime/state/attac
 import type { DocumentPickerResult } from "expo-document-picker";
 import { msg } from "gt-react-native";
 import { m } from "../i18n/messages";
-import { estimateBase64ByteSize } from "./base64";
+import { prepareComposerImage } from "./prepareComposerImage";
 import {
   COMPOSER_ATTACHMENT_DIRECTORY,
   isComposerAttachmentFileRetained,
@@ -24,7 +23,6 @@ import {
 } from "./composerAttachmentFiles";
 import { imageMimeType } from "@t3tools/shared/image";
 import { videoMimeType } from "@t3tools/shared/video";
-import { fitComposerImage, renderPhoto } from "./composerImageFit";
 import { beginForegroundHandoff } from "./foreground-handoff";
 import { uuidv4 } from "./uuid";
 import { writeFileAtomically } from "./atomic-file";
@@ -335,32 +333,13 @@ export async function pickComposerFiles(input: {
       }
       try {
         const { File } = await import("expo-file-system");
-        const original = await new File(attachment.fileUri).base64();
-        const candidate = await fitComposerImage({
-          uri: attachment.fileUri,
+        // Tangent(FORK-IMAGE-001): read bytes, not the copy removed below, so the preview survives.
+        const prepared = await prepareComposerImage({
+          base64: await new File(attachment.fileUri).base64(),
           mimeType,
-          base64: original,
-        });
-        const fitted =
-          candidate !== null &&
-          estimateBase64ByteSize(candidate.base64) <= PROVIDER_SEND_TURN_MAX_IMAGE_BYTES
-            ? candidate
-            : null;
-        const base64 = fitted?.base64 ?? original;
-        const sizeBytes = estimateBase64ByteSize(base64);
-        if (sizeBytes <= 0 || sizeBytes > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
-          throw new Error(m(msg("''{name}'' exceeds the 10 MB attachment limit.", { name })));
-        }
-        const dataUrl = `data:${mimeType};base64,${base64}`;
-        attachments.push({
-          id: attachment.id,
-          type: "image",
           name,
-          mimeType,
-          sizeBytes,
-          dataUrl,
-          previewUri: fitted?.uri ?? dataUrl,
         });
+        attachments.push({ id: attachment.id, type: "image", ...prepared });
       } finally {
         await removePersistedComposerAttachmentFile(attachment.fileUri);
       }
@@ -386,7 +365,10 @@ async function loadImagePicker() {
   }
 }
 
-export async function pickComposerImages(input: { readonly existingCount: number }): Promise<{
+export async function pickComposerImages(input: {
+  readonly existingCount: number;
+  readonly source?: "library" | "camera";
+}): Promise<{
   readonly images: ReadonlyArray<DraftComposerImageAttachment>;
   readonly error: string | null;
 }> {
@@ -401,6 +383,8 @@ export async function pickComposerMedia(input: {
   readonly existingCount: number;
   readonly maxVideoBytes?: number;
   readonly acceptSelection?: () => boolean;
+  /** Tangent(FORK-IMAGE-001): capture one photo with the camera instead of the library. */
+  readonly source?: "library" | "camera";
 }): Promise<{
   readonly attachments: ReadonlyArray<DraftComposerAttachment>;
   readonly error: string | null;
@@ -431,15 +415,31 @@ export async function pickComposerMedia(input: {
   const endHandoff = beginForegroundHandoff();
   let result: Awaited<ReturnType<typeof imagePicker.launchImageLibraryAsync>>;
   try {
-    result = await imagePicker.launchImageLibraryAsync({
-      mediaTypes: input.maxVideoBytes === undefined ? ["images"] : ["images", "videos"],
-      allowsMultipleSelection: true,
-      selectionLimit: remainingSlots,
-      // Base64 makes iOS decode all full-size photos and stalls JS with large strings; read bytes only as needed.
-      base64: false,
-      quality: 1,
-      shouldDownloadFromNetwork: true,
-    });
+    if (input.source === "camera") {
+      const permission = await imagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        return {
+          attachments: [],
+          // oxlint-disable-next-line t3code/no-untranslated-copy -- Tangent fork copy stays English
+          error: "Camera access is required to take a photo. Allow camera access in Settings.",
+        };
+      }
+      result = await imagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        base64: false,
+        quality: 1,
+      });
+    } else {
+      result = await imagePicker.launchImageLibraryAsync({
+        mediaTypes: input.maxVideoBytes === undefined ? ["images"] : ["images", "videos"],
+        allowsMultipleSelection: true,
+        selectionLimit: remainingSlots,
+        // Base64 makes iOS decode all full-size photos and stalls JS with large strings; read bytes only as needed.
+        base64: false,
+        quality: 1,
+        shouldDownloadFromNetwork: true,
+      });
+    }
   } catch (error) {
     return {
       attachments: [],
@@ -499,69 +499,19 @@ export async function pickComposerMedia(input: {
     }
 
     const name = asset.fileName?.trim() || "image";
-    // Android content streams can exceed their reported size; measure the file before loading bytes into JS.
-    let sourceBytes: number | null = null;
+    // Tangent(FORK-IMAGE-001): the shared preparation step measures the file itself and
+    // re-encodes HEIC, unsupported, and oversized images.
     try {
-      const { File } = await import("expo-file-system");
-      sourceBytes = new File(asset.uri).size;
-    } catch {
-      sourceBytes = null;
+      const prepared = await prepareComposerImage({
+        uri: asset.uri,
+        mimeType: mimeType ?? "application/octet-stream",
+        name,
+      });
+      attachments.push({ id: uuidv4(), type: "image", ...prepared });
+    } catch (cause) {
+      error =
+        cause instanceof Error ? cause.message : m(msg("Failed to read ''{name}''.", { name }));
     }
-    // Pass through supported, under-cap originals unchanged to preserve transparency and animation.
-    const originalMimeType =
-      mimeType !== undefined &&
-      isProviderSendTurnSupportedImageMimeType(mimeType) &&
-      sourceBytes !== null &&
-      sourceBytes > 0 &&
-      sourceBytes <= PROVIDER_SEND_TURN_MAX_IMAGE_BYTES
-        ? mimeType
-        : null;
-
-    let image: { base64: string; mimeType: string; name: string; previewUri: string };
-    try {
-      if (originalMimeType !== null) {
-        const { File } = await import("expo-file-system");
-        const base64 = await new File(asset.uri).base64();
-        const fitted = await fitComposerImage({
-          uri: asset.uri,
-          mimeType: originalMimeType,
-          base64,
-        });
-        image = {
-          base64: fitted?.base64 ?? base64,
-          mimeType: originalMimeType,
-          name,
-          previewUri: fitted?.uri ?? asset.uri,
-        };
-      } else {
-        const rendered = await renderPhoto(asset.uri);
-        image = {
-          base64: rendered.base64,
-          mimeType: "image/jpeg",
-          name: /\.jpe?g$/i.test(name) ? name : `${name.replace(/\.[^.]+$/, "")}.jpg`,
-          previewUri: rendered.uri,
-        };
-      }
-    } catch {
-      error = m(msg("Failed to read ''{name}''.", { name }));
-      continue;
-    }
-
-    const sizeBytes = estimateBase64ByteSize(image.base64);
-    if (sizeBytes <= 0 || sizeBytes > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
-      error = m(msg("''{name}'' exceeds the 10 MB attachment limit.", { name }));
-      continue;
-    }
-
-    attachments.push({
-      id: uuidv4(),
-      type: "image",
-      name: image.name,
-      mimeType: image.mimeType,
-      sizeBytes,
-      dataUrl: `data:${image.mimeType};base64,${image.base64}`,
-      previewUri: image.previewUri,
-    });
   }
 
   return {
@@ -626,46 +576,21 @@ export async function convertPastedImagesToAttachments(input: {
       }
       const file = new File(uri);
       const reportedMimeType = file.type;
-      const sourceMimeType = reportedMimeType?.startsWith("image/")
+      const mimeType = reportedMimeType?.startsWith("image/")
         ? reportedMimeType
         : mimeTypeFromUri(uri);
-      let mimeType = isProviderSendTurnSupportedImageMimeType(sourceMimeType)
-        ? sourceMimeType
-        : "image/jpeg";
-      const rendered = mimeType === sourceMimeType ? null : await renderPhoto(uri);
-      const pastedBase64 = rendered?.base64 ?? (await file.base64());
-      const fitted = rendered ?? (await fitComposerImage({ uri, mimeType, base64: pastedBase64 }));
-      if (fitted !== null) {
-        temporaryUris.push(fitted.uri);
+      const pastedBase64 = await file.base64();
+      // Tangent(FORK-IMAGE-001): shrink or convert instead of dropping the image.
+      try {
+        const prepared = await prepareComposerImage({
+          base64: pastedBase64,
+          mimeType,
+          name: `pasted-image.${mimeType.split("/")[1] ?? "png"}`,
+        });
+        attachments.push({ id: uuidv4(), type: "image", ...prepared });
+      } catch (cause) {
+        error = cause instanceof Error ? cause.message : m(msg("Could not read a pasted image."));
       }
-      let base64 = fitted?.base64 ?? pastedBase64;
-      if (
-        rendered === null &&
-        estimateBase64ByteSize(base64) > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES
-      ) {
-        const jpeg = await renderPhoto(uri);
-        temporaryUris.push(jpeg.uri);
-        mimeType = "image/jpeg";
-        base64 = jpeg.base64;
-      }
-      const sizeBytes = estimateBase64ByteSize(base64);
-      if (sizeBytes <= 0 || sizeBytes > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
-        error =
-          sizeBytes > 0
-            ? m(msg("A pasted image exceeds the 10 MB attachment limit."))
-            : m(msg("Could not read a pasted image."));
-        continue;
-      }
-      const dataUrl = `data:${mimeType};base64,${base64}`;
-      attachments.push({
-        id: uuidv4(),
-        type: "image",
-        name: `pasted-image.${mimeType.split("/")[1] ?? "png"}`,
-        mimeType,
-        sizeBytes,
-        dataUrl,
-        previewUri: dataUrl,
-      });
     } catch (cause) {
       console.warn("Failed to read pasted image", uri, cause);
       error = m(msg("Could not read a pasted image."));
