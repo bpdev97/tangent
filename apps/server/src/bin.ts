@@ -35,6 +35,10 @@ if (
   } else if (command === "acp-mcp-bridge" || command === "acp-mcp-call") {
     const { runAcpMcpCliFastPath } = await import("./mcp/AcpMcpStdioBridge.ts");
     await runAcpMcpCliFastPath(command, process.argv.slice(3));
+  } else if (command === "shared-mcp-bridge") {
+    // Tangent(FORK-MCP-001)
+    const { runSharedMcpBridgeFastPath } = await import("./sharedMcpServers/sharedMcpBridge.ts");
+    await runSharedMcpBridgeFastPath();
   } else {
     enableCliCompileCache();
     // Windows desktop launches without stdin; attach before reading, except on fast paths using pipes.

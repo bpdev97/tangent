@@ -124,6 +124,8 @@ import { codexAppServerArgs, resolveCodexLaunchArgs } from "../../provider/codex
 import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+// Tangent(FORK-MCP-001)
+import { codexSharedMcpServers } from "@t3tools/provider-core/server/sharedMcpServers";
 import {
   MCP_APP_EXTENSION_ID,
   MCP_APP_MIME_TYPE,
@@ -1407,6 +1409,13 @@ function codexThreadRuntimeParams(input: {
       ...(input.threadId === null
         ? {}
         : { [`shell_environment_policy.set.${PortScanner.AGENT_THREAD_ENV}`]: input.threadId }),
+      // Tangent(FORK-MCP-001): per-server keys, like t3-code's, so launch-argument servers survive.
+      ...Object.fromEntries(
+        Object.entries(codexSharedMcpServers(input.threadId)).map(([name, server]) => [
+          `mcp_servers.${name}`,
+          server,
+        ]),
+      ),
       ...(t3Server === undefined
         ? {}
         : {
