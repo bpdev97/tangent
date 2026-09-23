@@ -1,3 +1,5 @@
+import { PERSONAL_MOBILE_DISTRIBUTION } from "../../../../downstream/mobile-config.ts";
+
 /**
  * The Expo dev client launches the app via
  * <scheme>://expo-development-client/?url=<packager> — that URL addresses
@@ -12,6 +14,11 @@ export function shouldHandleAppLink(url: string): boolean {
   return (
     !url.includes("expo-development-client") &&
     !url.includes("://expo-sharing") &&
-    !/^t3code(-dev|-preview)?:\/*$/.test(url)
+    !/^t3code(-dev|-preview)?:\/*$/.test(url) &&
+    ![
+      PERSONAL_MOBILE_DISTRIBUTION.scheme,
+      PERSONAL_MOBILE_DISTRIBUTION.developmentScheme,
+      PERSONAL_MOBILE_DISTRIBUTION.previewScheme,
+    ].some((scheme) => url.replace(/\/+$/, "") === `${scheme}:`)
   );
 }
