@@ -40,6 +40,8 @@ describe("buildPeriodColumns", () => {
       { provider: "opencode", value: 0 },
       { provider: "antigravity", value: 0 },
       { provider: "pi", value: 5 },
+      // Tangent(FORK-HERMES-001)
+      { provider: "hermes", value: 0 },
     ]);
   });
 });
