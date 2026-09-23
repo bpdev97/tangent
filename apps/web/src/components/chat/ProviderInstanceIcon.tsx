@@ -16,6 +16,8 @@ import {
   OpenAI,
   OpenRouterIcon,
 } from "../Icons";
+// Tangent(FORK-HERMES-001)
+import { HermesIcon } from "../HermesIcon";
 
 import { cn } from "~/lib/utils";
 import { providerClients } from "../settings/providerDriverMeta";
@@ -35,11 +37,13 @@ const PROVIDER_ICON_BY_PROVIDER: Partial<Record<ProviderDriverKind, Icon>> = {
   [ProviderDriverKind.make("anthropic")]: AnthropicIcon,
   [ProviderDriverKind.make("openrouter")]: OpenRouterIcon,
   [ProviderDriverKind.make("ollama")]: OllamaIcon,
+  [ProviderDriverKind.make("hermes")]: HermesIcon,
 };
 
 const PROVIDER_TEXT_COLOR_BY_PROVIDER: Partial<Record<ProviderDriverKind, string>> = {
   [ProviderDriverKind.make("codex")]: "text-black dark:text-white",
   [ProviderDriverKind.make("claudeAgent")]: "text-[#d97757]",
+  [ProviderDriverKind.make("hermes")]: "text-[#171717] dark:text-[#E5E5E5]",
   [ProviderDriverKind.make("antigravity")]: "text-[#5b87bf]",
   [ProviderDriverKind.make("openai")]: "text-black dark:text-white",
   [ProviderDriverKind.make("anthropic")]: "text-black dark:text-white",
