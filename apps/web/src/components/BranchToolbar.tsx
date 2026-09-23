@@ -1,6 +1,7 @@
 import { ComposerContextLabel } from "./ComposerContextLabel";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { isGenericChatProject } from "@t3tools/shared/genericChat";
 import {
   ChevronDownIcon,
   FolderGit2Icon,
@@ -603,6 +604,8 @@ export const BranchToolbar = memo(function BranchToolbar({
   if (!hasActiveThread || !activeProject) return null;
 
   if (layout === "panel") {
+    // Tangent(FORK-CHAT-001): chats have no checkout, worktree, or branch to choose.
+    if (isGenericChatProject(activeProject)) return null;
     return (
       <div className="flex w-full flex-col" data-thread-panel-run-context>
         {panelSection !== "branch" ? (

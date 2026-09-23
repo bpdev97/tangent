@@ -27,6 +27,7 @@ import * as Schema from "effect/Schema";
 
 import * as ServerConfig from "./config.ts";
 import * as ServiceLauncherClient from "./cloud/serviceLauncherClient.ts";
+import { ensureGenericChatProject } from "./genericChat.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import * as EffectWorker from "./orchestration-v2/EffectWorker.ts";
@@ -527,6 +528,16 @@ const make = (options?: StartupOptions) =>
         ).pipe(Effect.map((targets): AutoBootstrapWelcomeTargets => targets)),
       });
       yield* Effect.logInfo("V2 orchestration recovery completed", recovery);
+      // Tangent(FORK-CHAT-001): create or repair the managed Chats project.
+      yield* runStartupPhase(
+        "generic-chat.ensure",
+        ensureGenericChatProject().pipe(
+          Effect.provideService(Crypto.Crypto, crypto),
+          Effect.catch((cause) =>
+            Effect.logWarning("failed to ensure the Chats project", { cause }),
+          ),
+        ),
+      );
       yield* runStartupPhase(
         "projects.auto-pull",
         Effect.gen(function* () {
