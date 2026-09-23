@@ -52,6 +52,8 @@ import { resolveCodexHomeLayout } from "../provider/Drivers/CodexHomeLayout.ts";
 import { resolveAntigravityInstanceDirectories } from "../provider/antigravityAuthSupport.ts";
 import { mergeProviderInstanceEnvironment } from "../provider/ProviderInstanceEnvironment.ts";
 import { readOpenCodeUsage } from "./opencodeUsageReader.ts";
+// Tangent(FORK-HERMES-001)
+import { hermesCodexInstances, scanHermesUsage } from "./hermesUsageReader.ts";
 import { readAntigravityUsage } from "./antigravityUsageReader.ts";
 import { readCursorAccountUsage } from "./cursorUsageReader.ts";
 import { resolveModelAliases, UsageAggregator } from "./usageAggregation.ts";
@@ -323,6 +325,8 @@ export const make = Effect.gen(function* () {
           instanceId: ProviderInstanceId.make(driver),
         });
       }
+      // Tangent(FORK-HERMES-001): Hermes's Codex runtime writes to the Codex home it runs with.
+      if (driver === "codex") instances.push(...hermesCodexInstances(settings.providerInstances));
       for (const instance of instances) {
         const environment = mergeProviderInstanceEnvironment(instance.environment, hostEnvironment);
         const provider = driver === "claudeAgent" ? "claude" : driver;
@@ -621,6 +625,27 @@ export const make = Effect.gen(function* () {
         files: result.missing && !result.error ? null : result.files,
         status: result.error ? "partial" : "ok",
         ...(result.error ? { message: "Some OpenCode history could not be read." } : {}),
+      });
+    }
+    // Tangent(FORK-HERMES-001): each Hermes profile is a usage source of its own.
+    const hermesSources = yield* scanHermesUsage(
+      [
+        hostEnvironment,
+        ...Object.values(settings.providerInstances)
+          .filter((instance) => instance.driver === "hermes")
+          .map((instance) =>
+            mergeProviderInstanceEnvironment(instance.environment, hostEnvironment),
+          ),
+      ],
+      windowStartMs,
+    ).pipe(
+      Effect.provideService(Path.Path, path),
+      Effect.provideService(FileSystem.FileSystem, fileSystem),
+    );
+    for (const source of hermesSources) {
+      scanned.push({
+        ...source,
+        volumeId: yield* Effect.promise(() => readDirectoryVolumeId(source.dir)),
       });
     }
     const antigravityRoots = yield* envRoots("ANTIGRAVITY_DATA_DIR", [
