@@ -6,6 +6,7 @@ import * as NodeModule from "node:module";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
+import { PERSONAL_DISTRIBUTION } from "../../../downstream/config.ts";
 import { ensureElectronRuntime } from "./ensure-electron-runtime.mjs";
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
@@ -15,11 +16,13 @@ const repoRoot = NodePath.resolve(desktopDir, "..", "..");
 const devBundleIdSuffix = NodePath.basename(repoRoot)
   .toLowerCase()
   .replaceAll(/[^a-z0-9]+/g, "");
-const APP_DISPLAY_NAME = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)";
+// Tangent(FORK-DIST-001): the launcher bundle uses Tangent's identity.
+const tangent = PERSONAL_DISTRIBUTION.macos;
+const APP_DISPLAY_NAME = isDevelopment ? tangent.developmentProductName : tangent.productName;
 const APP_BUNDLE_ID = isDevelopment
-  ? `com.t3tools.t3code.dev.${devBundleIdSuffix || "local"}`
-  : "com.t3tools.t3code";
-const APP_PROTOCOL_SCHEMES = isDevelopment ? ["t3code-dev"] : ["t3code"];
+  ? `${tangent.appId}.dev.${devBundleIdSuffix || "local"}`
+  : tangent.appId;
+const APP_PROTOCOL_SCHEMES = isDevelopment ? [tangent.developmentScheme] : [tangent.scheme];
 const LAUNCHER_VERSION = 19;
 const developmentMacIconPngPath = NodePath.join(
   repoRoot,
