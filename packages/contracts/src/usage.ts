@@ -20,6 +20,8 @@ export const UsageProviderKind = Schema.Literals([
   "antigravity",
   "pi",
   "muse",
+  // Tangent(FORK-HERMES-001)
+  "hermes",
 ]);
 export type UsageProviderKind = typeof UsageProviderKind.Type;
 

@@ -36,4 +36,9 @@ export interface ProviderMaintenanceCommandAction {
    * must update that home and not the default one.
    */
   readonly env?: NodeJS.ProcessEnv;
+  /**
+   * Tangent(FORK-HERMES-001): wraps the command run, e.g. to drain and stop
+   * provider processes first. A failure is reported as the update's failure.
+   */
+  readonly guard?: <A, E, R>(run: Effect.Effect<A, E, R>) => Effect.Effect<A, E | Error, R>;
 }

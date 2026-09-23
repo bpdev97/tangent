@@ -487,7 +487,9 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
               );
             }
             yield* setRunningMessage(`Running ${describeCommand(command)}`);
-            const result = yield* runMaintenanceCommand(command, setRunningMessage);
+            // Tangent(FORK-HERMES-001): optional provider guard around the command.
+            const run = runMaintenanceCommand(command, setRunningMessage);
+            const result = yield* fresh.update.guard ? fresh.update.guard(run) : run;
             const finishedAt = yield* nowIso;
             if (result.timedOut || result.exitCode !== 0) {
               yield* Effect.logWarning("Provider update command failed", {

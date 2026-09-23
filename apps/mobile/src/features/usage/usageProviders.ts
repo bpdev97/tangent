@@ -10,6 +10,8 @@ export const PROVIDER_ORDER: readonly UsageProviderKind[] = [
   "antigravity",
   "pi",
   "muse",
+  // Tangent(FORK-HERMES-001)
+  "hermes",
 ];
 
 /** The usage series a provider driver reports under, or null for drivers without one. */
@@ -27,6 +29,7 @@ export const PROVIDER_LABEL: Record<UsageProviderKind, string> = {
   antigravity: "Antigravity",
   pi: "Pi",
   muse: "Muse Code",
+  hermes: "Hermes",
 };
 
 export function useProviderColors(): Record<UsageProviderKind, string> {
@@ -40,6 +43,7 @@ export function useProviderColors(): Record<UsageProviderKind, string> {
     antigravity: "#8c7bd1",
     pi: "#4d9f8a",
     muse: "#0866ff",
+    hermes: "#c9a227",
   };
 }
 
