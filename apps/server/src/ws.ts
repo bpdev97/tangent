@@ -235,6 +235,7 @@ import * as SessionStore from "./auth/SessionStore.ts";
 import { failEnvironmentAuthInvalid, failEnvironmentInternal } from "./auth/http.ts";
 import * as RelayClient from "@t3tools/shared/relayClient";
 import * as PersonalPushRelay from "./personalPush/PersonalPushRelayClient.ts";
+import { normalizeUploadedImage } from "./imageNormalization.ts";
 import {
   sameUsageLimitCommandCoverage,
   withUsageLimitsCommands,
@@ -304,6 +305,19 @@ const persistChatAttachments = Effect.fn("ws.assets.persistChatAttachments")(fun
           message: `Attachment ${attachment.name} size does not match its payload.`,
         });
       }
+      // Tangent(FORK-IMAGE-001): HEIC becomes JPEG before metadata and paths exist.
+      const image = yield* normalizeUploadedImage({
+        bytes,
+        mimeType: attachment.mimeType,
+        name: attachment.name,
+      }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new PersistChatAttachmentsError({
+              message: `Attachment ${attachment.name}: ${cause.message}`,
+            }),
+        ),
+      );
       const rawId = createDeterministicAttachmentId(input.threadId, `${input.messageId}:${index}`);
       if (rawId === null) {
         return yield* new PersistChatAttachmentsError({
@@ -313,12 +327,15 @@ const persistChatAttachments = Effect.fn("ws.assets.persistChatAttachments")(fun
       const persisted = {
         type: "image" as const,
         id: ChatAttachmentId.make(rawId),
-        name: attachment.name,
-        mimeType: attachment.mimeType,
-        sizeBytes: attachment.sizeBytes,
+        name: image.name,
+        mimeType: image.mimeType,
+        sizeBytes: image.bytes.byteLength,
       };
       yield* fileSystem
-        .writeFile(path.join(config.attachmentsDir, attachmentRelativePath(persisted)!), bytes)
+        .writeFile(
+          path.join(config.attachmentsDir, attachmentRelativePath(persisted)!),
+          image.bytes,
+        )
         .pipe(
           Effect.mapError(
             (cause) =>

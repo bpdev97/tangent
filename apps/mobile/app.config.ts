@@ -11,6 +11,8 @@ Object.assign(process.env, repoEnv);
 
 const APP_VARIANT = resolveAppVariant(repoEnv.APP_VARIANT);
 const personalMobile = PERSONAL_MOBILE_DISTRIBUTION;
+const CAMERA_PERMISSION =
+  "Allow T3 Code to access your camera so you can take photos and scan pairing QR codes.";
 const isIosPersonalTeamBuild = repoEnv.T3CODE_IOS_PERSONAL_TEAM === "1";
 const runtimeVersionPolicy =
   process.env.MOBILE_VERSION_POLICY ??
@@ -368,13 +370,17 @@ const config: ExpoConfig = {
     [
       "expo-camera",
       {
-        cameraPermission: "Allow T3 Code to access your camera so you can scan pairing QR codes.",
+        // Tangent(FORK-IMAGE-001): the camera also captures composer photos.
+        cameraPermission: CAMERA_PERMISSION,
         microphonePermission: false,
         barcodeScannerEnabled: true,
         recordAudioAndroid: false,
       },
     ],
-    ["expo-image-picker", { photosPermission: false, microphonePermission: false }],
+    [
+      "expo-image-picker",
+      { photosPermission: false, cameraPermission: CAMERA_PERMISSION, microphonePermission: false },
+    ],
     [
       "expo-splash-screen",
       {
