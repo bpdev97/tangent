@@ -14,6 +14,11 @@ import {
   type CursorAdapterV2DriverEnv,
 } from "@t3tools/provider-cursor/server";
 import { GrokAdapterV2Driver, type GrokAdapterV2DriverEnv } from "@t3tools/provider-grok/server";
+// Tangent(FORK-HERMES-001)
+import {
+  HermesAdapterV2Driver,
+  type HermesAdapterV2DriverEnv,
+} from "./Adapters/HermesAdapterV2.ts";
 import {
   OpenCodeAdapterV2Driver,
   type OpenCodeAdapterV2DriverEnv,
@@ -27,6 +32,7 @@ export type BuiltInProviderAdapterDriversV2Env =
   | CodexAdapterV2DriverEnv
   | CursorAdapterV2DriverEnv
   | GrokAdapterV2DriverEnv
+  | HermesAdapterV2DriverEnv
   | OpenCodeAdapterV2DriverEnv
   | PiAdapterV2DriverEnv;
 
@@ -39,6 +45,7 @@ const BUILT_IN_PROVIDER_ADAPTER_DRIVERS_V2: ReadonlyArray<
   OpenCodeAdapterV2Driver,
   GrokAdapterV2Driver,
   PiAdapterV2Driver,
+  HermesAdapterV2Driver,
   AcpRegistryAdapterV2Driver,
 ];
 

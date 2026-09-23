@@ -59,6 +59,8 @@ import type {
   TranscriptUsageFormat,
   UsageRecord,
 } from "@t3tools/provider-core/server/usage";
+// Tangent(FORK-HERMES-001)
+import { hermesCodexInstances } from "./hermesUsageReader.ts";
 import { resolveModelAliases, UsageAggregator } from "./usageAggregation.ts";
 import { createOverrideRateTable, parseRateTable, type RateTable } from "./usagePricing.ts";
 import {
@@ -350,6 +352,10 @@ export const make = Effect.gen(function* () {
       .map(([id, instance]) => [ProviderInstanceId.make(id), instance, true] as const);
     if (!Object.hasOwn(settings.providerInstances, driver.driverKind)) {
       entries.push([ProviderInstanceId.make(driver.driverKind), {}, false]);
+    }
+    // Tangent(FORK-HERMES-001): Hermes's Codex runtime writes to the Codex home it runs with.
+    if (driver.driverKind === "codex") {
+      entries.push(...hermesCodexInstances(settings.providerInstances));
     }
     const decodeConfig = Schema.decodeUnknownOption(driver.configSchema);
     return yield* Effect.forEach(
