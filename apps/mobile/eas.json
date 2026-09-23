@@ -69,6 +69,18 @@
       "ios": {
         "image": "macos-tahoe-26.6-xcode-27.1"
       }
+    },
+    "personal": {
+      "extends": "production",
+      "channel": "personal",
+      "environment": "production",
+      "env": {
+        "APP_VARIANT": "production",
+        "NODE_OPTIONS": "--max-old-space-size=4096"
+      },
+      "node": "24.13.1",
+      "corepack": false,
+      "pnpm": "11.10.0"
     }
   },
   "submit": {
@@ -85,6 +97,13 @@
       },
       "android": {
         "track": "internal"
+      }
+    },
+    "personal": {
+      "ios": {
+        "ascAppId": "6790012550",
+        "appleTeamId": "BL9B7SKPHX",
+        "sku": "t3-code-personal"
       }
     }
   }
