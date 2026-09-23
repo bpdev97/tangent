@@ -91,6 +91,7 @@ import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
 import { ExpandableText } from "./ExpandableText";
 import { ProviderInstanceCard } from "./ProviderInstanceCard";
 import { UsageProviderSettings } from "./UsageProviderSettings";
+import { SharedMcpServersSettings } from "./SharedMcpServersSettings";
 import { ProviderSetupSection, readAntigravityAuthMethod } from "./ProviderSetupSection";
 import { ProviderAuthenticationSection } from "./ProviderAuthenticationSection";
 import { CodexSetupSection, CodexManagedRuntimeFields } from "./CodexSetupSection";
@@ -1253,6 +1254,14 @@ export function EnvironmentProviderSettings({
         environmentLabel={environmentLabel}
         sources={settings.usageLimitSources}
         cursorKeychainUsageEnabled={settings.cursorKeychainUsageEnabled}
+        readOnly={readOnly}
+      />
+
+      {/* Tangent(FORK-MCP-001) */}
+      <SharedMcpServersSettings
+        environmentId={environmentId}
+        servers={settings.mcpServers}
+        providers={serverProviders}
         readOnly={readOnly}
       />
 

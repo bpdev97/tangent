@@ -65,6 +65,7 @@ import {
 } from "../../mcp/AcpMcpOverAcpBridge.ts";
 import { mcpToolPresentation } from "../../provider/McpToolPresentation.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import { acpSharedMcpServers } from "../../sharedMcpServers/SharedMcpServerSessions.ts";
 import {
   applyAcpAgentTerminalUpdate,
   acpContentBlockDisplayText,
@@ -683,8 +684,11 @@ interface AcpMcpContext {
 function acpMcpContext(threadId: ThreadId | null, self: SelfInvocation): AcpMcpContext {
   if (threadId === null) return { servers: [], acpServers: [] };
   const session = McpProviderSession.readMcpProviderSession(threadId);
+  // Tangent(FORK-MCP-001): agents that take MCP-over-ACP send only
+  // `acpServers`, so shared stdio servers ride along in both lists.
+  const shared = acpSharedMcpServers(threadId, self);
   if (session === undefined) {
-    return { servers: [], acpServers: [] };
+    return { servers: shared, acpServers: shared };
   }
   // Stdio is ACP's required baseline MCP transport. Agents that advertise
   // optional http support still routinely fail to wire injected http servers
@@ -694,6 +698,7 @@ function acpMcpContext(threadId: ThreadId | null, self: SelfInvocation): AcpMcpC
   // travels via environment variables, never the command line.
   return {
     servers: [
+      ...shared, // Tangent(FORK-MCP-001)
       {
         name: "t3-code",
         command: self.command,
@@ -705,7 +710,7 @@ function acpMcpContext(threadId: ThreadId | null, self: SelfInvocation): AcpMcpC
         ],
       },
     ],
-    acpServers: [{ type: "acp", name: "t3-code", serverId: "t3-code" }],
+    acpServers: [...shared, { type: "acp", name: "t3-code", serverId: "t3-code" }],
     endpoint: session.endpoint,
     authorization: session.authorizationHeader,
     processEnvironment: {
@@ -6725,7 +6730,10 @@ export function makeAcpAdapterV2(
           const prompt: Array<EffectAcpSchema.ContentBlock> = [];
           const instructionState = {
             interactionMode: turnInput.runtimePolicy.interactionMode,
-            hasT3Mcp: acpMcpServers(turnInput.threadId, self).length > 0,
+            // Tangent(FORK-MCP-001): shared servers alone do not bring t3-code.
+            hasT3Mcp: acpMcpServers(turnInput.threadId, self).some(
+              (server) => server.name === "t3-code",
+            ),
           } satisfies T3AcpInstructionState;
           const previousInstructionState = (yield* Ref.get(promptInstructionStates)).get(sessionId);
           const messageText = providerMessageTextWithAttachmentPaths({
