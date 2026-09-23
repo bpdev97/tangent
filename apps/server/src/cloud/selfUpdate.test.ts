@@ -49,7 +49,7 @@ const releaseHttpClient = (order: string[], urls: string[], beforeDownload?: Eff
         ).join("");
         return HttpClientResponse.fromWeb(
           request,
-          new Response(`${hex}  t3-1.1.0-linux-x64.tar.gz\n`),
+          new Response(`${hex}  tangent-server-1.1.0-linux-x64.tar.gz\n`),
         );
       }
       if (beforeDownload) yield* beforeDownload;
@@ -309,7 +309,7 @@ it.layer(NodeServices.layer)("server self update", (it) => {
       // The release comes from the policy's mirror, not GitHub.
       expect(urls.length).toBeGreaterThan(0);
       for (const url of urls)
-        expect(url).toMatch(/^https:\/\/updates\.example\.com\/t3code\/v1\.[12]\.0\//);
+        expect(url).toMatch(/^https:\/\/updates\.example\.com\/t3code\/personal-v1\.[12]\.0\//);
     }),
   );
 
@@ -481,7 +481,7 @@ it.layer(NodeServices.layer)("pruning runtimes on start", (it) => {
       if (input.servicePlistThroughLink) yield* fs.symlink(realHome, programHome);
       const program = path.join(programHome, "runtime", "versions", input.servicePlistStarts, "t3");
       yield* fs.writeFileString(
-        path.join(agentsDir, "com.t3tools.t3code.service.plist"),
+        path.join(agentsDir, "com.bpdev97.tangent.service.plist"),
         `<plist><dict>\n<key>ProgramArguments</key>\n<array>\n<string>${program}</string>\n<string>__service-launcher</string>\n</array>\n</dict></plist>\n`,
       );
     }

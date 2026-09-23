@@ -1,4 +1,5 @@
 import type { NavigationState, PartialState } from "@react-navigation/native";
+import { PERSONAL_MOBILE_DISTRIBUTION } from "../../../../downstream/mobile-config.ts";
 
 /**
  * The Expo dev client launches the app via
@@ -12,7 +13,11 @@ export function shouldHandleAppLink(url: string, cloudConfigured: boolean): bool
   return (
     !route.includes("expo-development-client") &&
     !route.includes("://expo-sharing") &&
-    !/^t3code(-dev|-preview)?:\/*$/.test(url) &&
+    ![
+      PERSONAL_MOBILE_DISTRIBUTION.scheme,
+      PERSONAL_MOBILE_DISTRIBUTION.developmentScheme,
+      PERSONAL_MOBILE_DISTRIBUTION.previewScheme,
+    ].some((scheme) => url.replace(/\/+$/, "") === `${scheme}:`) &&
     (cloudConfigured || !CLOUD_ONLY_LINK_PATH.test(route))
   );
 }
