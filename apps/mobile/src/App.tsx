@@ -53,6 +53,7 @@ import { environmentThreadShells, threadEnvironment } from "./state/threads";
 import { environmentShell } from "./state/shell";
 import { OverlayPortalHost } from "./components/ui/OverlayPortal";
 import { PERSONAL_MOBILE_DISTRIBUTION } from "../../../downstream/mobile-config";
+import { AgentAwarenessConnectionBridge } from "./features/agent-awareness/AgentAwarenessConnectionBridge";
 import { shouldHandleAppLink, restoreDraftLinkState } from "./lib/appLinking";
 import { hasCloudPublicConfig } from "./features/cloud/publicConfig";
 import { takeScheduledTaskNewLink } from "./features/settings/scheduled-task-editor-state";
@@ -245,6 +246,8 @@ function AppContent() {
     <>
       <SplashScreenCoordinator />
       <SubscriptionUsageCoordinator />
+      {/* Tangent(FORK-PUSH-001) */}
+      <AgentAwarenessConnectionBridge />
       <GestureHandlerRootView className="flex-1">
         <KeyboardProvider statusBarTranslucent>
           <SafeAreaProvider>
