@@ -99,6 +99,9 @@ minimumReleaseAgeExclude:
   - cn@0.3.2
 
 overrides:
+  # Tangent(FORK-IMAGE-001): libheif-js 1.23.2 rejects valid tiled HEIC fixtures; keep the
+  # verified decoder.
+  "heic-decode>libheif-js": 1.19.8
   # Earlier React Navigation declarations create a circular type alias in TypeScript 7.
   "@react-navigation/core": 7.21.13
   # The dbus-next patch drops usocket from the package, but pnpm resolves from the

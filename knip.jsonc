@@ -30,7 +30,12 @@
       ],
       // Keep the transitive Effect runtime pinned for standalone npm installs.
       // The Vite+ web build prerequisite.
-      "ignoreDependencies": ["@effect/platform-node-shared", "@t3tools/web"],
+      "ignoreDependencies": [
+        "@effect/platform-node-shared",
+        "@t3tools/web",
+        // Tangent(FORK-IMAGE-001): pins heic-decode's WASM dependency for npm installs.
+        "libheif-js",
+      ],
     },
     "apps/desktop": {
       // Electron loads these bundles by filename rather than importing them.
