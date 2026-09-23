@@ -990,13 +990,14 @@ export function NewTaskDraftScreen(props: {
   });
   const showBranchLoading = flow.branchesLoading && flow.availableBranches.length === 0;
 
-  async function handlePickMedia(): Promise<void> {
+  async function handlePickMedia(source?: "library" | "camera"): Promise<void> {
     if (isComposerInteractionLocked || voiceInput.isBusy) {
       return;
     }
     const capabilities = selectedEnvironmentServerConfig?.environment.capabilities;
     const insertion = flow.draftKey ? captureComposerDraftInsertion(flow.draftKey) : undefined;
     const result = await pickComposerMedia({
+      source, // Tangent(FORK-IMAGE-001)
       existingCount:
         flow.draftKey && insertion
           ? countComposerDraftAttachmentsAfterSelection(flow.draftKey, insertion)
