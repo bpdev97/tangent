@@ -96,6 +96,7 @@ import {
 } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 import { BackgroundActivitySettingsRow } from "./BackgroundActivitySettings";
+import { PersonalPushRelaySettingsSection } from "./PersonalPushRelaySettings";
 
 const RESPONSE_STREAMING_MODE_LABELS: Record<ResponseStreamingMode, string> = {
   turn: "Wait for the full response",
@@ -1897,6 +1898,9 @@ export function GeneralSettingsPanel() {
           }
         />
       </SettingsSection>
+
+      {/* Tangent(FORK-PUSH-001) */}
+      <PersonalPushRelaySettingsSection />
 
       <SettingsSection id="about" title="About">
         {isElectron || HOSTED_APP_CHANNEL ? (
