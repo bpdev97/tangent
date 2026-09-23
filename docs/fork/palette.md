@@ -15,9 +15,15 @@ Tangent maps them to the palette's existing next and previous navigation.
 
 ## Upstream hooks
 
-Planned: `apps/web/src/components/CommandPalette.tsx` and
-`apps/web/src/components/CommandPalette.logic.ts`, mapping the two keys onto existing navigation,
-with a test in `CommandPalette.logic.test.ts`.
+Each is marked `Tangent(FORK-PALETTE-001)`:
+
+- `apps/web/src/components/CommandPalette.logic.ts`: `getCommandPaletteControlNavigationKey`, the
+  pure key mapping.
+- `apps/web/src/components/CommandPalette.tsx`: the first check in the palette input's
+  `handleKeyDown` replays Control-N or Control-P as an `ArrowDown` or `ArrowUp` keydown on the
+  same input, so the list's existing highlight, wraparound, and scrolling apply. It runs before
+  keybinding resolution, so these chords do nothing else while the palette is open.
+- `apps/web/src/components/CommandPalette.logic.test.ts`: the mapping test.
 
 ## Resolving conflicts
 
