@@ -43,6 +43,7 @@ import * as ProjectService from "../project/ProjectService.ts";
 import * as McpProviderSession from "../mcp/McpProviderSession.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
+import { prepareSharedMcpServers } from "../sharedMcpServers/SharedMcpServerSessions.ts";
 import * as EventSink from "./EventSink.ts";
 import * as IdAllocator from "./IdAllocator.ts";
 import * as ProviderEventIngestor from "./ProviderEventIngestor.ts";
@@ -1309,6 +1310,12 @@ export const layerWithOptions = (
               Effect.uninterruptible,
             );
             if (attached !== undefined) {
+              // Tangent(FORK-MCP-001)
+              yield* prepareSharedMcpServers(
+                serverSettings,
+                input.threadId,
+                input.providerInstanceId,
+              );
               const prepared = yield* prepareMcpSession(input.threadId, input.providerInstanceId);
               preparedForCleanup = prepared;
               if (prepared.mcpCredentialId !== undefined) {
@@ -2065,6 +2072,12 @@ export const layerWithOptions = (
                       cause,
                     }),
                 ),
+              );
+              // Tangent(FORK-MCP-001)
+              yield* prepareSharedMcpServers(
+                serverSettings,
+                input.threadId,
+                input.modelSelection.instanceId,
               );
               const prepared = yield* prepareMcpSession(
                 input.threadId,
