@@ -24,6 +24,10 @@ export const CLI_RUNTIME_EXTERNAL_PREFIXES = [
   "@clerk/electron-passkeys",
   "node-gyp-build",
   "node-addon-api",
+  // Tangent(FORK-IMAGE-001): the HEIC worker resolves these from disk, including libheif's WASM.
+  "heic-decode",
+  "libheif-js",
+  "jpeg-js",
   "bufferutil",
   "utf-8-validate",
 ] as const;
