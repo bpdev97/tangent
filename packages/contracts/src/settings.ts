@@ -46,6 +46,7 @@ import {
 } from "./providerInstance.ts";
 import { PullRequestMergeMethod } from "./pullRequest.ts";
 import { PersonalPushRelaySettings, PersonalPushRelaySettingsPatch } from "./personalPush.ts";
+import { SharedMcpServers } from "./sharedMcpServers.ts";
 
 export const TimestampFormat = Schema.Literals(["locale", "12-hour", "24-hour"]);
 export type TimestampFormat = typeof TimestampFormat.Type;
@@ -1213,6 +1214,8 @@ export const ServerSettings = Schema.Struct({
   removeAgentCreditsOnMerge: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   // Tangent(FORK-PUSH-001): the password is stored in ServerSecretStore.
   personalPushRelay: PersonalPushRelaySettings,
+  // Tangent(FORK-MCP-001): header values are stored in ServerSecretStore.
+  mcpServers: SharedMcpServers.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   sourceControlWritingStyle: SourceControlWritingStyleSettings.pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
@@ -1474,6 +1477,7 @@ export const ServerSettingsPatch = Schema.Struct({
   branchNameInstructions: Schema.optionalKey(TrimmedString),
   removeAgentCreditsOnMerge: Schema.optionalKey(Schema.Boolean),
   personalPushRelay: Schema.optionalKey(PersonalPushRelaySettingsPatch), // Tangent(FORK-PUSH-001)
+  mcpServers: Schema.optionalKey(SharedMcpServers), // Tangent(FORK-MCP-001)
   sourceControlWritingStyle: Schema.optionalKey(
     Schema.Struct({
       mode: Schema.optionalKey(SourceControlWritingStyleMode),

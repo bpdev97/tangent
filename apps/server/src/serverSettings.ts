@@ -53,6 +53,7 @@ import {
   sourceControlHostSecretName,
 } from "./sourceControl/sourceControlHostSecrets.ts";
 import * as PersonalPushSettingsSecret from "./personalPush/settingsSecret.ts";
+import * as SharedMcpServerSecrets from "./sharedMcpServers/settingsSecret.ts";
 
 import { mapSettingsSecrets, SECRET_REDACTED, type SettingsSecret } from "./settingsSecrets.ts";
 
@@ -130,12 +131,14 @@ const normalizeServerSettings = (
   );
 
 export function redactServerSettingsForClient(settings: ServerSettings): ServerSettings {
-  // Tangent(FORK-PUSH-001)
-  return PersonalPushSettingsSecret.redactPersonalPushRelayForClient(
-    mapSettingsSecrets(settings, (secret) =>
-      secret.sensitive
-        ? { value: "", redacted: secret.redacted || secret.value.length > 0 }
-        : { value: secret.value, redacted: false },
+  // Tangent(FORK-PUSH-001), Tangent(FORK-MCP-001)
+  return SharedMcpServerSecrets.redactSharedMcpServersForClient(
+    PersonalPushSettingsSecret.redactPersonalPushRelayForClient(
+      mapSettingsSecrets(settings, (secret) =>
+        secret.sensitive
+          ? { value: "", redacted: secret.redacted || secret.value.length > 0 }
+          : { value: secret.value, redacted: false },
+      ),
     ),
   );
 }
@@ -842,6 +845,15 @@ const make = Effect.gen(function* () {
             (cause) => new ServerSettingsError({ settingsPath, operation: "read-secret", cause }),
           ),
         );
+      // Tangent(FORK-MCP-001)
+      const mcpServers = yield* SharedMcpServerSecrets.materializeSharedMcpServerHeaders(
+        settings.mcpServers,
+        secretStore,
+      ).pipe(
+        Effect.mapError(
+          (cause) => new ServerSettingsError({ settingsPath, operation: "read-secret", cause }),
+        ),
+      );
       return {
         ...mapSettingsSecrets(settings, (secret) => ({
           value:
@@ -851,6 +863,7 @@ const make = Effect.gen(function* () {
           redacted: secret.sensitive && secret.kind === "environment" && secret.redacted,
         })),
         personalPushRelay,
+        mcpServers,
       };
     });
 
@@ -939,7 +952,20 @@ const make = Effect.gen(function* () {
         next.personalPushRelay,
       );
       changes.push(...personalPush.changes);
-      return { settings: { ...settings, personalPushRelay: personalPush.relay }, changes };
+      // Tangent(FORK-MCP-001)
+      const sharedMcp = SharedMcpServerSecrets.persistSharedMcpServerHeaders(
+        current.mcpServers,
+        next.mcpServers,
+      );
+      changes.push(...sharedMcp.changes);
+      return {
+        settings: {
+          ...settings,
+          personalPushRelay: personalPush.relay,
+          mcpServers: sharedMcp.servers,
+        },
+        changes,
+      };
     });
 
   const rollbackSettingsSecretWrites = (
