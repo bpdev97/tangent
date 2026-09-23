@@ -69,6 +69,7 @@ import {
   sourceControlHostSecretName,
   writeSecretFieldValues,
 } from "./sourceControl/sourceControlHostSecrets.ts";
+import * as PersonalPushSettingsSecret from "./personalPush/settingsSecret.ts";
 
 export {
   resolveReviewGuideModelSelection,
@@ -246,7 +247,13 @@ export function redactServerSettingsForClient(settings: ServerSettings): ServerS
   const sourceControlHosts = mapSlotValues(settings.sourceControlHosts, (_slot, value) =>
     redactSecret(value),
   );
-  return { ...settings, providerInstances, usageLimitSources, sourceControlHosts };
+  // Tangent(FORK-PUSH-001)
+  return PersonalPushSettingsSecret.redactPersonalPushRelayForClient({
+    ...settings,
+    providerInstances,
+    usageLimitSources,
+    sourceControlHosts,
+  });
 }
 
 export function applyProviderInstanceMutation(
@@ -1032,6 +1039,16 @@ const make = Effect.gen(function* () {
           Option.isSome(secret) ? textDecoder.decode(secret.value) : "",
         );
       }
+      // Tangent(FORK-PUSH-001)
+      const personalPushRelay =
+        yield* PersonalPushSettingsSecret.materializePersonalPushRelayPassword(
+          settings.personalPushRelay,
+          secretStore,
+        ).pipe(
+          Effect.mapError(
+            (cause) => new ServerSettingsError({ settingsPath, operation: "read-secret", cause }),
+          ),
+        );
       return {
         ...settings,
         providerInstances: providerInstances as ServerSettings["providerInstances"],
@@ -1041,6 +1058,7 @@ const make = Effect.gen(function* () {
             ? (storedSecrets.get(sourceControlHostSecretName(slot)) ?? "")
             : value,
         ),
+        personalPushRelay,
       };
     });
 
@@ -1182,6 +1200,12 @@ const make = Effect.gen(function* () {
         });
       }
 
+      // Tangent(FORK-PUSH-001)
+      const personalPush = PersonalPushSettingsSecret.persistPersonalPushRelayPassword(
+        next.personalPushRelay,
+      );
+      changes.push(...personalPush.changes);
+
       // Hand-edited plaintext not yet in the store, so the redaction marker can move it there.
       const inlineSecrets = new Map(
         sourceControlHostSecretSlots(current.sourceControlHosts).flatMap((slot) =>
@@ -1220,6 +1244,7 @@ const make = Effect.gen(function* () {
           providerInstances: providerInstances as ServerSettings["providerInstances"],
           usageLimitSources: usageLimitSources as ServerSettings["usageLimitSources"],
           sourceControlHosts,
+          personalPushRelay: personalPush.relay,
         },
         changes,
       };
