@@ -16,6 +16,8 @@ import * as Stream from "effect/Stream";
 import { Argument, Command } from "effect/unstable/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
+import { PERSONAL_MOBILE_DISTRIBUTION } from "../downstream/mobile-config.ts";
+
 export type NativePlatform = "ios" | "android";
 const NativeClientRecord = Schema.Struct({ fingerprint: Schema.String, binary: Schema.String });
 const encodeRecord = Schema.encodeEffect(Schema.fromJsonString(NativeClientRecord));
@@ -140,6 +142,9 @@ export const hashBundle = Effect.fn("hashBundle")(function* (root: string) {
 type FileSystemError = import("effect/PlatformError").PlatformError;
 
 const bundleId = "com.t3tools.t3code.dev";
+// Tangent(FORK-DIST-001): the iOS dev client uses the personal bundle and native project name.
+const iosBundleId = `${PERSONAL_MOBILE_DISTRIBUTION.iosBundleIdentifier}.dev`;
+const nativeName = PERSONAL_MOBILE_DISTRIBUTION.developmentAppName.replace(/ /g, "");
 const roots = Effect.gen(function* () {
   const path = yield* Path.Path;
   const repo = yield* path.fromFileUrl(new URL("../", import.meta.url));
@@ -261,9 +266,9 @@ export const installedBinary = Effect.fn("installedBinary")(function* (
 ) {
   if (platform === "ios") {
     const apps = yield* run("xcrun", ["simctl", "listapps", device]);
-    if (!apps.includes(`"${bundleId}"`)) return null;
+    if (!apps.includes(`"${iosBundleId}"`)) return null;
     return yield* hashBundle(
-      yield* run("xcrun", ["simctl", "get_app_container", device, bundleId, "app"]),
+      yield* run("xcrun", ["simctl", "get_app_container", device, iosBundleId, "app"]),
     );
   }
   const installed = yield* run("adb", ["-s", device, "shell", "pm", "list", "packages", bundleId]);
@@ -352,9 +357,9 @@ const main = Command.make(
             [
               "xcodebuild",
               "-workspace",
-              path.join(mobile, "ios/T3CodeDev.xcworkspace"),
+              path.join(mobile, `ios/${nativeName}.xcworkspace`),
               "-scheme",
-              "T3CodeDev",
+              nativeName,
               "-configuration",
               "Debug",
               "-destination",
@@ -371,7 +376,7 @@ const main = Command.make(
               "simctl",
               "install",
               device,
-              path.join(output, "Build/Products/Debug-iphonesimulator/T3CodeDev.app"),
+              path.join(output, `Build/Products/Debug-iphonesimulator/${nativeName}.app`),
             ],
             true,
           );

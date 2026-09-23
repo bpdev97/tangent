@@ -20,6 +20,7 @@ import {
 import { RootStack } from "./Stack";
 import { appAtomRegistry } from "./state/atom-registry";
 import { OverlayPortalHost } from "./components/OverlayPortal";
+import { PERSONAL_MOBILE_DISTRIBUTION } from "../../../downstream/mobile-config";
 import { shouldHandleAppLink } from "./lib/appLinking";
 import { useMobileNavigationTheme } from "./lib/useMobileNavigationTheme";
 import { SubscriptionUsageCoordinator } from "./widgets/SubscriptionUsageCoordinator";
@@ -35,7 +36,13 @@ void SplashScreen.preventAutoHideAsync().catch(() => {
 });
 
 const appLinking = {
-  prefixes: [Linking.createURL("/"), "t3code://", "t3code-dev://", "t3code-preview://"],
+  // Tangent(FORK-DIST-001): the personal app registers its own URL schemes.
+  prefixes: [
+    Linking.createURL("/"),
+    `${PERSONAL_MOBILE_DISTRIBUTION.scheme}://`,
+    `${PERSONAL_MOBILE_DISTRIBUTION.developmentScheme}://`,
+    `${PERSONAL_MOBILE_DISTRIBUTION.previewScheme}://`,
+  ],
   // Keep the compact thread list available beneath a directly opened thread.
   config: { initialRouteName: "Home" },
   filter: shouldHandleAppLink,
