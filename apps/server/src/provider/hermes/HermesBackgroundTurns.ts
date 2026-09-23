@@ -26,7 +26,6 @@ const ESSENTIAL_EVENTS: ReadonlySet<string> = new Set([
   "message.start",
   "message.interim",
   "message.complete",
-  "reasoning.available",
   "tool.complete",
   "subagent.complete",
   "error",

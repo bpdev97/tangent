@@ -37,6 +37,8 @@ import { ServerSettingsService } from "../serverSettings.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 import { OrchestratorV2 } from "./Orchestrator.ts";
+import { workerLive as ProviderContinuationWorkerLive } from "./ProviderContinuationService.ts";
+import { layer as providerContinuationRequestsLayer } from "./ProviderContinuationRequests.ts";
 import { makeHermesGatewayRuntime } from "../provider/hermes/HermesGatewayRuntime.ts";
 import { makeHermesGatewayUtility } from "../provider/hermes/HermesGatewayUtility.ts";
 import { HERMES_MIN_GATEWAY_CONTRACT } from "../provider/hermes/HermesGatewaySupport.ts";
@@ -111,7 +113,14 @@ const providerInstanceRegistryLayer = ProviderInstanceRegistryHydrationLive.pipe
   ),
 );
 
-const liveLayer = OrchestrationV2LayerLive.pipe(
+// The production layer adds the continuation worker; Hermes's background
+// wake turns (async delegation results) need it.
+const liveLayer = Layer.provideMerge(
+  ProviderContinuationWorkerLive.pipe(
+    Layer.provide(Layer.mergeAll(providerContinuationRequestsLayer, idAllocatorLayer)),
+  ),
+  OrchestrationV2LayerLive,
+).pipe(
   Layer.provide(worktreeRepairDependenciesTestLayer),
   Layer.provide(mcpSessionRegistryTestLayer),
   Layer.provide(SqlitePersistenceMemory),
@@ -204,6 +213,73 @@ describe.runIf(process.env.T3_HERMES_LIVE_ORCHESTRATOR === "1")(
           assert.include(assistantText(projection), marker);
           const providerThread = projection.providerThreads[0];
           assert.match(providerThread?.nativeThreadRef?.nativeId ?? "", /^\d{8}_\d{6}_/);
+        }).pipe(Effect.provide(liveLayer), Effect.scoped),
+      360_000,
+    );
+
+    it.live(
+      "settles an async delegation into an openable child thread",
+      () =>
+        Effect.gen(function* () {
+          yield* runEffectWorkerDaemonWithOptions({ concurrency: 2 }).pipe(Effect.forkScoped);
+          const orchestrator = yield* OrchestratorV2;
+          const threadId = ThreadId.make("thread:hermes-live-subagent");
+          yield* orchestrator.dispatch({
+            type: "thread.create",
+            createdBy: "user",
+            creationSource: "web",
+            commandId: CommandId.make("command:hermes-live-subagent:create"),
+            threadId,
+            projectId: ProjectId.make("project:hermes-live"),
+            title: "Hermes live subagent",
+            modelSelection: HERMES_MODEL_SELECTION,
+            runtimeMode: "full-access",
+            interactionMode: "default",
+            branch: null,
+            worktreePath: process.cwd(),
+          });
+          yield* orchestrator.dispatch({
+            type: "message.dispatch",
+            createdBy: "user",
+            creationSource: "web",
+            commandId: CommandId.make("command:hermes-live-subagent:send"),
+            threadId,
+            messageId: MessageId.make("message:hermes-live-subagent:send"),
+            text:
+              "Use delegate_task to start exactly one subagent with the goal: " +
+              "'Reply with the word PINEAPPLE and nothing else.' Do not do the task yourself.",
+            attachments: [],
+            modelSelection: HERMES_MODEL_SELECTION,
+            dispatchMode: { type: "start_immediately" },
+          });
+
+          // Hermes reports the result in a turn of its own once the subagent finishes.
+          let projection = yield* waitForIdle(threadId);
+          for (let attempt = 0; attempt < 600; attempt += 1) {
+            if (
+              projection.runs.length > 1 &&
+              projection.subagents.length > 0 &&
+              projection.subagents.every((subagent) => subagent.status === "completed")
+            ) {
+              break;
+            }
+            yield* Effect.sleep("500 millis");
+            projection = yield* orchestrator.getThreadProjection(threadId);
+          }
+          projection = yield* waitForIdle(threadId);
+          assert.deepEqual(
+            projection.runs.map((run) => run.status),
+            ["completed", "completed"],
+          );
+          const subagent = projection.subagents[0];
+          assert.equal(subagent?.status, "completed");
+          assert.isNotNull(subagent?.childThreadId ?? null);
+          const child = yield* orchestrator.getThreadProjection(subagent!.childThreadId!);
+          assert.deepEqual(
+            child.messages.map((message) => message.role),
+            ["user", "assistant"],
+          );
+          assert.include(child.messages[1]?.text ?? "", "PINEAPPLE");
         }).pipe(Effect.provide(liveLayer), Effect.scoped),
       360_000,
     );

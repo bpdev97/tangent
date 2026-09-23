@@ -300,7 +300,7 @@ describe("HermesAdapterV2", () => {
     }).pipe(Effect.scoped, Effect.provide(testLayer)),
   );
 
-  it.effect("maps subagent lifecycle keyed by subagent_id", () =>
+  it.effect("maps subagent lifecycle into a child thread keyed by subagent_id", () =>
     Effect.gen(function* () {
       const fake = yield* makeFakeHermesGateway;
       const { runtime, takeEvent } = yield* openRuntime(fake);
@@ -309,16 +309,158 @@ describe("HermesAdapterV2", () => {
       yield* fake.takeRpc("prompt.submit");
       yield* fake.events([{ type: "message.start", payload: {} }, ...subagentEvents]);
 
-      const statuses: Array<string> = [];
-      let last: Extract<ProviderAdapterV2Event, { type: "subagent.updated" }> | undefined;
-      for (let index = 0; index < subagentEvents.length; index += 1) {
-        last = yield* takeEvent(is("subagent.updated"));
-        statuses.push(last.subagent.status);
-      }
-      assert.deepStrictEqual(statuses, ["pending", "running", "running", "completed"]);
-      assert.equal(last?.subagent.result, "No issues found.");
-      assert.equal(last?.subagent.prompt, "Audit the parser");
-      assert.equal(last?.subagent.nativeTaskRef?.nativeId, "sa_1");
+      const seen: Array<ProviderAdapterV2Event> = [];
+      yield* takeEvent((event): event is ProviderAdapterV2Event => {
+        seen.push(event);
+        return event.type === "subagent.updated" && event.subagent.status === "completed";
+      });
+      const updates = seen.filter(is("subagent.updated"));
+      assert.deepStrictEqual(
+        updates.map((event) => event.subagent.status),
+        ["pending", "running", "running", "completed"],
+      );
+      const last = updates.at(-1)!.subagent;
+      assert.equal(last.result, "No issues found.");
+      assert.equal(last.prompt, "Audit the parser");
+      assert.equal(last.nativeTaskRef?.nativeId, "sa_1");
+
+      const created = seen.filter(is("app_thread.created"));
+      assert.equal(created.length, 1);
+      const child = created[0]!.appThread;
+      assert.equal(child.lineage.parentThreadId, THREAD_ID);
+      assert.equal(child.lineage.relationshipToParent, "subagent");
+      assert.equal(child.title, "Audit the parser");
+      assert.ok(updates.every((event) => event.subagent.childThreadId === child.id));
+
+      const childItems = seen
+        .filter(is("turn_item.updated"))
+        .filter((event) => event.turnItem.threadId === child.id);
+      assert.deepStrictEqual(
+        childItems.map((event) => [event.turnItem.type, event.turnItem.status]),
+        [
+          ["user_message", "completed"],
+          ["dynamic_tool", "running"],
+          ["dynamic_tool", "completed"],
+          ["assistant_message", "completed"],
+        ],
+      );
+      const messages = seen
+        .filter(is("message.updated"))
+        .filter((event) => event.message.threadId === child.id)
+        .map((event) => [event.message.role, event.message.text]);
+      assert.deepStrictEqual(messages, [
+        ["user", "Audit the parser"],
+        ["assistant", "No issues found."],
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(testLayer)),
+  );
+
+  it.effect("settles an async delegation that finishes after its turn ended", () =>
+    Effect.gen(function* () {
+      const fake = yield* makeFakeHermesGateway;
+      const { runtime, takeEvent } = yield* openRuntime(fake);
+      const providerThread = yield* ensureThread(runtime);
+      yield* startTurn(runtime, providerThread);
+      yield* fake.takeRpc("prompt.submit");
+      const [spawn, start, tool, complete] = subagentEvents;
+      yield* fake.events([
+        { type: "message.start", payload: {} },
+        spawn,
+        start,
+        { type: "message.complete", payload: { text: "Started.", status: "complete", usage: {} } },
+      ]);
+      yield* takeEvent(is("turn.terminal"));
+      assert.isTrue(yield* runtime.hasPendingBackgroundWork!);
+
+      yield* fake.events([tool, complete]);
+      const seen: Array<ProviderAdapterV2Event> = [];
+      const done = yield* takeEvent(
+        (event): event is Extract<ProviderAdapterV2Event, { type: "subagent.updated" }> => {
+          seen.push(event);
+          return event.type === "subagent.updated" && event.subagent.status === "completed";
+        },
+      );
+      assert.equal(done.subagent.runId, runIdFor(1));
+      assert.equal(done.subagent.result, "No issues found.");
+      const parentItem = seen
+        .filter(isTurnItem("subagent", "completed"))
+        .find((event) => event.turnItem.threadId === THREAD_ID);
+      assert.equal(parentItem?.turnItem.runId, runIdFor(1));
+      assert.isTrue(
+        seen.some(
+          (event) =>
+            event.type === "message.updated" &&
+            event.message.threadId === done.subagent.childThreadId &&
+            event.message.text === "No issues found.",
+        ),
+      );
+      assert.isFalse(yield* runtime.hasPendingBackgroundWork!);
+    }).pipe(Effect.scoped, Effect.provide(testLayer)),
+  );
+
+  it.effect("surfaces an async subagent's approval in the run that spawned it", () =>
+    Effect.gen(function* () {
+      const fake = yield* makeFakeHermesGateway;
+      const { runtime, takeEvent } = yield* openRuntime(fake);
+      const providerThread = yield* ensureThread(runtime);
+      yield* startTurn(runtime, providerThread);
+      yield* fake.takeRpc("prompt.submit");
+      const [spawn, start] = subagentEvents;
+      yield* fake.events([
+        { type: "message.start", payload: {} },
+        spawn,
+        start,
+        { type: "message.complete", payload: { text: "Started.", status: "complete", usage: {} } },
+      ]);
+      const terminal = yield* takeEvent(is("turn.terminal"));
+
+      const srq = yield* fake.request("approval", serverRequests.approval);
+      const request = yield* takeEvent(is("runtime_request.updated"));
+      assert.equal(request.runtimeRequest.providerTurnId, terminal.providerTurnId);
+      const item = yield* takeEvent(isTurnItem("approval_request", "waiting"));
+      assert.equal(item.turnItem.runId, runIdFor(1));
+
+      // A later turn ending must not withdraw the subagent's question.
+      yield* startTurn(runtime, providerThread, "Next", { runOrdinal: 2 });
+      yield* fake.takeRpc("prompt.submit");
+      yield* fake.events([
+        { type: "message.start", payload: {} },
+        { type: "message.complete", payload: { text: "Hi.", status: "complete", usage: {} } },
+      ]);
+      yield* takeEvent(is("turn.terminal"));
+
+      yield* runtime.respondToRuntimeRequest({
+        requestId: request.runtimeRequest.id,
+        decision: "accept",
+      });
+      const reply = yield* fake.takeReply(srq);
+      assert.deepStrictEqual(reply.result, { choice: "once" });
+    }).pipe(Effect.scoped, Effect.provide(testLayer)),
+  );
+
+  it.effect("keeps Hermes's spinner line and reply echo out of reasoning", () =>
+    Effect.gen(function* () {
+      const fake = yield* makeFakeHermesGateway;
+      const { runtime, takeEvent } = yield* openRuntime(fake);
+      const providerThread = yield* ensureThread(runtime);
+      yield* startTurn(runtime, providerThread);
+      yield* fake.takeRpc("prompt.submit");
+      yield* fake.events([
+        { type: "message.start", payload: {} },
+        { type: "thinking.delta", payload: { text: "(◔_◔) processing..." } },
+        { type: "reasoning.delta", payload: { text: "Planning the answer" } },
+        { type: "message.delta", payload: { text: "Done." } },
+        { type: "reasoning.available", payload: { text: "Done." } },
+        { type: "message.complete", payload: { text: "Done.", status: "complete", usage: {} } },
+      ]);
+      const reasoning = new Map<string, string>();
+      yield* takeEvent((event): event is ProviderAdapterV2Event => {
+        if (event.type === "turn_item.updated" && event.turnItem.type === "reasoning") {
+          reasoning.set(event.turnItem.id, event.turnItem.text);
+        }
+        return event.type === "turn.terminal";
+      });
+      assert.deepStrictEqual([...reasoning.values()], ["Planning the answer"]);
     }).pipe(Effect.scoped, Effect.provide(testLayer)),
   );
 
@@ -460,6 +602,35 @@ describe("HermesAdapterV2", () => {
       const terminal = yield* takeEvent(is("turn.terminal"));
       assert.equal(terminal.status, "interrupted");
       assert.equal(fake.activeTurns(), 0);
+    }).pipe(Effect.scoped, Effect.provide(testLayer)),
+  );
+
+  it.effect("marks a command stopped by an interrupt as interrupted", () =>
+    Effect.gen(function* () {
+      const fake = yield* makeFakeHermesGateway;
+      const { runtime, takeEvent } = yield* openRuntime(fake);
+      const providerThread = yield* ensureThread(runtime);
+      yield* startTurn(runtime, providerThread);
+      const providerTurnId = (yield* takeEvent(is("provider_turn.updated"))).providerTurn.id;
+      yield* fake.takeRpc("prompt.submit");
+      const tool = { tool_id: "call_sleep", name: "terminal", args: { command: "sleep 60" } };
+      yield* fake.events([
+        { type: "message.start", payload: {} },
+        { type: "tool.start", payload: tool },
+      ]);
+      yield* takeEvent(isTurnItem("command_execution", "running"));
+
+      yield* runtime.interruptTurn({ providerThread, providerTurnId });
+      yield* fake.takeRpc("session.interrupt");
+      yield* fake.events([
+        {
+          type: "tool.complete",
+          payload: { ...tool, result: { output: "[Command interrupted]", exit_code: 130 } },
+        },
+        { type: "message.complete", payload: { text: null, status: "interrupted", usage: {} } },
+      ]);
+      const stopped = yield* takeEvent(isTurnItem("command_execution"));
+      assert.equal(stopped.turnItem.status, "interrupted");
     }).pipe(Effect.scoped, Effect.provide(testLayer)),
   );
 

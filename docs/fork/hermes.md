@@ -46,27 +46,42 @@ Mapping to v2 (`apps/server/src/orchestration-v2/ProviderAdapter.ts`):
 - `session.create` and `session.resume` open and resume provider threads.
 - `prompt.submit` starts a turn and is supervised without blocking the adapter. Text sent while a
   turn is running uses `session.steer`.
-- `message.*` and `reasoning.*` become message and turn-item updates. `message.interim` seals a
-  commentary segment without ending the turn. A terminal response marked `response_previewed` is
-  de-duplicated against those segments.
+- `message.*` and `reasoning.delta` become message and turn-item updates. `message.interim`
+  seals a commentary segment without ending the turn. A terminal response marked
+  `response_previewed` is de-duplicated against those segments. `reasoning.available` only
+  repeats the reply text, and `thinking.delta` is Hermes's spinner line
+  (`(◔_◔) processing...`), so neither is shown.
 - `tool.*` becomes execution nodes. A tool start is published immediately so running tools are
   visible. Arguments are normalized into the shared shapes (commands, changed paths, search
   queries, URLs, image prompts, MCP identities, delegated tasks). Raw arguments are kept only for
-  MCP calls.
-- `subagent.*` becomes v2 subagents, keyed by the required `subagent_id`.
+  MCP calls. Hermes reports a stopped command as an ordinary result (exit 130), so a tool that
+  finishes after a stop request is marked interrupted.
+- `subagent.*` becomes v2 subagents, keyed by the required `subagent_id`. Each gets a child
+  thread (the goal, each tool it reports, then its summary), because clients open a subagent only
+  through its child thread. Hermes delegates asynchronously, so `subagent.complete` usually
+  arrives after the spawning turn has ended. A known subagent's frames are therefore applied
+  whenever they arrive, stamped with the spawning run, and never buffered into a background
+  turn; that run keeps reading events until its subagents settle. `subagent.thinking` is not
+  shown, because it is the child's spinner line and clipped reply.
+- Stopping any Hermes turn stops every running subagent (Hermes stops the whole tree). Each
+  reports an interrupted completion, and Hermes then starts a turn of its own to report it, so a
+  stop can be followed by a short "background work finished" run. That is Hermes behavior; the
+  gateway has no option to skip it.
 - Contract 7 delivers approvals and questions as server→client JSON-RPC requests (`srq-…` frames),
   answered with a response frame carrying the same id. Tangent advertises
   `client.capabilities {server_requests: true}` on every session connection and refuses request
   kinds it has no surface for (desktop reads, vault prompts, tours) so Hermes fails fast.
 - `approval` becomes a runtime request. Accept, accept-for-session, and decline map to `once`,
-  `session`, and `deny`.
+  `session`, and `deny`. A subagent's approval can arrive after its turn has ended, and it
+  carries no subagent identity, so a request with no active turn belongs to the turn that
+  spawned the newest running subagent.
 - `clarify`, `sudo`, and `secret` become user-input runtime requests. They keep Hermes request and
   question IDs. Batched questions are answered one at a time with `clarify.lock`, and multi-select
   answers use Hermes's JSON-array format. A question with no options is a valid open-ended prompt.
   `request.cancel` withdraws the matching request.
 - `session.usage` updates the context-window usage. Completion, `session.interrupt`, and failures
-  end the turn. Any open approval or question is resolved when its turn ends, so a "waiting on you"
-  state never outlives the Hermes callback it represents.
+  end the turn. Any open approval or question the turn owns is resolved when it ends, so a
+  "waiting on you" state never outlives the Hermes callback it represents.
 - `session.undo` implements rollback. Capabilities declare only what the gateway supports; anything
   else falls back to v2's portable handoff.
 - Hermes's `MEDIA: <path>` output becomes an ordinary Markdown file link while text streams. Only a
@@ -196,7 +211,14 @@ against the Behavior section, then delete this adapter and move to upstream's.
   replayed attachment, a queued user message, interrupts, and the buffer cap).
 - Updater tests with a fake `hermes` binary cover: refusing during an active turn, stopping and
   re-probing gateways, and reporting an incompatible contract.
-- An opt-in live test runs against the real binary on the Hermes host.
+- An opt-in live test runs against the real binary on the Hermes host, including one async
+  delegation that must settle into a child thread and the wake turn that reports it. The live
+  layer adds the continuation worker, which only the production layer includes; without it
+  wake turns never start.
+- Approval prompts need a profile with `approvals.mode: manual`; the default `smart` mode lets
+  Hermes's guardian model approve ordinary commands itself, so they never reach T3. Use a
+  throwaway profile (`hermes profile create <name> --clone`), which inherits the root login
+  instead of copying it. Never copy `auth.json`: Codex refresh tokens rotate.
 
 To move the baseline to a new Hermes release:
 

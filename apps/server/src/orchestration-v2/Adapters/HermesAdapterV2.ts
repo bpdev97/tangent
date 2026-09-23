@@ -30,7 +30,9 @@
 import { HostProcessEnvironment } from "@t3tools/shared/hostProcess";
 import {
   HermesSettings,
+  isOrchestrationV2WorkActive,
   type ModelSelection,
+  type NodeId,
   type OrchestrationV2ExecutionNode,
   type OrchestrationV2ProviderCapabilities,
   type OrchestrationV2ProviderFailure,
@@ -46,6 +48,7 @@ import {
   type ProviderApprovalDecision,
   type ProviderInstanceId,
   type ProviderUserInputAnswers,
+  type ThreadId,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
@@ -129,6 +132,11 @@ import {
 } from "../ProviderContinuationRequests.ts";
 import { makeProviderFailure, makeProviderFailureTurnItem } from "../ProviderFailure.ts";
 import { turnScopedSelectionTransition } from "../ProviderSelectionTransition.ts";
+import {
+  makeSubagentChildThread,
+  makeSubagentConversationArtifacts,
+  subagentThreadTitle,
+} from "../SubagentProjection.ts";
 
 const HERMES_PROVIDER = HERMES_DRIVER_KIND;
 const DEFAULT_HERMES_SETTINGS = Schema.decodeSync(HermesSettings)({});
@@ -502,7 +510,6 @@ interface ActiveTurn {
     string,
     { payload: Readonly<Record<string, unknown>>; at: DateTime.Utc }
   >;
-  readonly subagentStarts: Map<string, DateTime.Utc>;
   interrupted: boolean;
   failure: OrchestrationV2ProviderFailure | null;
   lastError: string | null;
@@ -556,10 +563,42 @@ interface PendingRequest {
   readonly turnItem: OrchestrationV2TurnItem;
 }
 
+/**
+ * A Hermes delegated child, shown as a subagent with its own child thread.
+ * Hermes delegates asynchronously, so a child usually outlives the turn that
+ * spawned it. Its updates keep that turn's run identity and are applied
+ * whether or not a turn is active; the run's event stream stays open until
+ * every subagent it owns settles.
+ */
+interface HermesSubagent {
+  readonly nodeId: NodeId;
+  readonly nativeTaskId: string;
+  /** The turn that spawned it; it owns the subagent's updates and questions. */
+  readonly turn: ActiveTurn;
+  readonly ordinal: number;
+  readonly childThreadId: ThreadId;
+  readonly childRootNodeId: NodeId;
+  readonly goal: string;
+  readonly model: string | null;
+  readonly startedAt: DateTime.Utc;
+  status: OrchestrationV2Subagent["status"];
+  progress: string | undefined;
+  nextChildOrdinal: number;
+  /** Hermes reports only a child's tool starts; the next tool or completion closes it. */
+  openTool: {
+    readonly nativeItemId: string;
+    readonly payload: Readonly<Record<string, unknown>>;
+    readonly ordinal: number;
+    readonly startedAt: DateTime.Utc;
+  } | null;
+}
+
 interface ThreadState {
   providerThread: OrchestrationV2ProviderThread;
   readonly liveSessionId: string;
   activeTurn: ActiveTurn | null;
+  /** Keyed by Hermes `subagent_id`. */
+  readonly subagents: Map<string, HermesSubagent>;
 }
 
 type InboxItem =
@@ -967,13 +1006,14 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
         const startedAt = started?.at ?? emittedAt;
         const projection = projectHermesTool(payload, started?.payload);
         const completed = phase === "complete";
+        // Hermes reports a stopped command as an ordinary result (exit 130).
         const status = !completed
           ? "running"
-          : projection.failed
-            ? turn.interrupted
-              ? "interrupted"
-              : "failed"
-            : "completed";
+          : turn.interrupted
+            ? "interrupted"
+            : projection.failed
+              ? "failed"
+              : "completed";
         const nativeItemId = `tool:${toolId}`;
         yield* emitItemNode(
           turn,
@@ -997,73 +1037,297 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
         if (completed) turn.toolStarts.delete(toolId);
       });
 
-      const emitSubagent = Effect.fnUntraced(function* (
+      const openSubagent = Effect.fnUntraced(function* (
+        state: ThreadState,
         turn: ActiveTurn,
+        subagentId: string,
+        payload: Readonly<Record<string, unknown>>,
+        now: DateTime.Utc,
+      ) {
+        const nativeTaskId = `subagent:${subagentId}`;
+        const goal = text(payload.goal) ?? "Hermes subagent";
+        const subagent: HermesSubagent = {
+          nodeId: idAllocator.derive.nodeFromProviderItem({
+            driver: HERMES_PROVIDER,
+            nativeItemId: nativeTaskId,
+          }),
+          nativeTaskId,
+          turn,
+          ordinal: itemOrdinal(turn, nativeTaskId),
+          childThreadId: idAllocator.derive.threadFromProviderThread({
+            driver: HERMES_PROVIDER,
+            nativeThreadId: `${state.providerThread.id}:${nativeTaskId}`,
+          }),
+          childRootNodeId: idAllocator.derive.nodeFromProviderItem({
+            driver: HERMES_PROVIDER,
+            nativeItemId: `${nativeTaskId}:child-root`,
+          }),
+          goal,
+          model: text(payload.model) ?? null,
+          startedAt: now,
+          status: "pending",
+          progress: undefined,
+          nextChildOrdinal: 100,
+          openTool: null,
+        };
+        state.subagents.set(subagentId, subagent);
+        yield* emit({
+          type: "app_thread.created",
+          driver: HERMES_PROVIDER,
+          appThread: makeSubagentChildThread({
+            parentThread: turn.turnInput.appThread,
+            childThreadId: subagent.childThreadId,
+            parentNodeId: subagent.nodeId,
+            activeProviderThreadId: null,
+            providerInstanceId: options.instanceId,
+            modelSelection: turn.turnInput.modelSelection,
+            title: subagentThreadTitle({
+              parentTitle: turn.turnInput.appThread.title,
+              prompt: goal,
+              ordinal: state.subagents.size,
+            }),
+            now,
+            createdBy: "agent",
+            creationSource: "provider",
+          }),
+        });
+        yield* emitChildMessage(subagent, "prompt", "user", goal, now);
+        return subagent;
+      });
+
+      const emitChildMessage = Effect.fnUntraced(function* (
+        subagent: HermesSubagent,
+        suffix: string,
+        role: "user" | "assistant",
+        body: string,
+        now: DateTime.Utc,
+      ) {
+        const nativeItemId = `${subagent.nativeTaskId}:${suffix}`;
+        const artifacts = makeSubagentConversationArtifacts({
+          messageId: idAllocator.derive.messageFromProviderItem({
+            driver: HERMES_PROVIDER,
+            nativeItemId,
+          }),
+          ...(role === "user" ? { senderThreadId: subagent.turn.turnInput.threadId } : {}),
+          turnItemId: idAllocator.derive.turnItemFromProviderItem({
+            driver: HERMES_PROVIDER,
+            nativeItemId,
+          }),
+          threadId: subagent.childThreadId,
+          rootNodeId: subagent.childRootNodeId,
+          providerThreadId: null,
+          providerTurnId: null,
+          nativeItemRef: providerRef(nativeItemId, "weak"),
+          role,
+          text: body,
+          ordinal: role === "user" ? 100 : ++subagent.nextChildOrdinal,
+          now,
+        });
+        yield* emit({
+          type: "message.updated",
+          driver: HERMES_PROVIDER,
+          message: artifacts.message,
+        });
+        yield* emit({
+          type: "turn_item.updated",
+          driver: HERMES_PROVIDER,
+          turnItem: artifacts.turnItem,
+        });
+      });
+
+      const emitChildTool = (
+        subagent: HermesSubagent,
+        tool: NonNullable<HermesSubagent["openTool"]>,
+        status: "running" | "completed" | "interrupted",
+        now: DateTime.Utc,
+      ) => {
+        const projection = projectHermesTool(tool.payload);
+        return emit({
+          type: "turn_item.updated",
+          driver: HERMES_PROVIDER,
+          turnItem: {
+            id: idAllocator.derive.turnItemFromProviderItem({
+              driver: HERMES_PROVIDER,
+              nativeItemId: tool.nativeItemId,
+            }),
+            threadId: subagent.childThreadId,
+            runId: null,
+            nodeId: subagent.childRootNodeId,
+            providerThreadId: null,
+            providerTurnId: null,
+            nativeItemRef: providerRef(tool.nativeItemId, "weak"),
+            parentItemId: null,
+            ordinal: tool.ordinal,
+            status,
+            title: projection.title,
+            startedAt: tool.startedAt,
+            completedAt: status === "running" ? null : now,
+            updatedAt: now,
+            ...projection.item,
+          } as OrchestrationV2TurnItem,
+        });
+      };
+
+      /**
+       * Applies one `subagent.*` frame. The first frame must arrive during a
+       * turn, which becomes the subagent's owner; later frames may arrive at
+       * any time. Child thread items are written before the subagent settles,
+       * because settling lets the owning run stop reading events.
+       */
+      const emitSubagent = Effect.fnUntraced(function* (
+        state: ThreadState,
+        turn: ActiveTurn | null,
         type: string,
         payload: Readonly<Record<string, unknown>>,
       ) {
         const subagentId = text(payload.subagent_id);
         if (!subagentId) return;
-        const emittedAt = yield* DateTime.now;
-        const nativeTaskId = `subagent:${subagentId}`;
-        const startedAt = turn.subagentStarts.get(subagentId) ?? emittedAt;
-        turn.subagentStarts.set(subagentId, startedAt);
-        const status = subagentStatus(type, text(payload.status));
+        const now = yield* DateTime.now;
+        const known = state.subagents.get(subagentId);
+        if (known === undefined && turn === null) return;
+        const subagent = known ?? (yield* openSubagent(state, turn!, subagentId, payload, now));
+        if (!isOrchestrationV2WorkActive(subagent.status)) return;
+
         const finished = type === "subagent.complete";
-        const goal = text(payload.goal) ?? "Hermes subagent";
-        const progressText =
-          type === "subagent.tool"
-            ? `Using ${text(payload.tool_name) ?? "a tool"}`
-            : (text(payload.text) ?? text(payload.tool_preview));
-        const progress = !finished && progressText ? { progress: progressText.slice(0, 200) } : {};
+        subagent.status = subagentStatus(type, text(payload.status));
+        if (type === "subagent.tool" || finished) {
+          if (subagent.openTool !== null) {
+            yield* emitChildTool(
+              subagent,
+              subagent.openTool,
+              subagent.status === "interrupted" ? "interrupted" : "completed",
+              now,
+            );
+            subagent.openTool = null;
+          }
+        }
+        if (type === "subagent.tool") {
+          const toolPayload = {
+            name: text(payload.tool_name) ?? "tool",
+            context: text(payload.tool_preview) ?? text(payload.text),
+          };
+          const nativeItemId = `${subagent.nativeTaskId}:tool:${subagent.nextChildOrdinal + 1}`;
+          subagent.openTool = {
+            nativeItemId,
+            payload: toolPayload,
+            ordinal: ++subagent.nextChildOrdinal,
+            startedAt: now,
+          };
+          yield* emitChildTool(subagent, subagent.openTool, "running", now);
+          subagent.progress = toolPayload.context ?? projectHermesTool(toolPayload).title;
+        } else if (type === "subagent.progress") {
+          // `subagent.thinking` is Hermes's spinner line and a clipped reply
+          // preview, so it never becomes progress.
+          subagent.progress = text(payload.text) ?? text(payload.tool_name) ?? subagent.progress;
+        }
         const result = finished ? (text(payload.summary)?.slice(0, 10_000) ?? null) : null;
-        const id = idAllocator.derive.nodeFromProviderItem({
+        if (result !== null) yield* emitChildMessage(subagent, "result", "assistant", result, now);
+
+        const completedAt = finished ? now : null;
+        const progress =
+          !finished && subagent.progress ? { progress: subagent.progress.slice(0, 200) } : {};
+        const { turnInput } = subagent.turn;
+        const providerTurnId = subagent.turn.providerTurn.id;
+        const title = subagent.goal.slice(0, 120);
+        const nativeTaskRef = providerRef(subagentId);
+        yield* emit({
+          type: "node.updated",
           driver: HERMES_PROVIDER,
-          nativeItemId: nativeTaskId,
+          node: {
+            id: subagent.childRootNodeId,
+            threadId: subagent.childThreadId,
+            runId: null,
+            parentNodeId: null,
+            rootNodeId: subagent.childRootNodeId,
+            kind: "root_turn",
+            status: subagent.status,
+            countsForRun: false,
+            providerThreadId: null,
+            providerTurnId: null,
+            nativeItemRef: nativeTaskRef,
+            runtimeRequestId: null,
+            checkpointScopeId: null,
+            startedAt: subagent.startedAt,
+            completedAt,
+          },
         });
         yield* emit({
-          type: "subagent.updated",
+          type: "node.updated",
           driver: HERMES_PROVIDER,
-          subagent: {
-            id,
-            threadId: turn.turnInput.threadId,
-            runId: turn.turnInput.runId,
-            parentNodeId: turn.turnInput.rootNodeId,
-            origin: "provider_native",
-            createdBy: "agent",
-            driver: HERMES_PROVIDER,
-            providerInstanceId: options.instanceId,
-            providerThreadId: turn.turnInput.providerThread.id,
-            childThreadId: null,
-            nativeTaskRef: providerRef(subagentId),
-            prompt: goal,
-            title: goal.slice(0, 120),
-            model: text(payload.model) ?? null,
-            status,
-            ...progress,
-            result,
-            startedAt,
-            completedAt: finished ? emittedAt : null,
-            updatedAt: emittedAt,
+          node: {
+            id: subagent.nodeId,
+            threadId: turnInput.threadId,
+            runId: turnInput.runId,
+            parentNodeId: turnInput.rootNodeId,
+            rootNodeId: turnInput.rootNodeId,
+            kind: "subagent",
+            status: subagent.status,
+            countsForRun: false,
+            providerThreadId: turnInput.providerThread.id,
+            providerTurnId,
+            nativeItemRef: nativeTaskRef,
+            runtimeRequestId: null,
+            checkpointScopeId: null,
+            startedAt: subagent.startedAt,
+            completedAt,
           },
         });
         yield* emit({
           type: "turn_item.updated",
           driver: HERMES_PROVIDER,
           turnItem: {
-            ...baseItemFields(turn, nativeTaskId, startedAt, emittedAt),
-            status,
-            title: goal.slice(0, 120),
-            completedAt: finished ? emittedAt : null,
+            id: idAllocator.derive.turnItemFromProviderItem({
+              driver: HERMES_PROVIDER,
+              nativeItemId: subagent.nativeTaskId,
+            }),
+            threadId: turnInput.threadId,
+            runId: turnInput.runId,
+            nodeId: subagent.nodeId,
+            providerThreadId: turnInput.providerThread.id,
+            providerTurnId,
+            nativeItemRef: providerRef(subagent.nativeTaskId),
+            parentItemId: null,
+            ordinal: subagent.ordinal,
+            startedAt: subagent.startedAt,
+            updatedAt: now,
+            status: subagent.status,
+            title,
+            completedAt,
             type: "subagent",
-            subagentId: id,
+            subagentId: subagent.nodeId,
             origin: "provider_native",
             driver: HERMES_PROVIDER,
             providerInstanceId: options.instanceId,
-            childThreadId: null,
-            prompt: goal,
+            childThreadId: subagent.childThreadId,
+            prompt: subagent.goal,
             ...progress,
             result,
+          },
+        });
+        yield* emit({
+          type: "subagent.updated",
+          driver: HERMES_PROVIDER,
+          subagent: {
+            id: subagent.nodeId,
+            threadId: turnInput.threadId,
+            runId: turnInput.runId,
+            parentNodeId: turnInput.rootNodeId,
+            origin: "provider_native",
+            createdBy: "agent",
+            driver: HERMES_PROVIDER,
+            providerInstanceId: options.instanceId,
+            providerThreadId: turnInput.providerThread.id,
+            childThreadId: subagent.childThreadId,
+            nativeTaskRef,
+            prompt: subagent.goal,
+            title,
+            model: subagent.model,
+            status: subagent.status,
+            ...progress,
+            result,
+            startedAt: subagent.startedAt,
+            completedAt,
+            updatedAt: now,
           },
         });
       });
@@ -1118,9 +1382,14 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
         });
 
       /** A "waiting on you" state must not outlive the Hermes callback it represents. */
-      const cancelPendingRequests = (resolvedAt: DateTime.Utc) =>
+      const cancelPendingRequests = (
+        resolvedAt: DateTime.Utc,
+        providerTurnId: OrchestrationV2ProviderTurn["id"],
+      ) =>
         Effect.forEach(
-          Array.from(pendingRequests.values()),
+          Array.from(pendingRequests.values()).filter(
+            (pending) => pending.runtimeRequest.providerTurnId === providerTurnId,
+          ),
           (pending) =>
             refuse(pending.srqId, "The turn ended.").pipe(
               Effect.andThen(settleRequest(pending, "cancelled", resolvedAt)),
@@ -1231,8 +1500,17 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
           yield* refuse(request.id, `T3 Code does not handle Hermes ${method} requests.`);
           return;
         }
-        const turn = state?.activeTurn ?? null;
+        const activeTurn = state?.activeTurn ?? null;
         const params = request.params;
+        // An async subagent asks after its turn has ended. The turn that spawned
+        // it owns the question, so that run (still reading events while its
+        // subagents work) surfaces it.
+        const turn =
+          activeTurn ??
+          [...(state?.subagents.values() ?? [])]
+            .filter((subagent) => isOrchestrationV2WorkActive(subagent.status))
+            .at(-1)?.turn ??
+          null;
         const runtimeMode =
           turn?.turnInput.runtimePolicy.runtimeMode ?? input.runtimePolicy.runtimeMode;
         if (method === "approval" && shouldAutoApproveHermes(runtimeMode)) {
@@ -1243,7 +1521,7 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
         // continuation run. With a T3 run waiting behind it, it surfaces now so
         // the waiting run cannot deadlock on an unanswerable request.
         const background = runningBackground();
-        if (background !== undefined && turn === null) {
+        if (background !== undefined && activeTurn === null) {
           if (background.dropped) yield* refuse(request.id, "The turn ended.");
           else bufferHermesBackgroundItem(background, { kind: "request", request });
           return;
@@ -1439,7 +1717,7 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
         yield* sealReasoning(turn);
         yield* sealAssistant(turn);
         const completedAt = yield* DateTime.now;
-        yield* cancelPendingRequests(completedAt);
+        yield* cancelPendingRequests(completedAt, turn.providerTurn.id);
         const failure = turn.interrupted ? null : turn.failure;
         const status = turn.interrupted ? "interrupted" : failure !== null ? "failed" : "completed";
         yield* emit({
@@ -1551,6 +1829,16 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
             break;
         }
 
+        // A known subagent's frames update it wherever they arrive; async
+        // delegations report back after their turn has ended.
+        if (
+          event.type.startsWith("subagent.") &&
+          state.subagents.has(text(payload.subagent_id) ?? "")
+        ) {
+          yield* emitSubagent(state, state.activeTurn, event.type, payload);
+          return;
+        }
+
         // Frames of a self-started turn belong to it until its `message.complete`,
         // even when a T3 run is already waiting behind it.
         const background = runningBackground();
@@ -1607,18 +1895,16 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
             turn.interimTexts.push(interim);
             return;
           }
-          case "thinking.delta":
-          case "reasoning.delta":
-          case "reasoning.available": {
+          // Only `reasoning.delta` is model reasoning. `thinking.delta` is
+          // Hermes's spinner line ("(◔_◔) processing...") and
+          // `reasoning.available` repeats the reply text, so both are dropped.
+          case "reasoning.delta": {
             const delta = typeof payload.text === "string" ? payload.text : "";
             if (!delta) return;
-            if (event.type === "reasoning.available" && (turn.reasoning?.text.length ?? 0) > 0)
-              return;
             const item = turn.reasoning ?? (yield* newStreamItem(turn, "reasoning"));
             turn.reasoning = item;
             item.text += delta;
-            if (event.type === "reasoning.available") yield* sealReasoning(turn);
-            else yield* scheduleFlush(turn, item);
+            yield* scheduleFlush(turn, item);
             return;
           }
           case "tool.start":
@@ -1634,7 +1920,7 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
           case "subagent.tool":
           case "subagent.progress":
           case "subagent.complete":
-            yield* emitSubagent(turn, event.type, payload);
+            yield* emitSubagent(state, turn, event.type, payload);
             return;
           case "session.usage":
             yield* reportUsage(turn, payload.usage);
@@ -1881,7 +2167,7 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
                 createdAt,
                 updatedAt: createdAt,
               };
-        threadState = { providerThread, liveSessionId, activeTurn: null };
+        threadState = { providerThread, liveSessionId, activeTurn: null, subagents: new Map() };
         if (publish) {
           yield* emit({ type: "provider_thread.updated", driver: HERMES_PROVIDER, providerThread });
         }
@@ -2118,7 +2404,6 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
           reasoning: null,
           reasoningSegment: 0,
           toolStarts: new Map(),
-          subagentStarts: new Map(),
           interrupted: false,
           failure: null,
           lastError: null,
@@ -2187,6 +2472,12 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
           return sessionEntity;
         },
         events: Stream.fromQueue(events),
+        // A running delegation reports back into this session; keep it resident.
+        hasPendingBackgroundWork: Effect.sync(() =>
+          [...(threadState?.subagents.values() ?? [])].some((subagent) =>
+            isOrchestrationV2WorkActive(subagent.status),
+          ),
+        ),
         getModelContextWindow: (selection) =>
           selection.instanceId === options.instanceId && contextWindow !== null
             ? contextWindow
