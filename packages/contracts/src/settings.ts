@@ -38,6 +38,7 @@ import {
   type ProviderDriverKind,
 } from "./providerInstance.ts";
 import { PullRequestMergeMethod } from "./pullRequest.ts";
+import { PersonalPushRelaySettings, PersonalPushRelaySettingsPatch } from "./personalPush.ts";
 
 // ── Client Settings (local-only) ───────────────────────────────
 
@@ -1351,6 +1352,8 @@ export const ServerSettings = Schema.Struct({
   ),
   branchNamePrefix: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed("t3code"))),
   branchNameInstructions: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  // Tangent(FORK-PUSH-001): the password is stored in ServerSecretStore.
+  personalPushRelay: PersonalPushRelaySettings,
   sourceControlWritingStyle: SourceControlWritingStyleSettings.pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
@@ -1649,6 +1652,7 @@ export const ServerSettingsPatch = Schema.Struct({
   branchNamingMode: Schema.optionalKey(BranchNamingMode),
   branchNamePrefix: Schema.optionalKey(TrimmedString),
   branchNameInstructions: Schema.optionalKey(TrimmedString),
+  personalPushRelay: Schema.optionalKey(PersonalPushRelaySettingsPatch), // Tangent(FORK-PUSH-001)
   sourceControlWritingStyle: Schema.optionalKey(
     Schema.Struct({
       mode: Schema.optionalKey(SourceControlWritingStyleMode),
