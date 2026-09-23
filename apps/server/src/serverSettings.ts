@@ -62,6 +62,7 @@ import {
 } from "@t3tools/shared/serverSettings";
 import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
 import * as PersonalPushSettingsSecret from "./personalPush/settingsSecret.ts";
+import * as SharedMcpServerSecrets from "./sharedMcpServers/settingsSecret.ts";
 
 export { resolveSourceControlWriterModelSelection } from "@t3tools/shared/serverSettings";
 
@@ -191,12 +192,14 @@ export function redactServerSettingsForClient(settings: ServerSettings): ServerS
       },
     ]),
   );
-  // Tangent(FORK-PUSH-001)
-  return PersonalPushSettingsSecret.redactPersonalPushRelayForClient({
-    ...settings,
-    providerInstances,
-    usageLimitSources,
-  });
+  // Tangent(FORK-PUSH-001), Tangent(FORK-MCP-001)
+  return SharedMcpServerSecrets.redactSharedMcpServersForClient(
+    PersonalPushSettingsSecret.redactPersonalPushRelayForClient({
+      ...settings,
+      providerInstances,
+      usageLimitSources,
+    }),
+  );
 }
 
 export function applyProviderInstanceMutation(
@@ -837,11 +840,21 @@ const make = Effect.gen(function* () {
             (cause) => new ServerSettingsError({ settingsPath, operation: "read-secret", cause }),
           ),
         );
+      // Tangent(FORK-MCP-001)
+      const mcpServers = yield* SharedMcpServerSecrets.materializeSharedMcpServerHeaders(
+        settings.mcpServers,
+        secretStore,
+      ).pipe(
+        Effect.mapError(
+          (cause) => new ServerSettingsError({ settingsPath, operation: "read-secret", cause }),
+        ),
+      );
       return {
         ...settings,
         providerInstances: providerInstances as ServerSettings["providerInstances"],
         usageLimitSources: usageLimitSources as ServerSettings["usageLimitSources"],
         personalPushRelay,
+        mcpServers,
       };
     });
 
@@ -988,6 +1001,12 @@ const make = Effect.gen(function* () {
         next.personalPushRelay,
       );
       changes.push(...personalPush.changes);
+      // Tangent(FORK-MCP-001)
+      const sharedMcp = SharedMcpServerSecrets.persistSharedMcpServerHeaders(
+        current.mcpServers,
+        next.mcpServers,
+      );
+      changes.push(...sharedMcp.changes);
 
       return {
         settings: {
@@ -995,6 +1014,7 @@ const make = Effect.gen(function* () {
           providerInstances: providerInstances as ServerSettings["providerInstances"],
           usageLimitSources: usageLimitSources as ServerSettings["usageLimitSources"],
           personalPushRelay: personalPush.relay,
+          mcpServers: sharedMcp.servers,
         },
         changes,
       };
