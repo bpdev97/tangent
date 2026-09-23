@@ -21,7 +21,7 @@ import {
 // and unpacks it with tar. The fake client serves both files; the fake runner
 // stands in for tar and drops the executable where extraction would.
 const version = "1.2.3";
-const archiveName = `t3-${version}-linux-x64.tar.gz`;
+const archiveName = `tangent-server-${version}-linux-x64.tar.gz`;
 const archiveBytes = new TextEncoder().encode("not really a tarball");
 const archiveHex = (bytes: Uint8Array) =>
   Effect.promise(() => crypto.subtle.digest("SHA-256", bytes)).pipe(
@@ -89,8 +89,8 @@ it.layer(NodeServices.layer)("ensurePinnedRuntimeInstalled", (it) => {
       assert.equal(paths.entryPath, path.join(paths.versionDir, "t3"));
       assert.deepEqual(pinnedRuntimeCommand(paths), { command: paths.entryPath, args: [] });
       assert.deepEqual(requests, [
-        `https://releases.example/download/v${version}/SHA256SUMS`,
-        `https://releases.example/download/v${version}/${archiveName}`,
+        `https://releases.example/download/personal-v${version}/SHA256SUMS`,
+        `https://releases.example/download/personal-v${version}/${archiveName}`,
       ]);
       assert.deepEqual(commands, ["tar"]);
       assert.equal(yield* fs.readFileString(paths.sentinelPath), `${version}\n`);
