@@ -1,0 +1,33 @@
+{
+  "upstream": {
+    "repository": "pingdotgg/t3code",
+    "branch": "t3code/codex-turn-mapping",
+    "pullRequest": 2829,
+    "afterMerge": "main",
+    "requiredChecks": [
+      "Test",
+      "Test Server 1",
+      "Test Server 2",
+      "Test Server 3",
+      "Release Smoke",
+      "Rust",
+      "Mobile Native Static Analysis"
+    ]
+  },
+  "baseline": "060756de5adcda82fedace42d8c47b449bc1097b",
+  "hermes": {
+    "version": "0.21.4",
+    "tag": "v2026.9.21",
+    "minimumContract": 7
+  },
+  "features": {
+    "FORK-MAINT-001": "docs/fork/maintenance.md",
+    "FORK-DIST-001": "docs/fork/distribution.md",
+    "FORK-HERMES-001": "docs/fork/hermes.md",
+    "FORK-CHAT-001": "docs/fork/generic-chat.md",
+    "FORK-PUSH-001": "docs/fork/push-relay.md",
+    "FORK-IMAGE-001": "docs/fork/image-normalization.md",
+    "FORK-MERMAID-001": "docs/fork/mermaid.md",
+    "FORK-PALETTE-001": "docs/fork/palette.md"
+  }
+}
