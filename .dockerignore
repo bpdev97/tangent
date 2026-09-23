@@ -1,0 +1,10 @@
+.git
+.repos
+.env
+**/.env
+**/secrets
+**/node_modules
+**/dist
+**/.vite-plus
+apps/mobile/android
+apps/mobile/ios

@@ -52,6 +52,7 @@ import {
   readSecretFieldValues,
   sourceControlHostSecretName,
 } from "./sourceControl/sourceControlHostSecrets.ts";
+import * as PersonalPushSettingsSecret from "./personalPush/settingsSecret.ts";
 
 import { mapSettingsSecrets, SECRET_REDACTED, type SettingsSecret } from "./settingsSecrets.ts";
 
@@ -129,10 +130,13 @@ const normalizeServerSettings = (
   );
 
 export function redactServerSettingsForClient(settings: ServerSettings): ServerSettings {
-  return mapSettingsSecrets(settings, (secret) =>
-    secret.sensitive
-      ? { value: "", redacted: secret.redacted || secret.value.length > 0 }
-      : { value: secret.value, redacted: false },
+  // Tangent(FORK-PUSH-001)
+  return PersonalPushSettingsSecret.redactPersonalPushRelayForClient(
+    mapSettingsSecrets(settings, (secret) =>
+      secret.sensitive
+        ? { value: "", redacted: secret.redacted || secret.value.length > 0 }
+        : { value: secret.value, redacted: false },
+    ),
   );
 }
 
@@ -828,13 +832,26 @@ const make = Effect.gen(function* () {
           Option.isSome(value) ? textDecoder.decode(value.value) : "",
         );
       }
-      return mapSettingsSecrets(settings, (secret) => ({
-        value:
-          secret.sensitive && secret.redacted
-            ? (storedSecrets.get(secret.secretName) ?? "")
-            : secret.value,
-        redacted: secret.sensitive && secret.kind === "environment" && secret.redacted,
-      }));
+      // Tangent(FORK-PUSH-001)
+      const personalPushRelay =
+        yield* PersonalPushSettingsSecret.materializePersonalPushRelayPassword(
+          settings.personalPushRelay,
+          secretStore,
+        ).pipe(
+          Effect.mapError(
+            (cause) => new ServerSettingsError({ settingsPath, operation: "read-secret", cause }),
+          ),
+        );
+      return {
+        ...mapSettingsSecrets(settings, (secret) => ({
+          value:
+            secret.sensitive && secret.redacted
+              ? (storedSecrets.get(secret.secretName) ?? "")
+              : secret.value,
+          redacted: secret.sensitive && secret.kind === "environment" && secret.redacted,
+        })),
+        personalPushRelay,
+      };
     });
 
   const materializeChanges = (changes: Stream.Stream<ServerSettings>) =>
@@ -917,7 +934,12 @@ const make = Effect.gen(function* () {
             : {}),
         });
       }
-      return { settings, changes };
+      // Tangent(FORK-PUSH-001)
+      const personalPush = PersonalPushSettingsSecret.persistPersonalPushRelayPassword(
+        next.personalPushRelay,
+      );
+      changes.push(...personalPush.changes);
+      return { settings: { ...settings, personalPushRelay: personalPush.relay }, changes };
     });
 
   const rollbackSettingsSecretWrites = (
