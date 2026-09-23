@@ -1,5 +1,6 @@
 import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { useAtomValue } from "@effect/atom-react";
+import { excludeGenericChatProjects } from "@t3tools/shared/genericChat";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { Atom } from "effect/unstable/reactivity";
 import { useEffect, useState } from "react";
@@ -87,7 +88,8 @@ export function FirstRunGate({
   const onboardingCompletedAt = useClientSettings((settings) => settings.onboardingCompletedAt);
   const bootstrapped = useAllEnvironmentShellsBootstrapped();
   const { environments, isReady: environmentCatalogReady } = useEnvironments();
-  const projects = useProjects();
+  // Tangent(FORK-CHAT-001): the managed Chats project is not user setup.
+  const projects = excludeGenericChatProjects(useProjects());
   const threads = useThreadShells();
   const serverConfig = useAtomValue(primaryServerConfigAtom);
   const serverWelcome = useAtomValue(primaryServerWelcomeAtom);

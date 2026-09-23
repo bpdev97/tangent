@@ -2,6 +2,7 @@ import { makeTurnCommandMetadata } from "../../lib/commandMetadata";
 import { buildProjectThreadStartTurnInput } from "../../lib/projectThreadStartTurn";
 import { useWorktreeSetup } from "./use-worktree-setup";
 import { worktreeSetupAgentStarted } from "@t3tools/client-runtime/worktree-setup";
+import { isGenericChatThread } from "@t3tools/shared/genericChat";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { ScreenHeaderButton } from "../../components/ScreenHeaderButton";
 import type { ScreenHeaderAction } from "../../components/ScreenHeader.types";
@@ -124,11 +125,13 @@ function ThreadHeader(
         onPress: () => onOpenTerminal(null),
       });
     }
-    actions.push({
-      accessibilityLabel: "Open git controls",
-      icon: "point.topleft.down.curvedto.point.bottomright.up",
-      onPress: props.onOpenGitInspector,
-    });
+    if (!props.gitControls.genericChat) {
+      actions.push({
+        accessibilityLabel: "Open git controls",
+        icon: "point.topleft.down.curvedto.point.bottomright.up",
+        onPress: props.onOpenGitInspector,
+      });
+    }
     if (onMergeBack) {
       actions.push({
         accessibilityLabel: "Merge back to source",
@@ -148,6 +151,7 @@ function ThreadHeader(
     props.onReturnToThread,
     props.hasThreadCwd,
     props.hasWorkspaceRoot,
+    props.gitControls.genericChat,
   ]);
 
   return (
@@ -818,13 +822,17 @@ function ThreadRouteContent(
     gitStatus: gitStatus.data,
     gitOperationLabel: gitState.gitOperationLabel,
     canOpenTerminal: Boolean(selectedThreadProject?.workspaceRoot),
-    canOpenFiles: Boolean(selectedThreadProject?.workspaceRoot),
-    projectScripts: selectedThreadProject
-      ? resolveProjectScripts(
-          routeEnvironmentRuntime?.serverConfig?.settings ?? DEFAULT_SERVER_SETTINGS,
-          selectedThreadProject,
-        )
-      : [],
+    // Tangent(FORK-CHAT-001): chats keep the terminal but have no files, Git, or scripts.
+    genericChat: isGenericChatThread(selectedThread),
+    canOpenFiles:
+      Boolean(selectedThreadProject?.workspaceRoot) && !isGenericChatThread(selectedThread),
+    projectScripts:
+      selectedThreadProject && !isGenericChatThread(selectedThread)
+        ? resolveProjectScripts(
+            routeEnvironmentRuntime?.serverConfig?.settings ?? DEFAULT_SERVER_SETTINGS,
+            selectedThreadProject,
+          )
+        : [],
     terminalSessions: terminalMenuSessions,
     showDirectFileControl: layout.usesSplitView,
     onOpenTerminal: handleOpenTerminal,

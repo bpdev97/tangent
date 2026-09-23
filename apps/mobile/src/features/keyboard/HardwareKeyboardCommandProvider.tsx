@@ -1,4 +1,5 @@
 import { StackActions, useNavigation } from "@react-navigation/native";
+import { isGenericChatThread } from "@t3tools/shared/genericChat";
 import { resolveThreadReferenceCopyTarget } from "@t3tools/shared/threadReference";
 import {
   createContext,
@@ -107,13 +108,16 @@ export function HardwareKeyboardCommandProvider({
     }
     if (pathname !== "/" || navigation.canGoBack()) commands.add("back");
     if (activeThreadRef !== null) {
-      commands.add("files");
+      // Tangent(FORK-CHAT-001): chats keep the terminal but have no files or review.
+      if (!isGenericChatThread(activeThread)) {
+        commands.add("files");
+        commands.add("review");
+      }
       commands.add("terminal");
-      commands.add("review");
       if (pathname.split("/")[4] !== "terminal") commands.add("copyThreadReference");
     }
     return [...commands];
-  }, [activeThreadRef, pathname, registrationVersion, navigation]);
+  }, [activeThread, activeThreadRef, pathname, registrationVersion, navigation]);
 
   const onCommand = useCallback(
     (command: HardwareKeyboardCommand) => {

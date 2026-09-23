@@ -26,6 +26,8 @@ type NewTaskDraftRouteParams = {
   readonly pendingTaskId?: string | string[];
   readonly draftId?: string | string[];
   readonly incomingShareId?: string | string[];
+  /** Tangent(FORK-CHAT-001): set by Home's compose button to open with the keyboard up. */
+  readonly focusComposer?: string | string[];
 };
 
 export function NewTaskDraftRouteScreen({ route }: StaticScreenProps<NewTaskDraftRouteParams>) {
@@ -168,6 +170,12 @@ export function NewTaskDraftRouteScreen({ route }: StaticScreenProps<NewTaskDraf
           }
           pendingTaskId={pendingTaskId}
           draftId={draftId}
+          // Tangent(FORK-CHAT-001)
+          autoFocusComposer={
+            (Array.isArray(params.focusComposer)
+              ? params.focusComposer[0]
+              : params.focusComposer) === "1"
+          }
         />
       )}
     </>

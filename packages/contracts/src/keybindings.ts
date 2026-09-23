@@ -95,6 +95,8 @@ export const STATIC_KEYBINDING_COMMANDS = [
   "composer.branch",
   "chat.new",
   "chat.newLocal",
+  // Tangent(FORK-CHAT-001): starts a chat in the managed Chats project. Unbound by default.
+  "chats.new",
   "editor.openFavorite",
   "usage.cost",
   "usage.tokens",
