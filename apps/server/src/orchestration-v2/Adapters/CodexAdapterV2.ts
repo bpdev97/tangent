@@ -113,6 +113,8 @@ import { codexAppServerArgs, resolveCodexLaunchArgs } from "../../provider/codex
 import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+// Tangent(FORK-MCP-001)
+import { codexSharedMcpServers } from "@t3tools/provider-core/server/sharedMcpServers";
 import {
   MCP_APP_EXTENSION_ID,
   MCP_APP_MIME_TYPE,
@@ -1302,6 +1304,8 @@ export const CODEX_THREAD_CONFIG = { "tools.update_plan.enabled": true } as cons
 
 export function codexThreadRuntimeParams(input: {
   readonly mcpSession: McpProviderSession.McpProviderSessionConfig | undefined;
+  /** Tangent(FORK-MCP-001): the thread whose shared MCP servers attach beside t3-code. */
+  readonly threadId?: ThreadId | null;
   readonly modelSelection?: { readonly model: string };
   readonly runtimePolicy?: ProviderAdapter.ProviderAdapterV2RuntimePolicy;
 }): {
@@ -1310,15 +1314,21 @@ export function codexThreadRuntimeParams(input: {
   readonly config: Readonly<Record<string, Schema.Json>>;
 } {
   const { mcpSession } = input;
+  // Tangent(FORK-MCP-001)
+  const sharedMcpServers = codexSharedMcpServers(input.threadId);
   return {
     ...(input.runtimePolicy?.cwd == null ? {} : { cwd: input.runtimePolicy.cwd }),
     ...(input.modelSelection === undefined ? {} : { model: input.modelSelection.model }),
     config: {
       ...CODEX_THREAD_CONFIG,
       ...(mcpSession === undefined
-        ? {}
+        ? // Tangent(FORK-MCP-001)
+          Object.keys(sharedMcpServers).length === 0
+          ? {}
+          : { mcp_servers: sharedMcpServers }
         : {
             mcp_servers: {
+              ...sharedMcpServers, // Tangent(FORK-MCP-001)
               "t3-code": {
                 url: mcpSession.endpoint,
                 http_headers: {
@@ -6470,6 +6480,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                   "thread/start",
                   codexThreadRuntimeParams({
                     mcpSession,
+                    threadId: threadInput.threadId, // Tangent(FORK-MCP-001)
                     modelSelection: threadInput.modelSelection,
                     runtimePolicy: threadInput.runtimePolicy,
                   }),
@@ -6505,6 +6516,8 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                   mcpSession: yield* readMcpSession(
                     threadInput.threadId ?? threadInput.providerThread.appThreadId,
                   ),
+                  // Tangent(FORK-MCP-001)
+                  threadId: threadInput.threadId ?? threadInput.providerThread.appThreadId,
                   ...(threadInput.modelSelection === undefined
                     ? {}
                     : { modelSelection: threadInput.modelSelection }),
@@ -7233,6 +7246,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                   excludeTurns: true,
                   ...codexThreadRuntimeParams({
                     mcpSession: yield* readMcpSession(threadInput.providerThread.appThreadId),
+                    threadId: threadInput.providerThread.appThreadId, // Tangent(FORK-MCP-001)
                     modelSelection: input.modelSelection,
                     runtimePolicy: input.runtimePolicy,
                   }),
@@ -7282,6 +7296,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                       : { lastTurnId: boundary.lastTurnId }),
                     ...codexThreadRuntimeParams({
                       mcpSession: yield* mcpSessions.read(threadInput.targetThreadId),
+                      threadId: threadInput.targetThreadId, // Tangent(FORK-MCP-001)
                       ...(threadInput.modelSelection === undefined
                         ? {}
                         : { modelSelection: threadInput.modelSelection }),
