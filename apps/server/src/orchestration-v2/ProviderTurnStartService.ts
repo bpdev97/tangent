@@ -21,6 +21,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import { GitWorkflowService } from "../git/GitWorkflowService.ts";
+import { genericChatProviderText } from "../genericChat.ts";
 import { ProjectService } from "../project/ProjectService.ts";
 import { ProviderAuthService } from "../provider/Services/ProviderAuthService.ts";
 import { EventSinkV2 } from "./EventSink.ts";
@@ -893,9 +894,14 @@ export const layer: Layer.Layer<
       const routableSubagents = projection.subagents.filter((subagent) =>
         canRouteRelatedSubagent(subagent.status),
       );
-      const userText = projectComposerContextForProvider({
-        text: message.text,
-        records: message.context?.records ?? [],
+      // Tangent(FORK-CHAT-001): chat turns carry the no-project context.
+      const userText = genericChatProviderText({
+        thread: projection.thread,
+        message,
+        providerText: projectComposerContextForProvider({
+          text: message.text,
+          records: message.context?.records ?? [],
+        }),
       });
       const tokenCap = yield* handoffTokenCapConfig.pipe(
         Effect.orElseSucceed(() => DEFAULT_HANDOFF_TOKEN_CAP),

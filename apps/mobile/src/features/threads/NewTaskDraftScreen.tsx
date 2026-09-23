@@ -2,6 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { clampFileAttachmentUploadBytes } from "@t3tools/client-runtime/state/attachments";
+import { isGenericChatProject } from "@t3tools/shared/genericChat";
 import {
   nextPastedTextFileName,
   pastedTextDisposition,
@@ -189,6 +190,8 @@ export function NewTaskDraftScreen(props: {
   readonly draftId?: string;
   /** Durable native share inbox item to merge into this project draft. */
   readonly incomingShareId?: string;
+  /** Tangent(FORK-CHAT-001): open with the keyboard up, for Home's compose button. */
+  readonly autoFocusComposer?: boolean;
 }) {
   const projects = useProjects();
   const flow = useNewTaskFlow();
@@ -302,6 +305,13 @@ export function NewTaskDraftScreen(props: {
     });
   const queuesInsteadOfStarting = !environmentConnected || attachmentsUploading;
   const promptInputRef = useRef<ComposerEditorHandle>(null);
+  // Tangent(FORK-CHAT-001): a new chat is for typing, so Home's compose button lands in a ready
+  // composer.
+  useEffect(() => {
+    if (props.autoFocusComposer !== true) return;
+    const frame = requestAnimationFrame(() => promptInputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [props.autoFocusComposer]);
   const loadedBranchesProjectKeyRef = useRef<string | null>(null);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
   const [previewVideo, setPreviewVideo] = useState<VideoPreviewSource | null>(null);
@@ -1602,7 +1612,10 @@ export function NewTaskDraftScreen(props: {
           />
         </View>
       ) : null}
-      <View className="pb-1">{workspaceControls}</View>
+      {/* Tangent(FORK-CHAT-001): chats have no checkout, worktree, or branch to choose. */}
+      {isGenericChatProject(selectedProject) ? null : (
+        <View className="pb-1">{workspaceControls}</View>
+      )}
 
       {modelUnavailable ? (
         <Pressable

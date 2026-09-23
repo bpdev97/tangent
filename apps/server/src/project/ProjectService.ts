@@ -6,6 +6,7 @@ import {
   type ProjectUpdatePayload,
   type ProjectSnapshot,
 } from "@t3tools/contracts";
+import { isGenericChatProjectId } from "@t3tools/shared/genericChat";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -86,6 +87,7 @@ export class ProjectOperationError extends Schema.TaggedError<ProjectOperationEr
       "list-threads",
       "delete-thread",
       "dispatch-project-command",
+      "delete-reserved-project",
     ]),
     projectId: Schema.optional(ProjectId),
     workspaceRoot: Schema.optional(Schema.String),
@@ -375,6 +377,14 @@ export const make = Effect.gen(function* () {
   const deleteProject: ProjectService["Service"]["delete"] = Effect.fn("ProjectService.delete")(
     function* (input) {
       const { projectId } = input;
+      // Tangent(FORK-CHAT-001): a deleted reserved ID can never be created again.
+      if (isGenericChatProjectId(projectId)) {
+        return yield* new ProjectOperationError({
+          operation: "delete-reserved-project",
+          projectId,
+          cause: "The managed Chats project cannot be deleted.",
+        });
+      }
       const existing = yield* projects
         .getById({ projectId })
         .pipe(

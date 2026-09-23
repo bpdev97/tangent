@@ -5,6 +5,7 @@ import {
   OrchestrationEventInfrastructureLayerLive,
   OrchestrationLayerLive,
 } from "../orchestration/runtimeLayer.ts";
+import { genericChatCheckpointStoreLayer } from "../genericChat.ts";
 import { ProjectionProjectRepositoryLive } from "../persistence/Layers/ProjectionProjects.ts";
 import { layer as providerSessionRuntimeLayer } from "../persistence/ProviderSessionRuntime.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
@@ -96,7 +97,13 @@ const providerEventIngestorProvided = providerEventIngestorLayer.pipe(
   Layer.provide(Layer.mergeAll(eventSinkProvided, idAllocatorLayer, projectionStoreLayer)),
 );
 
-const checkpointServiceProvided = checkpointServiceLayer.pipe(Layer.provide(idAllocatorLayer));
+const checkpointServiceProvided = checkpointServiceLayer.pipe(
+  Layer.provide(idAllocatorLayer),
+  // Tangent(FORK-CHAT-001): never checkpoint the managed Chats workspace.
+  Layer.provide(
+    genericChatCheckpointStoreLayer.pipe(Layer.provide(ProjectionProjectRepositoryLive)),
+  ),
+);
 const contextHandoffServiceProvided = contextHandoffServiceLayer.pipe(
   Layer.provide(idAllocatorLayer),
 );
