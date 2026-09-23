@@ -28,6 +28,7 @@
     "FORK-PUSH-001": "docs/fork/push-relay.md",
     "FORK-IMAGE-001": "docs/fork/image-normalization.md",
     "FORK-MERMAID-001": "docs/fork/mermaid.md",
-    "FORK-PALETTE-001": "docs/fork/palette.md"
+    "FORK-PALETTE-001": "docs/fork/palette.md",
+    "FORK-MCP-001": "docs/fork/mcp-servers.md"
   }
 }

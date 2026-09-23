@@ -573,6 +573,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     ],
     providerSettingsOnly: true,
   },
+  // Tangent(FORK-MCP-001)
+  {
+    id: "mcp-servers",
+    title: "MCP servers",
+    to: "/settings/providers",
+    searchTerms: ["model context protocol tools executor http url headers add remove agents"],
+    providerSettingsOnly: true,
+  },
   {
     id: "provider-health-check-interval",
     title: "Health check interval",

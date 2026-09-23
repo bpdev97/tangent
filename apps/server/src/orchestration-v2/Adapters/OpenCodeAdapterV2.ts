@@ -57,6 +57,7 @@ import * as Stream from "effect/Stream";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import { readSharedMcpServers } from "../../sharedMcpServers/SharedMcpServerSessions.ts";
 import type { EventNdjsonLogger } from "../../provider/Layers/EventNdjsonLogger.ts";
 import { ProviderEventLoggers } from "../../provider/Layers/ProviderEventLoggers.ts";
 import {
@@ -1026,6 +1027,31 @@ export function makeOpenCodeAdapterV2(options: OpenCodeAdapterV2Options): Provid
               },
             }),
           );
+        }
+        // Tangent(FORK-MCP-001): an external server is the user's to configure,
+        // exactly as t3-code is skipped there.
+        if (!connection.external) {
+          for (const server of readSharedMcpServers(input.threadId)) {
+            yield* runOpenCodeSdk("mcp.add", () =>
+              client.mcp.add({
+                name: server.name,
+                config: {
+                  type: "remote",
+                  url: server.url,
+                  headers: { ...server.headers },
+                  oauth: false,
+                },
+              }),
+            ).pipe(
+              // An unreachable server must not keep the session from opening.
+              Effect.catch((cause) =>
+                Effect.logWarning("failed to attach shared MCP server", {
+                  server: server.name,
+                  cause,
+                }),
+              ),
+            );
+          }
         }
 
         const now = yield* DateTime.now;
