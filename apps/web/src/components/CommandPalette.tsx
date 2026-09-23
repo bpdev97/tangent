@@ -153,6 +153,7 @@ import {
   filterPinnedBrowseEntries,
   getCommandPaletteInputPlaceholder,
   getCommandPaletteMode,
+  getCommandPaletteControlNavigationKey,
   ITEM_ICON_CLASS,
   RECENT_THREAD_LIMIT,
   reduceCommandPaletteUiState,
@@ -2651,6 +2652,28 @@ function OpenCommandPaletteDialog(props: {
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
+    // Tangent(FORK-PALETTE-001): replay Control-N/P as the arrow keys the list handles.
+    const controlNavigationKey = getCommandPaletteControlNavigationKey({
+      key: event.key,
+      ctrlKey: event.ctrlKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+      isComposing: event.nativeEvent.isComposing,
+    });
+    if (controlNavigationKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.currentTarget.dispatchEvent(
+        new globalThis.KeyboardEvent("keydown", {
+          key: controlNavigationKey,
+          bubbles: true,
+          cancelable: true,
+          repeat: event.repeat,
+        }),
+      );
+      return;
+    }
     const command = resolveShortcutCommand(event, keybindings, {
       platform: navigator.platform,
       context: { modelPickerOpen: false },
