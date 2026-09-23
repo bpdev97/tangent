@@ -1,0 +1,30 @@
+{
+  "upstream": {
+    "repository": "pingdotgg/t3code",
+    "branch": "main",
+    "requiredChecks": [
+      "Check",
+      "Test",
+      "Test Server 1",
+      "Test Server 2",
+      "Test Server 3",
+      "Release Smoke",
+      "Rust",
+      "Mobile Native Static Analysis"
+    ]
+  },
+  "baseline": "0bfd9dd19d0c9418a936190525ec8f4c4fdae09b",
+  "hermes": {
+    "version": "0.21.4",
+    "tag": "v2026.9.21",
+    "minimumContract": 7
+  },
+  "features": {
+    "FORK-MAINT-001": "docs/fork/maintenance.md",
+    "FORK-DIST-001": "docs/fork/distribution.md",
+    "FORK-HERMES-001": "docs/fork/hermes.md",
+    "FORK-PUSH-001": "docs/fork/push-relay.md",
+    "FORK-IMAGE-001": "docs/fork/image-normalization.md",
+    "FORK-PALETTE-001": "docs/fork/palette.md"
+  }
+}
