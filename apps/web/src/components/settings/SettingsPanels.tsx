@@ -104,6 +104,7 @@ import { canUpdateServer } from "../ServerUpdateAction";
 import { useUpdateEverythingRun } from "../sidebar/updateEverythingRun";
 import { awaitsTrackSwitch, channelSwitchLabel } from "../sidebar/updateEverything.logic";
 import { isHostedByThisApp } from "../sidebar/useUpdateEverything";
+import { PersonalPushRelaySettingsSection } from "./PersonalPushRelaySettings";
 
 const RESPONSE_STREAMING_MODE_LABELS: Record<ResponseStreamingMode, string> = {
   turn: "Wait for the full response",
@@ -783,6 +784,9 @@ export function GeneralSettingsPanel() {
           }
         />
       </SettingsSection>
+
+      {/* Tangent(FORK-PUSH-001) */}
+      <PersonalPushRelaySettingsSection />
 
       <SettingsSection id="sidebar" title="Sidebar">
         <SettingsRow
