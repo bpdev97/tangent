@@ -62,6 +62,7 @@ import {
   isModelSelectionProviderEnabled,
 } from "@t3tools/shared/serverSettings";
 import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
+import * as PersonalPushSettingsSecret from "./personalPush/settingsSecret.ts";
 
 export { resolveSourceControlWriterModelSelection } from "@t3tools/shared/serverSettings";
 
@@ -204,7 +205,13 @@ export function redactServerSettingsForClient(settings: ServerSettings): ServerS
     accessToken: redactSecret(settings.bitbucket.accessToken),
     apiToken: redactSecret(settings.bitbucket.apiToken),
   };
-  return { ...settings, providerInstances, usageLimitSources, bitbucket };
+  // Tangent(FORK-PUSH-001)
+  return PersonalPushSettingsSecret.redactPersonalPushRelayForClient({
+    ...settings,
+    providerInstances,
+    usageLimitSources,
+    bitbucket,
+  });
 }
 
 export function applyProviderInstanceMutation(
@@ -878,11 +885,22 @@ const make = Effect.gen(function* () {
           );
         bitbucket[field] = Option.isSome(secret) ? textDecoder.decode(secret.value) : "";
       }
+      // Tangent(FORK-PUSH-001)
+      const personalPushRelay =
+        yield* PersonalPushSettingsSecret.materializePersonalPushRelayPassword(
+          settings.personalPushRelay,
+          secretStore,
+        ).pipe(
+          Effect.mapError(
+            (cause) => new ServerSettingsError({ settingsPath, operation: "read-secret", cause }),
+          ),
+        );
       return {
         ...settings,
         providerInstances: providerInstances as ServerSettings["providerInstances"],
         usageLimitSources: usageLimitSources as ServerSettings["usageLimitSources"],
         bitbucket,
+        personalPushRelay,
       };
     });
 
@@ -1042,6 +1060,11 @@ const make = Effect.gen(function* () {
         changes.push({ kind: "write", secretName, value: textEncoder.encode(value) });
         bitbucket[field] = SECRET_REDACTED;
       }
+      // Tangent(FORK-PUSH-001)
+      const personalPush = PersonalPushSettingsSecret.persistPersonalPushRelayPassword(
+        next.personalPushRelay,
+      );
+      changes.push(...personalPush.changes);
 
       return {
         settings: {
@@ -1049,6 +1072,7 @@ const make = Effect.gen(function* () {
           providerInstances: providerInstances as ServerSettings["providerInstances"],
           usageLimitSources: usageLimitSources as ServerSettings["usageLimitSources"],
           bitbucket,
+          personalPushRelay: personalPush.relay,
         },
         changes,
       };

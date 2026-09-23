@@ -9,7 +9,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Alert, AppState, Linking, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AppText as Text } from "../../components/AppText";
 import {
   isAtomCommandInterrupted,
   reportAtomCommandResult,
@@ -39,6 +38,7 @@ import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { resolveAgentAwarenessPlatformPresentation } from "./SettingsRouteScreen.logic";
+import { PersonalNotificationsSettingsScreen } from "./PersonalNotificationsSettings";
 
 type NotificationStatus = "checking" | "enabled" | "disabled" | "unsupported";
 type LiveActivityStatus = "checking" | "enabled" | "disabled" | "signed-out" | "linking";
@@ -58,18 +58,7 @@ function useDeviceRegistered(): boolean {
 
 export function SettingsNotificationsRouteScreen() {
   if (!hasCloudPublicConfig()) {
-    return (
-      <SettingsScreen title="Notifications">
-        <ScrollView
-          contentInsetAdjustmentBehavior="automatic"
-          contentContainerClassName="px-5 pt-4"
-        >
-          <Text className="text-base text-foreground-muted">
-            Notifications require T3 Connect in this app build.
-          </Text>
-        </ScrollView>
-      </SettingsScreen>
-    );
+    return <PersonalNotificationsSettingsScreen />; // Tangent(FORK-PUSH-001)
   }
 
   return <ConfiguredSettingsNotificationsRouteScreen />;
