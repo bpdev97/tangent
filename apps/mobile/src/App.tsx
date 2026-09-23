@@ -50,6 +50,7 @@ import { subscribeComposerDraftModelReconciliation } from "./state/use-composer-
 import { environmentThreadShells } from "./state/threads";
 import { environmentShell } from "./state/shell";
 import { OverlayPortalHost } from "./components/ui/OverlayPortal";
+import { PERSONAL_MOBILE_DISTRIBUTION } from "../../../downstream/mobile-config";
 import { shouldHandleAppLink, restoreDraftLinkState } from "./lib/appLinking";
 import { hasCloudPublicConfig } from "./features/cloud/publicConfig";
 import { takeScheduledTaskNewLink } from "./features/settings/scheduled-task-editor-state";
@@ -122,7 +123,13 @@ function getAppStateFromPath(path: string, options: Parameters<typeof getStateFr
 }
 
 const appLinking = {
-  prefixes: [Linking.createURL("/"), "t3code://", "t3code-dev://", "t3code-preview://"],
+  // Tangent(FORK-DIST-001): the personal app registers its own URL schemes.
+  prefixes: [
+    Linking.createURL("/"),
+    `${PERSONAL_MOBILE_DISTRIBUTION.scheme}://`,
+    `${PERSONAL_MOBILE_DISTRIBUTION.developmentScheme}://`,
+    `${PERSONAL_MOBILE_DISTRIBUTION.previewScheme}://`,
+  ],
   config: { initialRouteName: "Home" },
   filter: (url: string) => shouldHandleAppLink(url, hasCloudPublicConfig()),
   getInitialURL: async () => (await Linking.getInitialURL()) ?? (await launchWorkspaceURL()),
