@@ -20,7 +20,11 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 import * as SshAuth from "./auth.ts";
 import { SshCommandError } from "./errors.ts";
+import { PERSONAL_DISTRIBUTION } from "../../../downstream/config.ts";
 import * as SshTunnel from "./tunnel.ts";
+
+// Tangent(FORK-DIST-001): the launch script keeps its state under Tangent's home.
+const STATE_HOME = PERSONAL_DISTRIBUTION.macos.stateHomeDirectoryName;
 
 const TEST_NODE_ENGINE_RANGE = "^22.16 || ^23.11 || >=24.10";
 
@@ -108,10 +112,16 @@ describe("ssh tunnel scripts", () => {
     assert.include(script, "T3_NODE_SCRIPT_PATH=''");
     assert.include(
       script,
-      "T3_RELEASE_BASE_URL='https://github.com/pingdotgg/t3code/releases/download'",
+      "T3_RELEASE_BASE_URL='https://github.com/bpdev97/tangent/releases/download'",
     );
-    assert.include(script, 'T3_RUNTIME_DIR="$HOME/.t3/runtime/versions/$T3_ARCHIVE_VERSION"');
-    assert.include(script, 'T3_ARCHIVE="t3-$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz"');
+    assert.include(
+      script,
+      'T3_RUNTIME_DIR="$HOME/.bpdev-code/runtime/versions/$T3_ARCHIVE_VERSION"',
+    );
+    assert.include(
+      script,
+      'T3_ARCHIVE="tangent-server-$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz"',
+    );
     assert.include(script, "SHA256SUMS");
     assert.include(script, 'exec "$T3_RUNTIME_DIR/t3" "$@"');
     assert.notInclude(script, "npx");
@@ -120,7 +130,7 @@ describe("ssh tunnel scripts", () => {
     assert.notInclude(script, 'exec t3 "$@"');
     assert.include(
       script,
-      'T3_LOCK="$HOME/.t3/runtime/versions/.$T3_ARCHIVE_VERSION.install.lock"',
+      'T3_LOCK="$HOME/.bpdev-code/runtime/versions/.$T3_ARCHIVE_VERSION.install.lock"',
     );
     assert.include(script, 'while ! mkdir "$T3_LOCK" 2>/dev/null; do');
     assert.include(script, 'mv "$T3_LOCK/pid.tmp" "$T3_LOCK/pid"');
@@ -862,9 +872,9 @@ describe("archive runner script", () => {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const platform = hostPlatform === "darwin" ? "darwin" : "linux";
     const arch = hostArch === "arm64" ? "arm64" : "x64";
-    const stem = `t3-${archiveVersion}-${platform}-${arch}`;
+    const stem = `tangent-server-${archiveVersion}-${platform}-${arch}`;
     const stage = `${root}/stage/${stem}`;
-    const release = `${root}/mirror/v${archiveVersion}`;
+    const release = `${root}/mirror/personal-v${archiveVersion}`;
     const script = [
       "set -eu",
       `mkdir -p '${stage}' '${release}'`,
@@ -901,7 +911,7 @@ describe("archive runner script", () => {
           assert.equal(result.exitCode, 0, result.stderr);
           assert.include(result.stdout, `t3 v${archiveVersion}`);
         }
-        const versionsDir = `${home}/.t3/runtime/versions`;
+        const versionsDir = `${home}/.bpdev-code/runtime/versions`;
         assert.deepEqual(yield* fs.readDirectory(versionsDir), [archiveVersion]);
         assert.equal(
           (yield* fs.readFileString(`${versionsDir}/${archiveVersion}/.install-complete`)).trim(),
@@ -991,7 +1001,7 @@ server.listen(Number(flag("--port")), "127.0.0.1", () => {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-launch-script-" });
     const home = `${root}/home`;
-    const stateDir = `${home}/.t3/ssh-launch/test-state`;
+    const stateDir = `${home}/${STATE_HOME}/ssh-launch/test-state`;
     const fakeServer = `${root}/fake-t3.cjs`;
     const launch = `${root}/launch.sh`;
     yield* fs.makeDirectory(stateDir, { recursive: true });
@@ -1040,7 +1050,15 @@ server.listen(Number(flag("--port")), "127.0.0.1", () => {
     ) =>
       Effect.gen(function* () {
         const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-        const args = [fakeServer, "serve", "--port", "0", "--base-dir", `${home}/.t3`, ...flags];
+        const args = [
+          fakeServer,
+          "serve",
+          "--port",
+          "0",
+          "--base-dir",
+          `${home}/${STATE_HOME}`,
+          ...flags,
+        ];
         const server = yield* spawner.spawn(
           options?.unreaped
             ? ChildProcess.make("sh", ["-c", 'node "$@" & exec sleep 600', "sh", ...args])
@@ -1186,7 +1204,7 @@ server.listen(Number(flag("--port")), "127.0.0.1", () => {
         assert.include((yield* runScript(home, ["-c", `ps -o stat= -p ${zombie}`])).stdout, "Z");
         yield* fs.writeFileString(`${stateDir}/pid`, `${zombie}\n`);
         yield* fs.writeFileString(
-          `${home}/.t3/userdata/server-runtime.json`,
+          `${home}/${STATE_HOME}/userdata/server-runtime.json`,
           JSON.stringify({
             version: 1,
             pid: zombie,
