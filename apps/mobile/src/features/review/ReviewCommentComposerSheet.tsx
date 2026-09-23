@@ -14,6 +14,7 @@ import { ControlPill } from "../../components/ControlPill";
 import { cn } from "../../lib/cn";
 import type { DraftComposerImageAttachment } from "../../lib/composerImages";
 import { convertPastedImagesToAttachments, pickComposerImages } from "../../lib/composerImages";
+import { ComposerAttachmentButton } from "../../components/ComposerAttachmentButton";
 import { useNativePaste } from "../../lib/useNativePaste";
 import { setPendingConnectionError } from "../../state/use-remote-environment-registry";
 import { appendReviewCommentToDraft } from "../../state/use-thread-composer-state";
@@ -126,8 +127,8 @@ export function ReviewCommentComposerSheet(props: ReviewCommentComposerSheetProp
     };
   }, [selectedLines, selectedTheme, target]);
 
-  async function handlePickImages(): Promise<void> {
-    const result = await pickComposerImages({ existingCount: attachments.length });
+  async function handlePickImages(source?: "library" | "camera"): Promise<void> {
+    const result = await pickComposerImages({ existingCount: attachments.length, source });
     if (result.images.length > 0) {
       setAttachments((current) => [...current, ...result.images]);
     }
@@ -289,11 +290,8 @@ export function ReviewCommentComposerSheet(props: ReviewCommentComposerSheetProp
         </View>
         {!isAndroid && target ? (
           <View className="flex-row items-center gap-3 bg-sheet px-5 py-2">
-            <ControlPill
-              accessibilityLabel="Add image"
-              icon="plus"
-              onPress={() => void handlePickImages()}
-            />
+            {/* Tangent(FORK-IMAGE-001): Photo Library and Camera. */}
+            <ComposerAttachmentButton supportsFiles={false} onPickMedia={handlePickImages} />
             <View className="flex-1" />
             <ControlPill
               accessibilityLabel="Comment"
@@ -315,11 +313,8 @@ export function ReviewCommentComposerSheet(props: ReviewCommentComposerSheetProp
             className="flex-row items-center gap-3 border-t border-border bg-sheet px-5 pt-2"
             style={{ paddingBottom: Math.max(insets.bottom, 10) }}
           >
-            <ControlPill
-              accessibilityLabel="Add image"
-              icon="plus"
-              onPress={() => void handlePickImages()}
-            />
+            {/* Tangent(FORK-IMAGE-001): Photo Library and Camera. */}
+            <ComposerAttachmentButton supportsFiles={false} onPickMedia={handlePickImages} />
             <View className="flex-1" />
             <ControlPill
               accessibilityLabel="Comment"
