@@ -2,6 +2,7 @@ import {
   AntigravitySettings,
   ClaudeSettings,
   CodexSettings,
+  HermesSettings,
   isProviderDriverKind,
   ProviderDriverKind,
 } from "@t3tools/contracts";
@@ -43,6 +44,13 @@ export const providerClients = makeProviderClientRegistry([
   },
   museClient,
   piClient,
+  // Tangent(FORK-HERMES-001): Hermes instances are explicit, one per profile.
+  {
+    driverKind: ProviderDriverKind.make("hermes"),
+    label: "Hermes",
+    settingsSchema: HermesSettings,
+    hasDefaultInstance: false,
+  },
   acpRegistryClient,
 ]);
 
