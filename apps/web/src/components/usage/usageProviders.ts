@@ -46,6 +46,8 @@ export const PROVIDER_PRESENTATION = {
     color: "#4d9f8a",
     driverKind: ProviderDriverKind.make("pi"),
   },
+  // Tangent(FORK-HERMES-001)
+  hermes: { label: "Hermes", color: "#c9a227", driverKind: ProviderDriverKind.make("hermes") },
 } satisfies Record<UsageProviderKind, UsageProviderPresentation>;
 
 /** Stable provider reading order across charts, summaries, tables, and hover rows. */

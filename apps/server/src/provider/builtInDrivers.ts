@@ -36,6 +36,8 @@ import type {
   AnyProviderDriver,
   ProviderUsageReaderEnv,
 } from "@t3tools/provider-core/server/driver";
+// Tangent(FORK-HERMES-001)
+import { HermesDriver, type HermesDriverEnv } from "./hermes/HermesDriver.ts";
 
 /**
  * Union of infrastructure services required to construct any built-in
@@ -49,6 +51,7 @@ export type BuiltInDriversEnv =
   | CodexDriverEnv
   | CursorDriverEnv
   | GrokDriverEnv
+  | HermesDriverEnv
   | OpenCodeDriverEnv
   | PiDriverEnv
   | MuseDriverEnv;
@@ -67,6 +70,7 @@ export const BUILT_IN_DRIVERS: ReadonlyArray<AnyProviderDriver<BuiltInDriversEnv
   AntigravityDriver,
   PiDriver,
   MuseDriver,
+  HermesDriver,
   AcpRegistryDriver,
 ];
 
@@ -76,6 +80,7 @@ export type BuiltInUsageReadersEnv =
   | ProviderUsageReaderEnv<typeof CodexDriver>
   | ProviderUsageReaderEnv<typeof GrokDriver>
   | ProviderUsageReaderEnv<typeof OpenCodeDriver>
+  | ProviderUsageReaderEnv<typeof HermesDriver>
   | ProviderUsageReaderEnv<typeof AntigravityDriver>
   | ProviderUsageReaderEnv<typeof CursorDriver>
   | ProviderUsageReaderEnv<typeof PiDriver>;
@@ -93,6 +98,8 @@ export const BUILT_IN_USAGE_DRIVERS: ReadonlyArray<
   GrokDriver,
   PiDriver,
   OpenCodeDriver,
+  // Tangent(FORK-HERMES-001): each Hermes profile is a usage source of its own.
+  HermesDriver,
   AntigravityDriver,
   CursorDriver,
 ];

@@ -29,6 +29,8 @@ const CUSTOM_MODEL_PLACEHOLDER_BY_KIND: Partial<Record<ProviderDriverKind, strin
   [ProviderDriverKind.make("cursor")]: "claude-sonnet-4-6",
   [ProviderDriverKind.make("opencode")]: "openai/gpt-5",
   [ProviderDriverKind.make("pi")]: "anthropic/claude-sonnet-5",
+  // Tangent(FORK-HERMES-001): Hermes model IDs are `<provider>:<model>`.
+  [ProviderDriverKind.make("hermes")]: "anthropic:claude-sonnet-5",
 };
 
 /** Above this many models the list gets a filter input. */
