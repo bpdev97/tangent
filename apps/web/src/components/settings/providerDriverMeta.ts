@@ -5,6 +5,7 @@ import {
   CodexSettings,
   CursorSettings,
   GrokSettings,
+  HermesSettings,
   OpenCodeSettings,
   PiSettings,
   ProviderDriverKind,
@@ -91,6 +92,13 @@ const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = [
     label: "Pi",
     badgeLabel: "Early Access",
     settingsSchema: PiSettings,
+  },
+  // Tangent(FORK-HERMES-001): Hermes instances are explicit, one per profile.
+  {
+    value: ProviderDriverKind.make("hermes"),
+    label: "Hermes",
+    settingsSchema: HermesSettings,
+    hasDefaultInstance: false,
   },
   {
     value: ProviderDriverKind.make("acpRegistry"),
