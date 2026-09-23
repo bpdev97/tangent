@@ -15,7 +15,8 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer term
     async (fail) => {
       const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-install-progress-"));
       const version = "1.2.3";
-      const stem = `t3-${version}-linux-${HostProcess.Architecture.defaultValue()}`;
+      // Tangent(FORK-DIST-001): Tangent server archive name.
+      const stem = `tangent-server-${version}-linux-${HostProcess.Architecture.defaultValue()}`;
       const archiveName = `${stem}.tar.gz`;
       let resumeDownload: (() => void) | undefined;
       let sawPartialProgress = false;
