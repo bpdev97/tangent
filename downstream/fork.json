@@ -15,8 +15,8 @@
   },
   "baseline": "3143335fc3a568cbbb5174764961889272135cb9",
   "hermes": {
-    "version": "0.21.4",
-    "tag": "v2026.9.21",
+    "version": "0.21.5",
+    "tag": "v2026.9.24",
     "minimumContract": 7
   },
   "features": {
