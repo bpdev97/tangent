@@ -108,6 +108,7 @@ import {
 } from "../../provider/Layers/codexLaunchArgs.ts";
 import { mergeProviderInstanceEnvironment } from "../../provider/ProviderInstanceEnvironment.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import { codexSharedMcpServers } from "../../sharedMcpServers/SharedMcpServerSessions.ts";
 import {
   ProviderAdapterDriverCreateError,
   type ProviderAdapterDriver,
@@ -1207,15 +1208,21 @@ export function codexThreadRuntimeParams(input: {
 } {
   const mcpSession =
     input.threadId === null ? undefined : McpProviderSession.readMcpProviderSession(input.threadId);
+  // Tangent(FORK-MCP-001)
+  const sharedMcpServers = codexSharedMcpServers(input.threadId);
   return {
     ...(input.runtimePolicy?.cwd == null ? {} : { cwd: input.runtimePolicy.cwd }),
     ...(input.modelSelection === undefined ? {} : { model: input.modelSelection.model }),
     config: {
       ...CODEX_THREAD_CONFIG,
       ...(mcpSession === undefined
-        ? {}
+        ? // Tangent(FORK-MCP-001)
+          Object.keys(sharedMcpServers).length === 0
+          ? {}
+          : { mcp_servers: sharedMcpServers }
         : {
             mcp_servers: {
+              ...sharedMcpServers, // Tangent(FORK-MCP-001)
               "t3-code": {
                 url: mcpSession.endpoint,
                 http_headers: {
