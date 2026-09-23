@@ -158,6 +158,7 @@ describe("composer file attachments", () => {
       mocks.manipulate.mockImplementation((source: string | Size) => {
         let size = typeof source === "string" ? native.size : source;
         const context = {
+          release: vi.fn(),
           resize(next: Size) {
             native.resizes.push(next);
             size = next;
@@ -290,7 +291,7 @@ describe("composer file attachments", () => {
 
       expect(mocks.readBase64).not.toHaveBeenCalled();
       expect(mocks.manipulate).toHaveBeenCalledWith(photo.uri);
-      expect(result.images).toEqual([expect.objectContaining({ mimeType: "image/jpeg" })]);
+      expect(result.images).toEqual([expect.objectContaining({ mimeType: "image/png" })]);
     });
 
     // regression: #11440 render photo library picks to a bounded JPEG off the JS thread
@@ -306,7 +307,7 @@ describe("composer file attachments", () => {
 
       expect(mocks.readBase64).not.toHaveBeenCalled();
       expect(mocks.manipulate).toHaveBeenCalledWith("content://media/1");
-      expect(result.images).toEqual([expect.objectContaining({ mimeType: "image/jpeg" })]);
+      expect(result.images).toEqual([expect.objectContaining({ mimeType: "image/png" })]);
     });
 
     it("checks the rendered JPEG against the image limit", async () => {
@@ -320,7 +321,7 @@ describe("composer file attachments", () => {
 
       await expect(pickComposerImages({ existingCount: 0 })).resolves.toEqual({
         images: [],
-        error: "'photo.HEIC' exceeds the 10 MB attachment limit.",
+        error: "Could not shrink 'photo.HEIC' below the 10 MB attachment limit.",
       });
     });
 
@@ -334,12 +335,13 @@ describe("composer file attachments", () => {
       const result = await pickComposerImages({ existingCount: 0 });
 
       expect(result.images).toEqual([expect.objectContaining({ name: "photo.jpg" })]);
-      expect(result.error).toBe("Failed to read 'missing.gif'.");
+      expect(result.error).toBe("missing file");
     });
 
     // regression: #11440 render photo library picks to a bounded JPEG off the JS thread
     it("reports a photo the native renderer cannot decode", async () => {
       mocks.manipulate.mockImplementation(() => ({
+        release: vi.fn(),
         resize: () => {
           throw new Error("unreachable");
         },
@@ -349,7 +351,7 @@ describe("composer file attachments", () => {
 
       await expect(pickComposerImages({ existingCount: 0 })).resolves.toEqual({
         images: [],
-        error: "Failed to read 'photo.HEIC'.",
+        error: "corrupt",
       });
     });
   });

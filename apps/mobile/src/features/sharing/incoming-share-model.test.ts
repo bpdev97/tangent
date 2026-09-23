@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import {
-  PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
-  PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
-} from "@t3tools/contracts";
+import { PROVIDER_SEND_TURN_MAX_ATTACHMENTS } from "@t3tools/contracts";
+import { MAX_COMPOSER_IMAGE_SOURCE_BYTES } from "../../lib/prepareComposerImage";
 import type { ResolvedSharePayload, SharePayload } from "expo-sharing";
 
 import {
@@ -198,7 +196,7 @@ describe("incoming native shares", () => {
           contentUri: image.value,
           contentType: "image",
           contentMimeType: "image/png",
-          contentSize: PROVIDER_SEND_TURN_MAX_IMAGE_BYTES + 1,
+          contentSize: MAX_COMPOSER_IMAGE_SOURCE_BYTES + 1,
           originalName: "huge.png",
         },
       ],
@@ -206,7 +204,7 @@ describe("incoming native shares", () => {
     });
 
     expect(result.attachments).toEqual([]);
-    expect(result.warnings).toEqual(["'huge.png' exceeds the 10 MB attachment limit."]);
+    expect(result.warnings).toEqual(["'huge.png' exceeds the 50 MB image processing limit."]);
     expect(readBase64).not.toHaveBeenCalled();
     expect(removeOwnedFile).toHaveBeenCalledWith(image.value);
     expect(hasIncomingShareContent(result)).toBe(false);

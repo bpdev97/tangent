@@ -15,6 +15,7 @@ const manipulator = vi.hoisted(() => {
   const manipulate = vi.fn((source: string | { width: number; height: number }) => {
     let size = typeof source === "string" ? state.sourceSize : source;
     const context = {
+      release: vi.fn(), // Tangent(FORK-IMAGE-001): prepareComposerImage releases its context.
       resize: vi.fn((next: { width: number; height: number }) => {
         size = next;
         return context;
@@ -173,12 +174,12 @@ describe("native pasted image cleanup", () => {
 
     expect(attachments).toEqual([
       expect.objectContaining({
-        name: "pasted-image.jpeg",
+        name: "pasted-image.jpg", // Tangent(FORK-IMAGE-001): prepareComposerImage names JPEGs .jpg
         mimeType: "image/jpeg",
-        fileUri: `${STORED}-pasted-image.jpeg`,
+        fileUri: `${STORED}-pasted-image.jpg`,
       }),
     ]);
-    expect(files.get(`${STORED}-pasted-image.jpeg`)?.base64).toBe("cmVuZGVyZWQ=");
+    expect(files.get(`${STORED}-pasted-image.jpg`)?.base64).toBe("cmVuZGVyZWQ=");
     expect(files.get("file:///cache/rendered.jpeg")?.deleted).toBe(true);
     expect(files.get(uri)?.deleted).toBe(false);
   });
@@ -260,7 +261,8 @@ describe("native pasted image cleanup", () => {
 
     expect(attachments).toHaveLength(1);
     expect(attachments[0]?.sizeBytes).toBeLessThanOrEqual(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES);
-    expect(files.get("file:///cache/rendered.jpeg")?.deleted).toBe(true);
+    // Tangent(FORK-IMAGE-001): prepareComposerImage keeps PNG for transparency.
+    expect(files.get("file:///cache/rendered.png")?.deleted).toBe(true);
   });
 
   it("keeps the readable images of a paste and still reports the one it dropped", async () => {
@@ -289,7 +291,7 @@ describe("native pasted image cleanup", () => {
 
     expect(result).toEqual({
       attachments: [],
-      error: "A pasted image exceeds the 10 MB attachment limit.",
+      error: "Could not shrink 'pasted-image.png' below the 10 MB attachment limit.",
     });
     expect(files.get(uri)?.deleted).toBe(true);
   });

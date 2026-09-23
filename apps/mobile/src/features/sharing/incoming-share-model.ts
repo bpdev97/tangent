@@ -4,7 +4,6 @@ import {
   fileAttachmentTooLargeMessage,
 } from "@t3tools/client-runtime/state/attachments";
 import {
-  isProviderSendTurnSupportedImageMimeType,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
@@ -16,9 +15,12 @@ import { msg } from "gt-react-native";
 import { m } from "../../i18n/messages";
 
 import { DraftComposerAttachmentSchema } from "../../lib/composer-image-schema";
-import { fitComposerImage } from "../../lib/composerImageFit";
 import type { DraftComposerAttachment } from "../../lib/composerImages";
-import { estimateBase64ByteSize } from "../../lib/base64";
+import {
+  MAX_COMPOSER_IMAGE_SOURCE_BYTES,
+  prepareComposerImage,
+  type PreparedComposerImage,
+} from "../../lib/prepareComposerImage";
 
 export interface IncomingShareDraft {
   readonly schemaVersion: 1;
@@ -385,28 +387,14 @@ export async function buildIncomingShareDraft(input: {
       await releaseOwnedFiles(input.fileReader, [uri, payload.value]);
       continue;
     }
-    if (!isProviderSendTurnSupportedImageMimeType(mimeType)) {
-      warnings.push(
-        m(
-          msg("''{name}'' is not a supported image type.", {
-            name: resolved?.originalName ?? fallbackName(uri, index, mimeType),
-          }),
-        ),
-      );
-      await releaseOwnedFiles(input.fileReader, [uri, payload.value]);
-      continue;
-    }
+    // Tangent(FORK-IMAGE-001): HEIC and oversized images are prepared below, up to 50 MB.
     if (
       resolved?.contentSize !== null &&
       resolved?.contentSize !== undefined &&
-      resolved.contentSize > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES
+      resolved.contentSize > MAX_COMPOSER_IMAGE_SOURCE_BYTES
     ) {
       warnings.push(
-        m(
-          msg("''{name}'' exceeds the 10 MB attachment limit.", {
-            name: resolved.originalName ?? fallbackName(uri, index, mimeType),
-          }),
-        ),
+        `'${resolved.originalName ?? fallbackName(uri, index, mimeType)}' exceeds the 50 MB image processing limit.`,
       );
       await releaseOwnedFiles(input.fileReader, [uri, payload.value]);
       continue;
@@ -415,22 +403,13 @@ export async function buildIncomingShareDraft(input: {
     const name = resolved?.originalName ?? fallbackName(uri, index, mimeType);
     let persistedImageUri: string | undefined;
     let retainedImageUri: string | undefined;
+    let prepared: PreparedComposerImage | undefined;
     try {
-      const sharedBase64 = await input.fileReader.readBase64(uri);
-      // Use already-read bytes because native image loaders may not read the provider's file.
-      const fitted = await fitComposerImage({
-        uri: `data:${mimeType};base64,${sharedBase64}`,
-        mimeType,
-        base64: sharedBase64,
-      });
-      const base64 = fitted?.base64 ?? sharedBase64;
-      const decodedSize = estimateBase64ByteSize(base64);
-      if (decodedSize <= 0 || decodedSize > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
-        warnings.push(m(msg("''{name}'' exceeds the 10 MB attachment limit.", { name })));
-        continue;
-      }
+      const base64 = await input.fileReader.readBase64(uri);
+      // Measured from the bytes; share metadata can under-report.
+      prepared = await prepareComposerImage({ uri, base64, mimeType, name });
       if (input.fileReader.persistFile) {
-        persistedImageUri = await input.fileReader.persistFile(fitted?.uri ?? uri, name);
+        persistedImageUri = await input.fileReader.persistFile(prepared.uri, prepared.name);
         const sizeBytes = (await input.fileReader.readSize?.(persistedImageUri)) ?? null;
         if (sizeBytes === null || sizeBytes <= 0) {
           warnings.push(m(msg("''{name}'' is empty or could not be read.", { name })));
@@ -443,8 +422,8 @@ export async function buildIncomingShareDraft(input: {
         attachments.push({
           id: `${input.id}-image-${index}`,
           type: "image",
-          name,
-          mimeType,
+          name: prepared.name,
+          mimeType: prepared.mimeType,
           sizeBytes,
           fileUri: persistedImageUri,
           previewUri: persistedImageUri,
@@ -452,20 +431,23 @@ export async function buildIncomingShareDraft(input: {
         retainedImageUri = persistedImageUri;
         continue;
       }
-      const dataUrl = `data:${mimeType};base64,${base64}`;
+      const dataUrl = `data:${prepared.mimeType};base64,${prepared.base64}`;
       attachments.push({
         id: `${input.id}-image-${index}`,
         type: "image",
-        name,
-        mimeType,
-        sizeBytes: decodedSize,
+        name: prepared.name,
+        mimeType: prepared.mimeType,
+        sizeBytes: prepared.sizeBytes,
         dataUrl,
         // Data-backed previews outlive temporary share files and App Group entries.
         previewUri: dataUrl,
       });
-    } catch {
-      warnings.push(m(msg("Could not read ''{name}''.", { name })));
+    } catch (cause) {
+      warnings.push(
+        cause instanceof Error ? cause.message : m(msg("Could not read ''{name}''.", { name })),
+      );
     } finally {
+      await prepared?.release();
       await releaseOwnedFiles(
         input.fileReader,
         [uri, payload.value, persistedImageUri].filter(
