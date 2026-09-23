@@ -19,6 +19,7 @@ import { Argument, Command, Flag, GlobalFlag, Prompt } from "effect/cli";
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 import packageJson from "../../package.json" with { type: "json" };
+import { PERSONAL_DISTRIBUTION } from "../../../../downstream/config.ts";
 import * as BootService from "../cloud/bootService.ts";
 import {
   ensurePinnedRuntimeInstalled,
@@ -273,7 +274,10 @@ const belongsToBootService = Effect.fn("cli.update.belongs_to_boot_service")(fun
   const runner = yield* ProcessRunner.ProcessRunner;
   if (platform === "linux") {
     const cgroup = yield* fs.readFileString(`/proc/${pid}/cgroup`).pipe(Effect.option);
-    return Option.isSome(cgroup) && cgroup.value.includes("/t3code.service");
+    return (
+      Option.isSome(cgroup) &&
+      cgroup.value.includes(`/${PERSONAL_DISTRIBUTION.connect.bootServiceName}.service`)
+    );
   }
   if (platform === "darwin") {
     const parent = yield* runner
