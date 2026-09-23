@@ -1,4 +1,4 @@
-import { HStack, Image, Spacer, Text, VStack, ZStack } from "@expo/ui/swift-ui";
+import { HStack, Image, Link, Spacer, Text, VStack, ZStack } from "@expo/ui/swift-ui";
 import type { ComponentProps } from "react";
 import {
   activityBackgroundTint,
@@ -169,11 +169,13 @@ export function AgentActivity(
 
   // Any registered scheme variant routes back to this app; taps are delivered
   // to the widget's containing app, so the prod scheme is safe for all builds.
-  const deepLinkRow = attentionRow ?? row0;
-  const deepLink =
-    deepLinkRow && deepLinkRow.deepLink.startsWith("/") && !deepLinkRow.deepLink.startsWith("//")
-      ? `t3code://${deepLinkRow.deepLink.slice(1)}`
+  // Tangent(FORK-PUSH-001): Tangent's prod scheme; this function is serialized
+  // into the widget bundle, so it cannot import the distribution config.
+  const appUrl = (row: AgentActivityRowProps | undefined): string | null =>
+    row && row.deepLink.startsWith("/") && !row.deepLink.startsWith("//")
+      ? `bpdev-code://${row.deepLink.slice(1)}`
       : null;
+  const deepLink = appUrl(attentionRow ?? row0);
 
   // A scannable status glyph per phase — reads faster than colored words and
   // ties the compact / expanded / banner / watch presentations together.
@@ -244,6 +246,14 @@ export function AgentActivity(
     </HStack>
   );
 
+  // Tangent(FORK-PUSH-001): a row opens its own thread. Without this every
+  // tap lands on the container's widgetURL, which is the attention or top row
+  // and not necessarily the thread that just alerted.
+  const renderLinkedRow = (row: AgentActivityRowProps) => {
+    const url = appUrl(row);
+    return url ? <Link destination={url}>{renderCompactRow(row)}</Link> : renderCompactRow(row);
+  };
+
   // The branded T3 mark. `assetName` resolves the template image set bundled in
   // the widget extension's asset catalog. Image views only honor `resizable`
   // directly (frame/foregroundStyle are dropped), so we size it via a container
@@ -306,11 +316,11 @@ export function AgentActivity(
             <Spacer minLength={0} />
           </HStack>
         </ZStack>
-        {row0 ? renderCompactRow(row0) : null}
-        {row1 ? renderCompactRow(row1) : null}
-        {row2 ? renderCompactRow(row2) : null}
-        {row3 ? renderCompactRow(row3) : null}
-        {row4 ? renderCompactRow(row4) : null}
+        {row0 ? renderLinkedRow(row0) : null}
+        {row1 ? renderLinkedRow(row1) : null}
+        {row2 ? renderLinkedRow(row2) : null}
+        {row3 ? renderLinkedRow(row3) : null}
+        {row4 ? renderLinkedRow(row4) : null}
       </VStack>
     ),
     // Compact card for the watchOS Smart Stack + CarPlay (the `.small` family):
@@ -396,9 +406,9 @@ export function AgentActivity(
             : [padding({ vertical: 2, horizontal: 8 })]
         }
       >
-        {row0 ? renderCompactRow(row0) : null}
-        {row1 ? renderCompactRow(row1) : null}
-        {row2 ? renderCompactRow(row2) : null}
+        {row0 ? renderLinkedRow(row0) : null}
+        {row1 ? renderLinkedRow(row1) : null}
+        {row2 ? renderLinkedRow(row2) : null}
       </VStack>
     ),
   };
