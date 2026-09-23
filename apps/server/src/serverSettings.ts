@@ -62,6 +62,7 @@ import {
   isModelSelectionProviderEnabled,
 } from "@t3tools/shared/serverSettings";
 import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
+import * as PersonalPushSettingsSecret from "./personalPush/settingsSecret.ts";
 
 export { resolveSourceControlWriterModelSelection } from "@t3tools/shared/serverSettings";
 
@@ -215,7 +216,14 @@ export function redactServerSettingsForClient(settings: ServerSettings): ServerS
       Object.entries(settings.github.tokens).map(([host, token]) => [host, redactSecret(token)]),
     ),
   };
-  return { ...settings, providerInstances, usageLimitSources, bitbucket, github };
+  // Tangent(FORK-PUSH-001)
+  return PersonalPushSettingsSecret.redactPersonalPushRelayForClient({
+    ...settings,
+    providerInstances,
+    usageLimitSources,
+    bitbucket,
+    github,
+  });
 }
 
 export function applyProviderInstanceMutation(
@@ -925,12 +933,23 @@ const make = Effect.gen(function* () {
           );
         tokens[host] = Option.isSome(secret) ? textDecoder.decode(secret.value) : "";
       }
+      // Tangent(FORK-PUSH-001)
+      const personalPushRelay =
+        yield* PersonalPushSettingsSecret.materializePersonalPushRelayPassword(
+          settings.personalPushRelay,
+          secretStore,
+        ).pipe(
+          Effect.mapError(
+            (cause) => new ServerSettingsError({ settingsPath, operation: "read-secret", cause }),
+          ),
+        );
       return {
         ...settings,
         providerInstances: providerInstances as ServerSettings["providerInstances"],
         usageLimitSources: usageLimitSources as ServerSettings["usageLimitSources"],
         bitbucket,
         github: { ...settings.github, tokens },
+        personalPushRelay,
       };
     });
 
@@ -1090,6 +1109,11 @@ const make = Effect.gen(function* () {
         changes.push({ kind: "write", secretName, value: textEncoder.encode(value) });
         bitbucket[field] = SECRET_REDACTED;
       }
+      // Tangent(FORK-PUSH-001)
+      const personalPush = PersonalPushSettingsSecret.persistPersonalPushRelayPassword(
+        next.personalPushRelay,
+      );
+      changes.push(...personalPush.changes);
 
       const tokens: Record<string, string> = {};
       for (const [rawHost, raw] of Object.entries(next.github.tokens)) {
@@ -1131,6 +1155,7 @@ const make = Effect.gen(function* () {
           usageLimitSources: usageLimitSources as ServerSettings["usageLimitSources"],
           bitbucket,
           github: { ...next.github, tokens },
+          personalPushRelay: personalPush.relay,
         },
         changes,
       };

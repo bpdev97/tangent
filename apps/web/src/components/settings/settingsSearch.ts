@@ -522,6 +522,21 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
     searchTerms: ["logs traces processes resource history failures spans cpu memory"],
   },
+  // Tangent(FORK-PUSH-001)
+  {
+    id: "personal-push-relay",
+    title: "Personal push relay",
+    to: "/settings/general",
+    scope: "environment",
+    searchTerms: ["notifications live activities apns ios tailnet password"],
+  },
+  {
+    id: "personal-push-quiet",
+    title: "Quiet phone after desktop activity",
+    to: "/settings/general",
+    scope: "environment",
+    searchTerms: ["notifications quiet silence mute phone desktop active away done finished"],
+  },
   {
     id: "open-source-licenses",
     title: "Open source licenses",
