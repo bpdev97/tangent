@@ -710,7 +710,7 @@ export function useThreadComposerState() {
     setComposerDraftText(threadKey, value);
   };
 
-  const onPickDraftMedia = async () => {
+  const onPickDraftMedia = async (source?: "library" | "camera") => {
     if (!selectedThreadShell) {
       return;
     }
@@ -719,6 +719,7 @@ export function useThreadComposerState() {
     const insertion = captureComposerDraftInsertion(threadKey);
     const capabilities = selectedEnvironmentRuntime?.serverConfig?.environment.capabilities;
     const result = await pickComposerMedia({
+      source, // Tangent(FORK-IMAGE-001)
       existingCount: countComposerDraftAttachmentsAfterSelection(threadKey, insertion),
       maxVideoBytes:
         capabilities?.attachmentUploads === true
