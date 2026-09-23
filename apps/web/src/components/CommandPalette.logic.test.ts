@@ -8,6 +8,7 @@ import {
   buildLinkedThreadActionItems,
   filterPinnedBrowseEntries,
   filterCommandPaletteGroups,
+  getCommandPaletteControlNavigationKey,
   reduceCommandPaletteUiState,
   createCommandPaletteSearchState,
   reduceCommandPaletteSearchState,
@@ -863,5 +864,32 @@ describe("returning from file and content search", () => {
     expect(closed).toEqual({ open: false, mode: "files", openIntent: null });
     expect(reduceCommandPaletteUiState(closed, { _tag: "BackToCommand" })).toEqual(closed);
     expect(reduceCommandPaletteUiState(closed, { _tag: "SetOpen", open: true })).toEqual(root);
+  });
+});
+
+describe("getCommandPaletteControlNavigationKey", () => {
+  const keyEvent = (key: string, overrides: Partial<KeyboardEvent> = {}) => ({
+    key,
+    ctrlKey: true,
+    altKey: false,
+    metaKey: false,
+    shiftKey: false,
+    isComposing: false,
+    ...overrides,
+  });
+
+  it("maps Control-N and Control-P to next and previous navigation", () => {
+    expect(getCommandPaletteControlNavigationKey(keyEvent("n"))).toBe("ArrowDown");
+    expect(getCommandPaletteControlNavigationKey(keyEvent("p"))).toBe("ArrowUp");
+    expect(getCommandPaletteControlNavigationKey(keyEvent("N"))).toBe("ArrowDown");
+  });
+
+  it("does not claim other keys, modified chords, or composing input", () => {
+    expect(getCommandPaletteControlNavigationKey(keyEvent("k"))).toBeNull();
+    expect(getCommandPaletteControlNavigationKey(keyEvent("n", { ctrlKey: false }))).toBeNull();
+    expect(getCommandPaletteControlNavigationKey(keyEvent("n", { altKey: true }))).toBeNull();
+    expect(getCommandPaletteControlNavigationKey(keyEvent("p", { metaKey: true }))).toBeNull();
+    expect(getCommandPaletteControlNavigationKey(keyEvent("p", { shiftKey: true }))).toBeNull();
+    expect(getCommandPaletteControlNavigationKey(keyEvent("n", { isComposing: true }))).toBeNull();
   });
 });
