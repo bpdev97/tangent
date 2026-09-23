@@ -140,6 +140,7 @@ describe("composer file attachments", () => {
       mocks.release.mockReset();
       mocks.manipulate.mockImplementation(() => {
         const context = {
+          release: vi.fn(),
           resize(size: { width?: number | null; height?: number | null }) {
             native.resizes.push(size);
             return context;
@@ -176,7 +177,7 @@ describe("composer file attachments", () => {
               mimeType: "image/jpeg",
               sizeBytes: 4,
               dataUrl: `data:image/jpeg;base64,${rendered.base64}`,
-              previewUri: rendered.uri,
+              previewUri: `data:image/jpeg;base64,${rendered.base64}`,
             },
           ],
           error: null,
@@ -256,7 +257,7 @@ describe("composer file attachments", () => {
 
       expect(mocks.readBase64).not.toHaveBeenCalled();
       expect(mocks.manipulate).toHaveBeenCalledWith(photo.uri);
-      expect(result.images).toEqual([expect.objectContaining({ mimeType: "image/jpeg" })]);
+      expect(result.images).toEqual([expect.objectContaining({ mimeType: "image/png" })]);
     });
 
     it("renders a supported original whose size cannot be measured", async () => {
@@ -271,7 +272,7 @@ describe("composer file attachments", () => {
 
       expect(mocks.readBase64).not.toHaveBeenCalled();
       expect(mocks.manipulate).toHaveBeenCalledWith("content://media/1");
-      expect(result.images).toEqual([expect.objectContaining({ mimeType: "image/jpeg" })]);
+      expect(result.images).toEqual([expect.objectContaining({ mimeType: "image/png" })]);
     });
 
     it("checks the rendered JPEG against the image limit", async () => {
@@ -285,7 +286,7 @@ describe("composer file attachments", () => {
 
       await expect(pickComposerImages({ existingCount: 0 })).resolves.toEqual({
         images: [],
-        error: "'photo.HEIC' exceeds the 10 MB attachment limit.",
+        error: "Could not shrink 'photo.HEIC' below the 10 MB attachment limit.",
       });
     });
 
@@ -299,11 +300,12 @@ describe("composer file attachments", () => {
       const result = await pickComposerImages({ existingCount: 0 });
 
       expect(result.images).toEqual([expect.objectContaining({ name: "photo.jpg" })]);
-      expect(result.error).toBe("Failed to read 'missing.gif'.");
+      expect(result.error).toBe("missing file");
     });
 
     it("reports a photo the native renderer cannot decode", async () => {
       mocks.manipulate.mockImplementation(() => ({
+        release: vi.fn(),
         resize: () => {
           throw new Error("unreachable");
         },
@@ -313,7 +315,7 @@ describe("composer file attachments", () => {
 
       await expect(pickComposerImages({ existingCount: 0 })).resolves.toEqual({
         images: [],
-        error: "Failed to read 'photo.HEIC'.",
+        error: "corrupt",
       });
     });
   });
