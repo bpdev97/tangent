@@ -5,12 +5,12 @@ lookups. They use the same providers, models, attachments, and thread history as
 
 ## Start a chat
 
-- **Web and desktop:** select **Chats** below the sidebar search to list your chats, or use the
-  pencil beside it to start a new one. **New thread in…** in the command palette also lists
-  **Chats**.
-- **iPhone and iPad:** open the chat bubble menu at the top of Home and choose **New chat** or
-  **Show chats**. On every device, **Chats** also appears in the new-task project list and the
-  project filter.
+- **Web and desktop:** **Chats** appears in the sidebar like any other project, and **New thread
+  in…** in the command palette lists it too. To start a chat from the keyboard, bind `chats.new`
+  in **Settings → Keybindings**; it has no default shortcut.
+- **iPhone and iPad:** the compose button on Home starts a chat. Tap **Chats** in the draft, or go
+  back, to pick a different project. **Chats** also appears in the new-task project list and the
+  project filter, which lists your chats.
 
 Each server keeps its own Chats list, and chats from every connected server appear together under
 **Chats**. A chat stays on the server where it started.

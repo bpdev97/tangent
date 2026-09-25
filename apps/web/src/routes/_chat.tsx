@@ -1,4 +1,6 @@
 import { Outlet, createFileRoute, redirect, useParams } from "@tanstack/react-router";
+import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { findGenericChatProject } from "@t3tools/shared/genericChat";
 import { useAtomValue } from "@effect/atom-react";
 import { useEffect, useMemo } from "react";
 
@@ -105,6 +107,15 @@ function ChatRouteGlobalShortcuts() {
         return;
       }
 
+      // Tangent(FORK-CHAT-001): new chat in the primary environment's Chats project.
+      if (command === "chats.new") {
+        event.preventDefault();
+        event.stopPropagation();
+        const chats = findGenericChatProject(projects, primaryEnvironmentId);
+        if (chats) void handleNewThread(scopeProjectRef(chats.environmentId, chats.id));
+        return;
+      }
+
       if (command === "chat.new") {
         event.preventDefault();
         event.stopPropagation();
@@ -180,7 +191,9 @@ function ChatRouteGlobalShortcuts() {
     keybindings,
     defaultProjectRef,
     previewOpen,
+    primaryEnvironmentId,
     projectGroupCount,
+    projects,
     routeThreadRef,
     selectedThreadKeysSize,
     legacySidebarEnabled,
