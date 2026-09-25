@@ -100,7 +100,8 @@ Mobile:
   chats use the local workspace and `approval-required`, with no workspace or branch controls.
 
 Every device also reaches chats through the new-task project list and the project filter, where
-`Chats` appears as a project.
+`Chats` appears as a project. Which server a chat starts on follows the project's default host
+([FORK-HOST-001](project-default-host.md)).
 
 ## Resolving conflicts
 

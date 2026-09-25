@@ -6,6 +6,7 @@
 - [Messages and context](./user/composer.md)
 - [Mermaid diagrams](./user/mermaid-diagrams.md)
 - [MCP servers](./user/mcp-servers.md)
+- [Default host for a project](./user/project-default-host.md)
 - [Working with threads](./user/thread-sidebar.md)
 - [Permission modes](./user/permission-modes.md)
 - [Terminal history](./user/terminal.md)

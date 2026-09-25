@@ -8,6 +8,10 @@ import * as Semaphore from "effect/Semaphore";
 import type { ProviderInstanceId, SidebarProjectGroupingMode } from "@t3tools/contracts";
 import type { ComposerEnterBehavior } from "../lib/composerEnterBehavior";
 import type { FollowUpBehavior } from "../lib/followUpBehavior";
+import {
+  sanitizeProjectDefaultHosts,
+  type ProjectDefaultHosts,
+} from "@t3tools/shared/projectDefaultHost";
 import { MOBILE_THEME_IDS, type MobileThemeId, type MobileThemeMode } from "../lib/mobileTheme";
 import * as MobileDatabase from "./mobile-database";
 import * as MobileSecureStorage from "./mobile-secure-storage";
@@ -49,6 +53,8 @@ export interface Preferences {
   /** Fresh keys reset both shelves to collapsed when users update. */
   readonly threadListSettledShelfExpanded?: boolean;
   readonly threadListSnoozedShelfExpanded?: boolean;
+  /** Tangent(FORK-HOST-001): logical project key to the environment new threads start on. */
+  readonly projectDefaultHosts?: ProjectDefaultHosts;
 }
 
 export class MobilePreferencesLoadError extends Schema.TaggedError<MobilePreferencesLoadError>()(
@@ -110,6 +116,7 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     modelFavorites?: Preferences["modelFavorites"];
     threadListSettledShelfExpanded?: boolean;
     threadListSnoozedShelfExpanded?: boolean;
+    projectDefaultHosts?: ProjectDefaultHosts;
   } = {};
 
   if (typeof parsed.liveActivitiesEnabled === "boolean") {
@@ -197,6 +204,9 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   if (typeof parsed.threadListSnoozedShelfExpanded === "boolean") {
     preferences.threadListSnoozedShelfExpanded = parsed.threadListSnoozedShelfExpanded;
   }
+  // Tangent(FORK-HOST-001)
+  const projectDefaultHosts = sanitizeProjectDefaultHosts(parsed.projectDefaultHosts);
+  if (projectDefaultHosts) preferences.projectDefaultHosts = projectDefaultHosts;
   return preferences;
 }
 

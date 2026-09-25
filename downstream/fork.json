@@ -30,6 +30,7 @@
     "FORK-MERMAID-001": "docs/fork/mermaid.md",
     "FORK-PALETTE-001": "docs/fork/palette.md",
     "FORK-MCP-001": "docs/fork/mcp-servers.md",
-    "FORK-LAN-001": "docs/fork/lan-fallback.md"
+    "FORK-LAN-001": "docs/fork/lan-fallback.md",
+    "FORK-HOST-001": "docs/fork/project-default-host.md"
   }
 }
