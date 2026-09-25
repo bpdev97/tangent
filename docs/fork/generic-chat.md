@@ -32,9 +32,12 @@ real working directory.
   store therefore reports the managed project's workspace as not a repository.
 - The managed project is not evidence of user setup, so it does not skip the first-run wizard, and
   a plain new thread defaults to a user project rather than `Chats`.
-- Web and mobile show `Chats` as a destination with a new-chat action. Chat threads hide files,
-  diffs, Git, worktrees, branches, and project scripts, and those routes are guarded against deep
-  links and keyboard shortcuts. The terminal remains available.
+- Web shows `Chats` as an ordinary sidebar project, and an unbound `chats.new` keybinding command
+  starts a chat in the primary environment's `Chats`. On iOS, Home's compose button opens a chat
+  draft with the project picker beneath it, so going back or tapping the project picks another
+  project; before any server reports `Chats` it opens the picker. Chat threads
+  hide files, diffs, Git, worktrees, branches, and project scripts, and those routes are guarded
+  against deep links and keyboard shortcuts. The terminal remains available.
 - Existing-thread capability comes from `thread.projectId`, because the project catalog can arrive a
   render later and must not briefly enable project tools.
 - Conversation presentation is upstream's; chats have no separate message grouping.
@@ -44,9 +47,8 @@ real working directory.
 Fork logic lives in `packages/shared/src/genericChat.ts` (reserved ID, predicates, provider
 context), `apps/server/src/genericChat.ts` (startup ensure, turn text, checkpoint guard),
 `apps/web/src/lib/genericChat.ts` (right-panel guard),
-`apps/web/src/components/sidebar/SidebarChatsEntry.tsx`,
 `apps/mobile/src/features/threads/ProjectThreadRouteGuard.tsx`, and
-`apps/mobile/src/features/home/useGenericChatHeaderItem.ts`. Each upstream hook is marked
+`apps/mobile/src/features/home/useStartNewChat.ts`. Each upstream hook is marked
 `Tangent(FORK-CHAT-001)`:
 
 Server:
@@ -67,8 +69,9 @@ Shared client:
 
 Web:
 
-- `apps/web/src/components/Sidebar.tsx`: renders `SidebarChatsEntry` under the header. The
-  destination is the sidebar's project scope set to the `Chats` group.
+- `packages/contracts/src/keybindings.ts`: the `chats.new` command, with no default binding.
+- `apps/web/src/routes/_chat.tsx`: handles `chats.new` by opening a draft in the `Chats` project
+  `findGenericChatProject` picks.
 - `apps/web/src/components/ChatView.tsx`: `genericChat` from `thread.projectId` hides scripts, the
   Git working directory, Git status, open-in-editor, and the files tab, and mounts the right-panel
   guard. The terminal is untouched.
@@ -90,12 +93,14 @@ Mobile:
   `genericChat` prop keeps only the terminal in the header, without project scripts.
 - `apps/mobile/src/features/keyboard/HardwareKeyboardCommandProvider.tsx`: no files or review
   command in a chat.
-- `apps/mobile/src/features/home/HomeHeader.tsx`: the iOS Chats menu (new chat, show chats).
+- `apps/mobile/src/features/home/HomeRouteScreen.tsx`: the compose button, in the header and in
+  split view's Home pane, calls `useStartNewChat`. Android's floating button and the empty-state
+  button keep opening the picker.
 - `apps/mobile/src/features/threads/new-task-flow-provider.tsx` and `NewTaskDraftScreen.tsx`: new
   chats use the local workspace and `approval-required`, with no workspace or branch controls.
 
-Android and iPad split view reach chats through the new-task project list and the project filter,
-where `Chats` appears as a project.
+Every device also reaches chats through the new-task project list and the project filter, where
+`Chats` appears as a project.
 
 ## Resolving conflicts
 

@@ -22,6 +22,7 @@ import { useHomeListOptions } from "./home-list-options";
 import { useHomeThreadSelection } from "./home-thread-navigation";
 import { buildHomeProjectScopes } from "./homeThreadList";
 import { usePendingTaskListActions } from "./usePendingTaskListActions";
+import { useStartNewChat } from "./useStartNewChat";
 import { useThreadListActions } from "./useThreadListActions";
 import { getConnectionAwareBrandHeaderOptions } from "./WorkspaceConnectionTitle";
 
@@ -96,6 +97,8 @@ export function HomeRouteScreen() {
     useHomeListOptions(availableEnvironmentIds);
   const selectedEnvironmentId = listOptions.selectedEnvironmentId;
   const [selectedProjectKey, setSelectedProjectKey] = useState<string | null>(null);
+  // Tangent(FORK-CHAT-001): the compose button starts a chat.
+  const startNewChat = useStartNewChat(selectedEnvironmentId);
   const projectFilterOptions = useMemo(
     () =>
       buildHomeProjectScopes({
@@ -134,7 +137,7 @@ export function HomeRouteScreen() {
             <NativeHeaderToolbar.Button
               accessibilityLabel="New task"
               icon="square.and.pencil"
-              onPress={() => navigation.navigate("NewTaskSheet", { screen: "NewTask" })}
+              onPress={startNewChat}
             />
           </NativeHeaderToolbar>
         ) : null}
@@ -202,7 +205,7 @@ export function HomeRouteScreen() {
             })
           }
           onSearchQueryChange={setSearchQuery}
-          onStartNewTask={() => navigation.navigate("NewTaskSheet", { screen: "NewTask" })}
+          onStartNewTask={startNewChat}
         />
 
         <HomeScreen
