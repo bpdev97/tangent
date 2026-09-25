@@ -201,6 +201,9 @@ export const ExecutionEnvironmentDescriptor = Schema.Struct({
   /** Absent on hosts from before explicit orchestration protocol negotiation. */
   orchestrationProtocolVersion: Schema.optionalKey(Schema.Int),
   capabilities: ExecutionEnvironmentCapabilities,
+  /** Tangent(FORK-LAN-001): plain-HTTP URLs for this host on its local networks. Paired clients
+      fall back to them when their saved address is unreachable. */
+  lanHttpBaseUrls: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 export type ExecutionEnvironmentDescriptor = typeof ExecutionEnvironmentDescriptor.Type;
 

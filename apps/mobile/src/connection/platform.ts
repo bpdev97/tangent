@@ -32,6 +32,7 @@ import { appAtomRegistry } from "../state/atom-registry";
 import { clearThreadOutboxEnvironment } from "../state/thread-outbox-removal";
 import { clearComposerDraftsEnvironment } from "../state/use-composer-drafts";
 import { mobileApplicationActiveWakeup } from "./app-state-wakeups";
+import { lanAddressBookLayer, removeLanAddresses } from "./lan-addresses"; // Tangent(FORK-LAN-001)
 import { connectionStorageLayer } from "./storage";
 
 function networkStatus(state: Network.NetworkState): "unknown" | "offline" | "online" {
@@ -220,6 +221,7 @@ const environmentOwnedDataCleanupLayer = Layer.succeed(
         [
           Effect.promise(() => clearThreadOutboxEnvironment(environmentId)),
           Effect.promise(() => clearComposerDraftsEnvironment(environmentId)),
+          removeLanAddresses(environmentId), // Tangent(FORK-LAN-001)
         ],
         { concurrency: "unbounded", discard: true },
       ).pipe(
@@ -240,7 +242,8 @@ type ConnectionPlatformLayerSource =
   | typeof wakeupsLayer
   | typeof providedCapabilitiesLayer
   | typeof platformConnectionSourceLayer
-  | typeof environmentOwnedDataCleanupLayer;
+  | typeof environmentOwnedDataCleanupLayer
+  | typeof lanAddressBookLayer; // Tangent(FORK-LAN-001)
 
 export const connectionPlatformLayer: Layer.Layer<
   Layer.Success<ConnectionPlatformLayerSource>,
@@ -254,4 +257,5 @@ export const connectionPlatformLayer: Layer.Layer<
   providedCapabilitiesLayer,
   platformConnectionSourceLayer,
   environmentOwnedDataCleanupLayer,
+  lanAddressBookLayer, // Tangent(FORK-LAN-001)
 );
