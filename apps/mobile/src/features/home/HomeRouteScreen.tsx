@@ -23,6 +23,7 @@ import { useHomeThreadSelection } from "./home-thread-navigation";
 import { buildHomeProjectScopes } from "./homeThreadList";
 import { usePendingTaskListActions } from "./usePendingTaskListActions";
 import { useStartNewChat } from "./useStartNewChat";
+import { useResolveProjectDefaultHost } from "../projects/projectDefaultHost";
 import { useThreadListActions } from "./useThreadListActions";
 import { getConnectionAwareBrandHeaderOptions } from "./WorkspaceConnectionTitle";
 
@@ -99,6 +100,7 @@ export function HomeRouteScreen() {
   const [selectedProjectKey, setSelectedProjectKey] = useState<string | null>(null);
   // Tangent(FORK-CHAT-001): the compose button starts a chat.
   const startNewChat = useStartNewChat(selectedEnvironmentId);
+  const resolveDefaultHost = useResolveProjectDefaultHost(); // Tangent(FORK-HOST-001)
   const projectFilterOptions = useMemo(
     () =>
       buildHomeProjectScopes({
@@ -241,7 +243,8 @@ export function HomeRouteScreen() {
           onSelectPendingTask={openPendingTask}
           onDeletePendingTask={confirmDeletePendingTask}
           onNewThreadOnBranch={handleNewThreadOnBranch}
-          onNewThreadInProject={(project) => {
+          onNewThreadInProject={(requestedProject) => {
+            const project = resolveDefaultHost(requestedProject);
             navigation.navigate("NewTaskSheet", {
               screen: "NewTaskDraft",
               params: {

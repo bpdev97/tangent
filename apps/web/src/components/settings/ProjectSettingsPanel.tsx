@@ -41,6 +41,7 @@ import {
 } from "./ProjectFaviconPickerDialog";
 import { ProjectActionsSettings } from "./ProjectActionsSettings";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
+import { ProjectDefaultHostSetting } from "./ProjectDefaultHostSetting";
 import { projectGroupTitleNeedsUpdate } from "./ProjectSettingsPanel.logic";
 import { useSettingsProjectGroups } from "./useSettingsProjectGroups";
 
@@ -488,6 +489,8 @@ function ProjectDetail({
               </div>
             }
           />
+          {/* Tangent(FORK-HOST-001) */}
+          {hasOtherMembers ? null : <ProjectDefaultHostSetting group={group} />}
         </SettingsSection>
         <ProjectDefaultsSettings category="project" />
         <ProjectActionsSettings />
