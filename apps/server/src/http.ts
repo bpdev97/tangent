@@ -46,6 +46,7 @@ import {
   failEnvironmentInternal,
 } from "./auth/http.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
+import { withLanHttpBaseUrls } from "./environment/lanHttpBaseUrls.ts"; // Tangent(FORK-LAN-001)
 import { browserApiCorsAllowedHeaders, browserApiCorsAllowedMethods } from "./httpCors.ts";
 
 const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
@@ -300,11 +301,12 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
   "metadata",
   Effect.fnUntraced(function* (handlers) {
     const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
+    const withLanFallback = withLanHttpBaseUrls(yield* ServerConfig.ServerConfig); // Tangent(FORK-LAN-001)
     return handlers.handle(
       "descriptor",
       Effect.fn("environment.metadata.descriptor")(function* (args) {
         yield* annotateEnvironmentRequest(args.endpoint.name);
-        return yield* serverEnvironment.getDescriptor;
+        return withLanFallback(yield* serverEnvironment.getDescriptor);
       }, traceRelayRequest),
     );
   }),
