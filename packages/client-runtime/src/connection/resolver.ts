@@ -36,6 +36,7 @@ import type {
   SshConnectionTarget,
 } from "./model.ts";
 import { ConnectionBlockedError, type ConnectionAttemptError } from "./model.ts";
+import * as LanFallback from "./lanFallback.ts"; // Tangent(FORK-LAN-001)
 import * as ConnectionProfileStore from "./profileStore.ts";
 import {
   appendOrchestrationProtocol,
@@ -105,6 +106,7 @@ const makePrimaryBroker = Effect.fn("clientRuntime.connection.broker.makePrimary
 const makeBearerBroker = Effect.fn("clientRuntime.connection.broker.makeBearer")(function* () {
   const credentials = yield* ConnectionCredentialStore.ConnectionCredentialStore;
   const remote = yield* RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization;
+  const lanFallback = yield* LanFallback.make; // Tangent(FORK-LAN-001)
 
   return Effect.fn("clientRuntime.connection.broker.bearer")(function* (
     entry: ConnectionCatalogEntry & { readonly target: BearerConnectionTarget },
@@ -137,7 +139,8 @@ const makeBearerBroker = Effect.fn("clientRuntime.connection.broker.makeBearer")
     if (!isBearerCredential(credential)) {
       return yield* credentialMissingError(target.connectionId);
     }
-    const authorized = yield* remote.authorizeBearer({
+    // Tangent(FORK-LAN-001): also tries the host's learned local-network addresses.
+    const authorized = yield* lanFallback.authorizeBearer(remote, {
       expectedEnvironmentId: target.environmentId,
       httpBaseUrl: profile.httpBaseUrl,
       wsBaseUrl: profile.wsBaseUrl,
@@ -246,6 +249,7 @@ export const make = Effect.gen(function* () {
   const relay = yield* makeRelayBroker();
   const ssh = yield* makeSshBroker();
   const httpClient = yield* HttpClient.HttpClient;
+  const lanFallback = yield* LanFallback.make; // Tangent(FORK-LAN-001)
 
   const prepare = Effect.fn("clientRuntime.connection.broker.prepare")(function* (
     entry: ConnectionCatalogEntry,
@@ -283,6 +287,7 @@ export const make = Effect.gen(function* () {
     if (compatibilityError !== null) {
       return yield* compatibilityError;
     }
+    yield* lanFallback.remember(entry, prepared.httpBaseUrl, descriptor); // Tangent(FORK-LAN-001)
     return {
       ...prepared,
       socketUrl: appendOrchestrationProtocol(prepared.socketUrl),

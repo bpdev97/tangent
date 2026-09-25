@@ -5,6 +5,7 @@ export { type ConnectionDriverProgress, type EnvironmentConnectionLease } from "
 export * from "./errors.ts";
 export * from "./githubRoutingPermissions.ts";
 export * as Connection from "./layer.ts";
+export * as LanFallback from "./lanFallback.ts"; // Tangent(FORK-LAN-001)
 export * from "./model.ts";
 export {
   type BearerConnectionUpdateInput,
