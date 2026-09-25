@@ -12,17 +12,20 @@ import { findGenericChatProject } from "@t3tools/shared/genericChat";
 import { useCallback } from "react";
 
 import { useProjects } from "../../state/entities";
+import { useResolveProjectDefaultHost } from "../projects/projectDefaultHost";
 
 export function useStartNewChat(preferredEnvironmentId: EnvironmentId | null) {
   const navigation = useNavigation();
   const projects = useProjects();
+  const resolveDefaultHost = useResolveProjectDefaultHost(); // Tangent(FORK-HOST-001)
 
   return useCallback(() => {
-    const project = findGenericChatProject(projects, preferredEnvironmentId);
-    if (project === null) {
+    const chats = findGenericChatProject(projects, preferredEnvironmentId);
+    if (chats === null) {
       navigation.navigate("NewTaskSheet", { screen: "NewTask" });
       return;
     }
+    const project = resolveDefaultHost(chats);
     navigation.navigate("NewTaskSheet", {
       screen: "NewTaskDraft",
       initial: false,
@@ -33,5 +36,5 @@ export function useStartNewChat(preferredEnvironmentId: EnvironmentId | null) {
         focusComposer: "1",
       },
     });
-  }, [navigation, preferredEnvironmentId, projects]);
+  }, [navigation, preferredEnvironmentId, projects, resolveDefaultHost]);
 }

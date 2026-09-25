@@ -21,6 +21,7 @@ import { useProjects } from "../../state/entities";
 import type { WorkspaceState } from "../../state/workspaceModel";
 import { useWorkspaceState } from "../../state/workspace";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
+import { useResolveProjectDefaultHost } from "../projects/projectDefaultHost";
 import { useIncomingShare } from "../sharing/IncomingShareProvider";
 import { useNewTaskFlow } from "./new-task-flow-provider";
 import { filterProjectScopes, getProjectScopeSelectionTarget } from "./new-task-project-selection";
@@ -134,6 +135,7 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const { getShare, releaseShareReservation } = useIncomingShare();
+  const resolveDefaultHost = useResolveProjectDefaultHost(); // Tangent(FORK-HOST-001)
   const routeShareId = Array.isArray(route.params?.incomingShareId)
     ? route.params.incomingShareId[0]
     : route.params?.incomingShareId;
@@ -313,9 +315,9 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
             >
               {visibleScopes.map((scope, scopeIndex) => {
                 const hasMultipleProjects = scope.projects.length > 1;
-                const selectionTarget = getProjectScopeSelectionTarget(
-                  scope,
-                  selectedEnvironmentId,
+                // Tangent(FORK-HOST-001): the project's default host, when connected.
+                const selectionTarget = resolveDefaultHost(
+                  getProjectScopeSelectionTarget(scope, selectedEnvironmentId),
                 );
                 if (Platform.OS === "android") {
                   return (
