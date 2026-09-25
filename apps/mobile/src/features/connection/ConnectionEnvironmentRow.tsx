@@ -20,6 +20,7 @@ import type { ConnectedEnvironmentSummary } from "../../state/remote-runtime-typ
 import { serverEnvironment } from "../../state/server";
 import { ConnectionFormField } from "./ConnectionFormField";
 import { ConnectionStatusDot } from "./ConnectionStatusDot";
+import { LearnedLanAddresses } from "./LearnedLanAddresses"; // Tangent(FORK-LAN-001)
 
 function connectionStatusLabel(environment: ConnectedEnvironmentSummary): string | null {
   if (!environment.isEnabled && environment.connectionState !== "unsupported") {
@@ -178,6 +179,9 @@ export function ConnectionEnvironmentRow(props: {
                 value={url}
                 onChangeText={setUrl}
               />
+
+              {/* Tangent(FORK-LAN-001) */}
+              <LearnedLanAddresses environmentId={props.environment.environmentId} />
             </>
           )}
 

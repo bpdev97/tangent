@@ -2,6 +2,7 @@ import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Terminal from "effect/Terminal";
 import { Command, Flag, GlobalFlag, Prompt } from "effect/unstable/cli";
 import { FetchHttpClient } from "effect/unstable/http";
@@ -39,10 +40,16 @@ export type ServiceReconcileResult =
 export const reconcileService = Effect.fn("cli.service.reconcile")(function* (options?: {
   readonly allowDowngrade?: boolean;
   readonly start?: boolean;
+  readonly host?: string; // Tangent(FORK-LAN-001)
 }) {
   const service = yield* BootService.BootService;
   const status = yield* service.status;
-  if (status.installed && status.current) {
+  if (
+    status.installed &&
+    status.current &&
+    // Tangent(FORK-LAN-001): a new listen address rewrites a current unit.
+    (options?.host === undefined || options.host === status.installedHost)
+  ) {
     return { changed: false, status } satisfies ServiceReconcileResult;
   }
   if (
@@ -94,6 +101,8 @@ export function formatServiceStatus(
   return [
     "T3 Code service",
     `  Status: ${status.current ? `installed · t3@${installedVersion}` : "needs an update or repair"}`,
+    // Tangent(FORK-LAN-001)
+    ...(status.installedHost === undefined ? [] : [`  Listening on: ${status.installedHost}`]),
     `  Unit: ${status.unitPath}`,
     `  Logs: ${status.logPath}`,
     ...problems,
@@ -118,13 +127,26 @@ const serviceReconcileFlags = {
   ),
 };
 
-const serviceInstallCommand = Command.make("install", serviceReconcileFlags).pipe(
+const serviceInstallCommand = Command.make("install", {
+  ...serviceReconcileFlags,
+  // Tangent(FORK-LAN-001)
+  host: Flag.String("host").pipe(
+    Flag.withDescription(
+      "Address the service listens on, kept across updates. Use 0.0.0.0 to reach it from the local network, or 127.0.0.1 for this machine only.",
+    ),
+    Flag.optional,
+  ),
+}).pipe(
   Command.withDescription("Install T3 Code as a background service for this user."),
   Command.withHandler((flags) =>
     runServiceCommand(
       flags,
       Effect.gen(function* () {
-        const result = yield* reconcileService({ allowDowngrade: flags.allowDowngrade });
+        const host = Option.getOrUndefined(flags.host); // Tangent(FORK-LAN-001)
+        const result = yield* reconcileService({
+          allowDowngrade: flags.allowDowngrade,
+          ...(host === undefined ? {} : { host }),
+        });
         if (!result.changed) {
           yield* Console.log(
             `T3 Code service is already installed with t3@${packageJson.version}.`,

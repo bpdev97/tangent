@@ -37,6 +37,7 @@ import {
   serviceStateHasPendingUpdate,
   type ServiceState,
 } from "./serviceProtocol.ts";
+import { bootServiceHostOf, SERVICE_HOST_ENV } from "./serviceListenHost.ts"; // Tangent(FORK-LAN-001)
 
 // Tangent(FORK-DIST-001): install beside, never over, the official service.
 const BOOT_SERVICE_NAME = PERSONAL_DISTRIBUTION.connect.bootServiceName;
@@ -94,6 +95,8 @@ export interface BootServicePlan {
   readonly baseDir: string;
   readonly logPath: string;
   readonly unitPath: string;
+  /** Tangent(FORK-LAN-001): listen address passed to the server; absent means loopback. */
+  readonly host?: string;
 }
 
 /** Pure renderer: service units cannot rely on the user's shell or PATH. */
@@ -110,6 +113,10 @@ export function renderBootServiceUnit(plan: BootServicePlan): string {
     "WorkingDirectory=%h",
     `Environment=T3CODE_HOME=${quoteSystemdValue(plan.baseDir)}`,
     `Environment=${BOOT_SERVICE_UNIT_ENV}=${BOOT_SERVICE_UNIT_FILE}`,
+    // Tangent(FORK-LAN-001)
+    ...(plan.host === undefined
+      ? []
+      : [`Environment=${SERVICE_HOST_ENV}=${quoteSystemdValue(plan.host)}`]),
     `ExecStart=${plan.program.map(quoteSystemdValue).join(" ")}`,
     // Let the launcher mark an explicit stop before it signals the server.
     // systemd still SIGKILLs the whole cgroup if graceful shutdown times out.
@@ -171,6 +178,10 @@ export function renderBootServicePlist(
     `    <string>${escapeXmlText(plan.baseDir)}</string>`,
     `    <key>${BOOT_SERVICE_UNIT_ENV}</key>`,
     `    <string>${BOOT_SERVICE_PLIST_FILE}</string>`,
+    // Tangent(FORK-LAN-001)
+    ...(plan.host === undefined
+      ? []
+      : [`    <key>${SERVICE_HOST_ENV}</key>`, `    <string>${escapeXmlText(plan.host)}</string>`]),
     `  </dict>`,
     `  <key>WorkingDirectory</key>`,
     `  <string>${escapeXmlText(options.homeDir)}</string>`,
@@ -522,6 +533,8 @@ export interface BootServiceStatus {
    * server of the machine it ran on.
    */
   readonly installedBaseDir?: string;
+  /** Tangent(FORK-LAN-001): the listen address the installed unit passes to the server. */
+  readonly installedHost?: string;
   readonly problems?: ReadonlyArray<BootServiceProblem>;
   readonly unitPath: string;
   readonly logPath: string;
@@ -538,6 +551,11 @@ export class BootService extends Context.Service<
        * restart, so a later `t3 service restart` lands on the new version.
        */
       readonly start?: boolean;
+      /**
+       * Tangent(FORK-LAN-001): listen address for the server. Omitted keeps the installed unit's
+       * address, so `t3 update` and repairs never drop it.
+       */
+      readonly host?: string;
     }) => Effect.Effect<BootServicePlan, BootServiceError>;
     /**
      * Stop and start the installed service on the version its unit names.
@@ -752,6 +770,7 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
   const install = Effect.fn("cloud.boot_service.install")(function* (options?: {
     readonly allowDowngrade?: boolean;
     readonly start?: boolean;
+    readonly host?: string; // Tangent(FORK-LAN-001)
   }) {
     const manager = yield* requireManager;
     yield* fs
@@ -819,6 +838,13 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
     const installed = yield* fs
       .exists(unitPath)
       .pipe(Effect.mapError((cause) => new BootServiceInstallError({ cause })));
+    // Tangent(FORK-LAN-001): keep the installed listen address unless a new one is given.
+    const installedUnit = installed
+      ? yield* fs.readFileString(unitPath).pipe(Effect.option)
+      : Option.none<string>();
+    const host =
+      options?.host ?? Option.getOrUndefined(Option.map(installedUnit, bootServiceHostOf));
+    const installPlan: BootServicePlan = host === undefined ? plan : { ...plan, host };
     // With start=false the service keeps running while its files change. The
     // launcher reads the state file once at startup and the unit only matters
     // on the next start, so that is safe as long as the launcher is not in
@@ -887,7 +913,7 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
           return yield* new BootServiceUpdatePendingError();
         }
       }
-      yield* writeDurably(unitPath, manager.render(plan));
+      yield* writeDurably(unitPath, manager.render(installPlan)); // Tangent(FORK-LAN-001)
 
       if (start) {
         yield* runSteps(manager.activate);
@@ -901,7 +927,7 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
         installed && start ? runSteps(manager.restart).pipe(Effect.ignore) : Effect.void,
       ),
     );
-    return plan;
+    return installPlan; // Tangent(FORK-LAN-001)
   });
 
   const restart: BootService["Service"]["restart"] = Effect.gen(function* () {
@@ -964,6 +990,7 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
       ? serviceStateActiveVersion(stateText.value)
       : undefined;
     const installedBaseDir = bootServiceBaseDirOf(unit);
+    const installedHost = bootServiceHostOf(unit); // Tangent(FORK-LAN-001)
     const normalizeUnit = (contents: string) =>
       detectedManager.kind === "launchd"
         ? contents.replace(/(<key>PATH<\/key>\n\s*<string>)[^<]*(<\/string>)/, "$1$2")
@@ -976,10 +1003,17 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
       installed: true,
       ...(installedVersion === undefined ? {} : { installedVersion }),
       ...(installedBaseDir === undefined ? {} : { installedBaseDir }),
+      ...(installedHost === undefined ? {} : { installedHost }), // Tangent(FORK-LAN-001)
       problems,
       current:
         problems.length === 0 &&
-        normalizeUnit(unit) === normalizeUnit(detectedManager.render(plan)) &&
+        // Tangent(FORK-LAN-001): an installed listen address is part of a current unit.
+        normalizeUnit(unit) ===
+          normalizeUnit(
+            detectedManager.render(
+              installedHost === undefined ? plan : { ...plan, host: installedHost },
+            ),
+          ) &&
         runtimeEntryExists &&
         Option.isSome(runtimeSentinel) &&
         runtimeSentinel.value.trim() === input.cliVersion &&
