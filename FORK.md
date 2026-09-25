@@ -47,6 +47,7 @@ rebased onto upstream rather than merging it, so each feature stays one commit.
 | `FORK-MERMAID-001` | Agents often answer with Mermaid diagrams; web and desktop render them safely                                                                 | [Mermaid](docs/fork/mermaid.md)                         | Active |
 | `FORK-PALETTE-001` | Control-N and Control-P move through the command palette, matching macOS and Emacs habits                                                     | [command palette](docs/fork/palette.md)                 | Active |
 | `FORK-MCP-001`     | Agents on every provider reach the same HTTP MCP servers, such as executor, configured once per environment                                   | [MCP servers](docs/fork/mcp-servers.md)                 | Active |
+| `FORK-LAN-001`     | Tailscale on iOS is unreliable; the phone falls back to the host's local-network address on its own                                           | [local network fallback](docs/fork/lan-fallback.md)     | Active |
 
 ## Removed, do not reintroduce
 
