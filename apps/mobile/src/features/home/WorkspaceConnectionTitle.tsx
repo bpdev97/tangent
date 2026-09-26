@@ -11,6 +11,7 @@ import {
   getCompactBrandHeaderOptions,
 } from "../../components/CompactBrandTitle";
 import { useWorkspaceState } from "../../state/workspace";
+import { QuietConnectionTitle, useQuietConnectionIndicator } from "./QuietConnectionTitle"; // Tangent(FORK-STATUS-001)
 import {
   workspaceConnectionStatusPresentation,
   type WorkspaceConnectionStatusPresentation,
@@ -105,10 +106,23 @@ export function WorkspaceConnectionTitle(props: {
   readonly maxWidth?: number;
 }) {
   const status = useDelayedConnectionStatus();
+  const quietIndicator = useQuietConnectionIndicator(); // Tangent(FORK-STATUS-001)
   const size = props.size ?? "navbar";
   const { scale } = useAndroidControlSizing();
 
-  if (status === null) {
+  // Tangent(FORK-STATUS-001): once threads have loaded, a mark beside the brand replaces the status.
+  if (quietIndicator === "partial" || quietIndicator === "disconnected") {
+    return (
+      <QuietConnectionTitle
+        brand={props.brand}
+        grow={props.grow}
+        indicator={quietIndicator}
+        maxWidth={props.maxWidth}
+        onPress={props.onPress}
+      />
+    );
+  }
+  if (status === null || quietIndicator === "none") {
     return props.grow ? (
       <View style={{ alignItems: "center", flex: 1, flexDirection: "row", minWidth: 0 }}>
         {props.brand}
