@@ -199,6 +199,7 @@ import {
   type FloatingWorkingStatus,
 } from "./floating-working-status";
 import type { ThreadStatusLineModel } from "./thread-context-divider";
+import { useConnectionPillPhase } from "./connection-pill-grace"; // Tangent(FORK-STATUS-001)
 import {
   derivePendingUserInputMaxHeight,
   ESTIMATED_KEYBOARD_HEIGHT,
@@ -737,6 +738,7 @@ function ThreadDetailBody(
     }
     setGoalCommandPending(false);
   };
+  const pillConnectionState = useConnectionPillPhase(props.connectionStateLabel); // Tangent(FORK-STATUS-001)
   const pendingBackgroundWork = presentPendingBackgroundWork(
     props.selectedThread.pendingBackgroundTasks,
     messages,
@@ -815,7 +817,7 @@ function ThreadDetailBody(
     const connectionStatus = connectionFloatingStatus(
       {
         connectionError: props.connectionError,
-        connectionState: props.connectionStateLabel,
+        connectionState: pillConnectionState,
         environmentLabel: props.environmentLabel,
         onReconnect: props.onReconnectEnvironment,
       },
