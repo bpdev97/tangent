@@ -6,7 +6,7 @@ Tangent's owner pairs the phone through the host's Tailscale Serve address, and 
 often stops routing. The owner is usually on the same Wi-Fi as the host, so the host is still
 reachable on its local IP. Upstream stores one address per saved environment, so the phone just
 fails until Tailscale recovers. Tangent lets the phone fall back to the host's local-network
-address on its own, with nothing shown in the UI.
+address on its own.
 
 ## Behavior
 
@@ -15,6 +15,12 @@ address on its own, with nothing shown in the UI.
   Tailscale addresses. The key is omitted while the server listens on loopback only, so the desktop
   app needs network access on (`serverExposureMode: "network-accessible"`). Only this route
   carries it, not the WebSocket config snapshot, MCP tools, or cloud publication.
+- Headless hosts run the background service, which listens on loopback unless it is given an
+  address. `t3 service install --host 0.0.0.0` writes `T3CODE_HOST` into the launchd plist or
+  systemd unit, and every later install, including `t3 update`, reads it back from the installed
+  unit and keeps it. `t3 service install --host 127.0.0.1` goes back to this machine only, and
+  `t3 service status` shows the address when one is set. Use `0.0.0.0` rather than the LAN IP:
+  Tailscale Serve proxies to `127.0.0.1`, which a LAN-only bind would stop answering.
 - Mobile learns the list only from a connection made through the saved address, so trust never
   extends from an address the user didn't pair. Each environment's list and its last working
   address live in the Keychain under `tangent.lan-addresses.v1.<environmentId>`, and are removed
@@ -26,7 +32,10 @@ address on its own, with nothing shown in the UI.
   reported, as it is without the fallback.
 - Every consumer reads `PreparedConnection.httpBaseUrl`, so the WebSocket, assets, and uploads all
   follow the winning address. Each reconnect runs the race again, so moving on or off the home
-  network needs nothing extra. The UI keeps showing the saved address.
+  network needs nothing extra. The environment keeps showing its saved address as its URL.
+- Mobile's environment settings list the learned addresses read-only under **Local network**,
+  marking the one that connected last, or say none were learned. That is how the owner tells
+  whether a host advertises its addresses.
 - Web and desktop provide no `LanAddressBook`, so they connect exactly as upstream does. Relay and
   SSH connections are unchanged.
 - Accepted risk, the same as upstream's pairing over a local address: the bearer token goes over
@@ -47,10 +56,18 @@ Each hook is marked `Tangent(FORK-LAN-001)`.
 - `packages/client-runtime/src/connection/index.ts`: the `LanFallback` export.
 - `apps/mobile/src/connection/platform.ts`: provides `lanAddressBookLayer` and removes the
   addresses in the environment cleanup.
+- `apps/mobile/src/features/connection/ConnectionEnvironmentRow.tsx`: renders
+  `LearnedLanAddresses` under the URL field.
+- `apps/server/src/cloud/bootService.ts`: the plan's `host`, the `T3CODE_HOST` line in both
+  renderers, `install`'s `host` option and read-back, and `status`'s `installedHost`, which also
+  renders the unit it compares against.
+- `apps/server/src/cli/service.ts`: `t3 service install --host`, `reconcileService` treating a new
+  address as a change, and the status line.
 
 Fork-owned: `apps/server/src/environment/lanHttpBaseUrls.ts`,
-`packages/client-runtime/src/connection/lanFallback.ts`, `apps/mobile/src/connection/lan-addresses.ts`,
-and their tests.
+`apps/server/src/cloud/serviceListenHost.ts`, `packages/client-runtime/src/connection/lanFallback.ts`,
+`apps/mobile/src/connection/lan-addresses.ts`,
+`apps/mobile/src/features/connection/LearnedLanAddresses.tsx`, and their tests.
 
 ## Resolving conflicts
 
@@ -59,6 +76,8 @@ and their tests.
   environment and compatibility checks.
 - `http.ts`: if upstream moves the descriptor route, re-wrap whichever handler serves
   `/.well-known/t3/environment`, and only that one.
+- `bootService.ts`: keep the host in the rendered unit and read it back with `bootServiceHostOf`.
+  If upstream adds its own service listen address, use it and drop the fork's option.
 - If upstream adds a second address, or address lists, to `BearerConnectionProfile`, move the
   learned addresses there and delete the Keychain store.
 
@@ -66,7 +85,6 @@ and their tests.
 
 - Never learn addresses from a connection made through a learned address.
 - Never start alternates before the head start unless the first attempt has failed.
-- Never show the learned addresses or the winning address in the UI.
 - Never add `lanHttpBaseUrls` to responses other than the well-known descriptor.
 
 ## Remove when
@@ -77,7 +95,7 @@ on iOS becomes reliable enough that the owner no longer needs it.
 ## Verify
 
 ```sh
-vp test run packages/client-runtime/src/connection/lanFallback.test.ts apps/server/src/environment/lanHttpBaseUrls.test.ts packages/client-runtime/src/connection/resolver.test.ts
+vp test run packages/client-runtime/src/connection/lanFallback.test.ts apps/server/src/environment/lanHttpBaseUrls.test.ts packages/client-runtime/src/connection/resolver.test.ts apps/server/src/cloud/serviceListenHost.test.ts
 ```
 
 Plus one pass on the phone at home: connect once with Tailscale on, then turn Tailscale off and
