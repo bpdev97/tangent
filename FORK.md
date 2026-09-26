@@ -37,18 +37,19 @@ rebased onto upstream rather than merging it, so each feature stays one commit.
 
 ## Features
 
-| ID                 | Why it exists                                                                                                                                 | Record                                                  | Status |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ------ |
-| `FORK-MAINT-001`   | Keeps the fork cheap and safe to sync: feature records, checks, the sync skill, agent guidance                                                | [maintenance](docs/fork/maintenance.md)                 | Active |
-| `FORK-DIST-001`    | Installs, updates, and stores state separately from the official app, and ships its own releases                                              | [distribution](docs/fork/distribution.md)               | Active |
-| `FORK-HERMES-001`  | Hermes Agent is not an upstream provider; Tangent integrates it natively through its TUI gateway, including in-app updates for headless hosts | [Hermes](docs/fork/hermes.md)                           | Active |
-| `FORK-PUSH-001`    | The personal build has no Clerk or managed relay; a self-hosted relay delivers iOS notifications and Live Activities                          | [push relay](docs/fork/push-relay.md)                   | Active |
-| `FORK-IMAGE-001`   | Photos from iPhones must work with every provider: HEIC conversion, mobile shrinking, and camera capture                                      | [image normalization](docs/fork/image-normalization.md) | Active |
-| `FORK-MERMAID-001` | Agents often answer with Mermaid diagrams; web and desktop render them safely                                                                 | [Mermaid](docs/fork/mermaid.md)                         | Active |
-| `FORK-PALETTE-001` | Control-N and Control-P move through the command palette, matching macOS and Emacs habits                                                     | [command palette](docs/fork/palette.md)                 | Active |
-| `FORK-MCP-001`     | Agents on every provider reach the same HTTP MCP servers, such as executor, configured once per environment                                   | [MCP servers](docs/fork/mcp-servers.md)                 | Active |
-| `FORK-LAN-001`     | Tailscale on iOS is unreliable; the phone falls back to the host's local-network address on its own                                           | [local network fallback](docs/fork/lan-fallback.md)     | Active |
-| `FORK-HOST-001`    | Each client can choose which server new threads start on for a project that lives on several                                                  | [default host](docs/fork/project-default-host.md)       | Active |
+| ID                 | Why it exists                                                                                                                                 | Record                                                          | Status |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ------ |
+| `FORK-MAINT-001`   | Keeps the fork cheap and safe to sync: feature records, checks, the sync skill, agent guidance                                                | [maintenance](docs/fork/maintenance.md)                         | Active |
+| `FORK-DIST-001`    | Installs, updates, and stores state separately from the official app, and ships its own releases                                              | [distribution](docs/fork/distribution.md)                       | Active |
+| `FORK-HERMES-001`  | Hermes Agent is not an upstream provider; Tangent integrates it natively through its TUI gateway, including in-app updates for headless hosts | [Hermes](docs/fork/hermes.md)                                   | Active |
+| `FORK-PUSH-001`    | The personal build has no Clerk or managed relay; a self-hosted relay delivers iOS notifications and Live Activities                          | [push relay](docs/fork/push-relay.md)                           | Active |
+| `FORK-IMAGE-001`   | Photos from iPhones must work with every provider: HEIC conversion, mobile shrinking, and camera capture                                      | [image normalization](docs/fork/image-normalization.md)         | Active |
+| `FORK-MERMAID-001` | Agents often answer with Mermaid diagrams; web and desktop render them safely                                                                 | [Mermaid](docs/fork/mermaid.md)                                 | Active |
+| `FORK-PALETTE-001` | Control-N and Control-P move through the command palette, matching macOS and Emacs habits                                                     | [command palette](docs/fork/palette.md)                         | Active |
+| `FORK-MCP-001`     | Agents on every provider reach the same HTTP MCP servers, such as executor, configured once per environment                                   | [MCP servers](docs/fork/mcp-servers.md)                         | Active |
+| `FORK-LAN-001`     | Tailscale on iOS is unreliable; the phone falls back to the host's local-network address on its own                                           | [local network fallback](docs/fork/lan-fallback.md)             | Active |
+| `FORK-HOST-001`    | Each client can choose which server new threads start on for a project that lives on several                                                  | [default host](docs/fork/project-default-host.md)               | Active |
+| `FORK-STATUS-001`  | An asleep or unreachable laptop is normal; the header shows a small mark beside the brand instead of "Reconnecting" text                      | [quiet connection status](docs/fork/quiet-connection-status.md) | Active |
 
 ## Removed, do not reintroduce
 
