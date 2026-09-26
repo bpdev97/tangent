@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import { useEffect, useSyncExternalStore } from "react";
 
 import * as MobileSecureStorage from "../persistence/mobile-secure-storage";
 
@@ -13,6 +14,15 @@ const StoredLanAddressesJson = Schema.fromJsonString(LanFallback.StoredLanAddres
 const decode = Schema.decodeEffect(StoredLanAddressesJson);
 const encode = Schema.encodeEffect(StoredLanAddressesJson);
 const cache = new Map<EnvironmentId, Option.Option<LanFallback.StoredLanAddresses>>();
+const listeners = new Set<() => void>();
+
+const setCached = (
+  environmentId: EnvironmentId,
+  entry: Option.Option<LanFallback.StoredLanAddresses>,
+) => {
+  cache.set(environmentId, entry);
+  for (const listener of listeners) listener();
+};
 
 // One key per environment, so concurrent connections never overwrite each other's entry.
 const storageKey = (environmentId: EnvironmentId) => `tangent.lan-addresses.v1.${environmentId}`;
@@ -23,7 +33,7 @@ const get = Effect.fn("mobile.lanAddresses.get")(
     if (cached !== undefined) return cached;
     const raw = yield* storage.getItem(storageKey(environmentId));
     const entry = raw === null ? Option.none() : Option.some(yield* decode(raw));
-    cache.set(environmentId, entry);
+    setCached(environmentId, entry);
     return entry;
   },
   Effect.catch((error) =>
@@ -35,7 +45,7 @@ const get = Effect.fn("mobile.lanAddresses.get")(
 
 const put = Effect.fn("mobile.lanAddresses.put")(
   function* (entry: LanFallback.StoredLanAddresses) {
-    cache.set(entry.environmentId, Option.some(entry));
+    setCached(entry.environmentId, Option.some(entry));
     yield* storage.setItem(storageKey(entry.environmentId), yield* encode(entry));
   },
   Effect.catch((error) =>
@@ -46,7 +56,7 @@ const put = Effect.fn("mobile.lanAddresses.put")(
 /** Drops an environment's learned addresses when it is removed from the phone. */
 export const removeLanAddresses = Effect.fn("mobile.lanAddresses.remove")(
   function* (environmentId: EnvironmentId) {
-    cache.set(environmentId, Option.none());
+    setCached(environmentId, Option.none());
     yield* storage.removeItem(storageKey(environmentId));
   },
   Effect.catch((error) =>
@@ -58,3 +68,20 @@ export const lanAddressBookLayer = Layer.succeed(
   LanFallback.LanAddressBook,
   LanFallback.LanAddressBook.of({ get, put }),
 );
+
+/** The learned addresses for an environment, loaded from the Keychain on first use. */
+export function useLanAddresses(
+  environmentId: EnvironmentId,
+): LanFallback.StoredLanAddresses | undefined {
+  const entry = useSyncExternalStore(
+    (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    () => cache.get(environmentId),
+  );
+  useEffect(() => {
+    if (!cache.has(environmentId)) void Effect.runPromise(get(environmentId));
+  }, [environmentId]);
+  return entry === undefined ? undefined : Option.getOrUndefined(entry);
+}
