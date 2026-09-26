@@ -34,8 +34,9 @@ real working directory.
   a plain new thread defaults to a user project rather than `Chats`.
 - Web shows `Chats` as an ordinary sidebar project, and an unbound `chats.new` keybinding command
   starts a chat in the primary environment's `Chats`. On iOS, Home's compose button opens a chat
-  draft with the project picker beneath it, so going back or tapping the project picks another
-  project; before any server reports `Chats` it opens the picker. Chat threads
+  draft with the keyboard up and the project picker beneath it, so going back or tapping the
+  project picks another project; before any server reports `Chats` it opens the picker. Drafts
+  opened any other way keep upstream's closed keyboard. Chat threads
   hide files, diffs, Git, worktrees, branches, and project scripts, and those routes are guarded
   against deep links and keyboard shortcuts. The terminal remains available.
 - Existing-thread capability comes from `thread.projectId`, because the project catalog can arrive a
@@ -98,6 +99,10 @@ Mobile:
   button keep opening the picker.
 - `apps/mobile/src/features/threads/new-task-flow-provider.tsx` and `NewTaskDraftScreen.tsx`: new
   chats use the local workspace and `approval-required`, with no workspace or branch controls.
+- `apps/mobile/src/features/threads/NewTaskDraftRouteScreen.tsx` and `NewTaskDraftScreen.tsx`: the
+  `focusComposer` route param from `useStartNewChat` becomes `autoFocusComposer`, which focuses the
+  editor once when the compose button opens the draft. Upstream's `autoFocus={false}` stays for
+  every other entry.
 
 Every device also reaches chats through the new-task project list and the project filter, where
 `Chats` appears as a project. Which server a chat starts on follows the project's default host

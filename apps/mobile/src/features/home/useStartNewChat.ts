@@ -3,7 +3,8 @@
  *
  * It opens the new-task sheet on a draft in the managed Chats project, with the
  * project picker beneath it, so going back or tapping the project name picks a
- * different project. Before any server reports Chats it opens the picker.
+ * different project, with the keyboard up. Before any server reports Chats it
+ * opens the picker.
  */
 import { useNavigation } from "@react-navigation/native";
 import type { EnvironmentId } from "@t3tools/contracts";
@@ -32,6 +33,7 @@ export function useStartNewChat(preferredEnvironmentId: EnvironmentId | null) {
         environmentId: String(project.environmentId),
         projectId: String(project.id),
         title: project.title,
+        focusComposer: "1",
       },
     });
   }, [navigation, preferredEnvironmentId, projects, resolveDefaultHost]);
