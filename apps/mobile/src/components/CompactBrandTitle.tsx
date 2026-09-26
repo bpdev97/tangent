@@ -1,11 +1,9 @@
-import Constants from "expo-constants";
 import type { NativeStackNavigationOptions } from "@react-navigation/native-stack";
 import { Platform, View } from "react-native";
 
 import { AppText as Text } from "./AppText";
 import { T3Wordmark } from "./T3Wordmark";
 import { IPAD_HOME_TITLE_OFFSET } from "../lib/layoutMetrics";
-import { resolveMobileStageLabel } from "../lib/mobileBranding";
 
 /**
  * Horizontal correction applied to content rendered in the brand title slot,
@@ -24,7 +22,6 @@ export function CompactBrandTitle(
     readonly allowFontScaling?: boolean;
   } = {},
 ) {
-  const stageLabel = resolveMobileStageLabel(Constants.expoConfig?.extra?.appVariant);
   const titleOffset = brandTitleOffset();
 
   return (
@@ -43,14 +40,7 @@ export function CompactBrandTitle(
       >
         Code
       </Text>
-      <View className="rounded-full bg-subtle px-1.5 py-0.5">
-        <Text
-          allowFontScaling={props.allowFontScaling}
-          className="font-t3-bold text-[9px] tracking-[0.9px] text-foreground-muted uppercase"
-        >
-          {stageLabel}
-        </Text>
-      </View>
+      {/* Tangent(FORK-DIST-001): no release-stage badge; upstream's stage does not describe Tangent builds. */}
     </View>
   );
 }

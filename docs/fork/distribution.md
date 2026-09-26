@@ -56,7 +56,8 @@ Code, each marked `Tangent(FORK-DIST-001)` where it is not self-evident:
 - Web: `versionSkew.ts` (manual update command).
 - Mobile: `app.config.ts`, `eas.json` (`personal` build and submit profiles), `package.json` (dev
   client schemes), `App.tsx`, `appLinking.ts`, and `pairing.ts` (Tangent URL schemes),
-  `app-updates.ts` (automatic update checks stay quiet on network and dev-client errors).
+  `app-updates.ts` (automatic update checks stay quiet on network and dev-client errors),
+  `CompactBrandTitle.tsx` (no Dev, Nightly, or Alpha stage badge beside the header brand).
 - Scripts: `build-cli-archive.ts`, `build-desktop-artifact.ts` (app ID, product and artifact names,
   macOS URL schemes, passkey signing gate), `install.sh` and `install.ps1` (run without Node, so
   they repeat the identity values), `mobile-native-client.ts` (iOS dev bundle and project name),
