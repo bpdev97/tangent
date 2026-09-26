@@ -102,6 +102,7 @@ import {
   FloatingWorkingControl,
 } from "./floating-working-control";
 import { connectionFloatingStatus, type FloatingWorkingStatus } from "./floating-working-status";
+import { useConnectionPillPhase } from "./connection-pill-grace"; // Tangent(FORK-STATUS-001)
 import {
   derivePendingUserInputMaxHeight,
   ESTIMATED_KEYBOARD_HEIGHT,
@@ -407,13 +408,14 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
         return null;
     }
   })();
+  const pillConnectionState = useConnectionPillPhase(props.connectionStateLabel); // Tangent(FORK-STATUS-001)
   // One floating pill above the composer: it reads the connection phase while
   // disconnected, the sync state while messages load, then the working timer
   // once the feed is settled.
   const floatingStatus = ((): FloatingWorkingStatus | null => {
     const connectionStatus = connectionFloatingStatus({
       connectionError: props.connectionError,
-      connectionState: props.connectionStateLabel,
+      connectionState: pillConnectionState,
       environmentLabel: props.environmentLabel,
       onReconnect: props.onReconnectEnvironment,
     });

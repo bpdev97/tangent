@@ -22,6 +22,9 @@ header indefinitely. For this owner an unreachable machine is a normal state, no
 - Per-environment detail is unchanged: a thread's own reconnect notice and the environment
   settings rows still name the machine and its error. Switched-off environments count as upstream
   counts them, which is not at all.
+- The pill above a thread's composer waits 2 s before reporting a connect or reconnect, which
+  phones do often and usually finish within a second. Until then it keeps showing work or sync
+  state. Offline and error show immediately.
 
 ## Upstream hooks
 
@@ -31,14 +34,19 @@ Each hook is marked `Tangent(FORK-STATUS-001)`.
   `useQuietConnectionIndicator`, renders `QuietConnectionTitle` for a mark, and renders the plain
   brand when the indicator is `none`. Every thread-list header (iOS header, split-view sidebar,
   Android toolbar) goes through this component.
+- `apps/mobile/src/features/threads/ThreadDetailScreen.tsx`: the floating pill reads
+  `useConnectionPillPhase(props.connectionStateLabel)` instead of the raw phase.
 
 Fork-owned: `apps/mobile/src/features/home/quiet-connection-indicator.ts`,
-`apps/mobile/src/features/home/QuietConnectionTitle.tsx`, and the indicator test.
+`apps/mobile/src/features/home/QuietConnectionTitle.tsx`,
+`apps/mobile/src/features/threads/connection-pill-grace.ts`, and their tests.
 
 ## Resolving conflicts
 
 - Take upstream's `WorkspaceConnectionTitle.tsx` and re-add the hook call and the two branches
   before its status rendering.
+- Take upstream's `ThreadDetailScreen.tsx` and pass `useConnectionPillPhase(...)` wherever the
+  floating status reads the connection phase.
 - If upstream changes `WorkspaceState`, update `quietConnectionIndicator` and its test to the new
   fields.
 
@@ -55,7 +63,7 @@ longer keeps machines paired that are usually offline.
 ## Verify
 
 ```sh
-vp test run apps/mobile/src/features/home/quiet-connection-indicator.test.ts apps/mobile/src/features/home/workspace-connection-status.test.ts
+vp test run apps/mobile/src/features/home/quiet-connection-indicator.test.ts apps/mobile/src/features/home/workspace-connection-status.test.ts apps/mobile/src/features/threads/connection-pill-grace.test.ts
 ```
 
 Plus one pass in the iOS simulator: with one environment connected and another unreachable, the
