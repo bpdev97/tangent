@@ -36,6 +36,7 @@ import {
 } from "../lib/chatThreadActions";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { readT3ProjectFile } from "../lib/t3ProjectFileDefaults";
+import { resolveNewThreadProjectRef } from "../lib/projectDefaultHost";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentSummaries } from "../state/presentation";
 import { environmentServerConfigsAtom } from "../state/server";
@@ -76,7 +77,7 @@ export function createNewThreadHandler(router: AnyRouter) {
   };
 
   return (
-    projectRef: ScopedProjectRef,
+    requestedProjectRef: ScopedProjectRef,
     options?: {
       branch?: string | null;
       worktreePath?: string | null;
@@ -87,6 +88,12 @@ export function createNewThreadHandler(router: AnyRouter) {
       prompt?: string;
     },
   ): Promise<{ draftId: DraftId; threadId: ThreadId } | null> => {
+    // Tangent(FORK-HOST-001): start on the project's default host unless the caller named a
+    // branch or worktree, which only exist where the caller found them.
+    const projectRef =
+      options?.branch != null || options?.worktreePath != null
+        ? requestedProjectRef
+        : resolveNewThreadProjectRef(requestedProjectRef);
     const projects = readProjects();
     const projectGroupingSettings = selectProjectGroupingSettings(getClientSettings());
     // Read at call time; status pushes replace the config map and would recreate every sidebar handler.
