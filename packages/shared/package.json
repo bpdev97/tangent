@@ -147,6 +147,10 @@
       "types": "./src/projectSettings.ts",
       "import": "./src/projectSettings.ts"
     },
+    "./projectDefaultHost": {
+      "types": "./src/projectDefaultHost.ts",
+      "import": "./src/projectDefaultHost.ts"
+    },
     "./t3ProjectFile": {
       "types": "./src/t3ProjectFile.ts",
       "import": "./src/t3ProjectFile.ts"
