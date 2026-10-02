@@ -35,6 +35,7 @@ import {
   resolveNewThreadModelSelectionOverride,
 } from "../lib/chatThreadActions";
 import { readT3ProjectFile } from "../lib/t3ProjectFileDefaults";
+import { resolveNewThreadProjectRef } from "../lib/projectDefaultHost";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentSummaries } from "../state/presentation";
 import { environmentServerConfigsAtom } from "../state/server";
@@ -69,7 +70,7 @@ export function useNewThreadHandler() {
   };
 
   return (
-    projectRef: ScopedProjectRef,
+    requestedProjectRef: ScopedProjectRef,
     options?: {
       branch?: string | null;
       worktreePath?: string | null;
@@ -78,6 +79,12 @@ export function useNewThreadHandler() {
       replace?: boolean;
     },
   ): Promise<{ draftId: DraftId; threadId: ThreadId } | null> => {
+    // Tangent(FORK-HOST-001): start on the project's default host unless the caller named a
+    // branch or worktree, which only exist where the caller found them.
+    const projectRef =
+      options?.branch != null || options?.worktreePath != null
+        ? requestedProjectRef
+        : resolveNewThreadProjectRef(requestedProjectRef);
     const projects = readProjects();
     // Read at call time; status pushes replace the config map and would recreate every sidebar handler.
     const environmentServerConfigs = appAtomRegistry.get(environmentServerConfigsAtom);
