@@ -201,6 +201,10 @@ vi.mock("../lib/chatThreadActions", async (importOriginal) => ({
   resolveNewThreadModelSelectionOverride: () => null,
 }));
 vi.mock("../providerInstances", () => ({ resolveDefaultProviderModelSelection: () => null }));
+// Tangent(FORK-HOST-001): no default hosts in these tests.
+vi.mock("../lib/projectDefaultHost", () => ({
+  resolveNewThreadProjectRef: <T>(projectRef: T) => projectRef,
+}));
 vi.mock("../lib/t3ProjectFileDefaults", () => ({
   readT3ProjectFile: () => testState.projectFileRead,
 }));

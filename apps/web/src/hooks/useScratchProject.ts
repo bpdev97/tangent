@@ -18,6 +18,7 @@ import {
   usePrimaryEnvironmentId,
 } from "~/state/environments";
 import { projectEnvironment } from "~/state/projects";
+import { readNoProjectDefaultHost } from "~/lib/projectDefaultHost";
 import { type NewThreadHandler, useNewThreadHandler } from "./useHandleNewThread";
 
 function reportScratchFailure(title: string, error: unknown) {
@@ -78,7 +79,9 @@ export function createScratchProjectActions(input: {
   };
 
   const startScratchThread = async (environmentId: EnvironmentId) => {
-    const project = await openScratchProject(environmentId);
+    const project = await openScratchProject(
+      readNoProjectDefaultHost(input.environments()) ?? environmentId, // Tangent(FORK-HOST-001)
+    );
     if (project) {
       await input
         .handleNewThread(scopeProjectRef(project.environmentId, project.id))
