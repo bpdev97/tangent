@@ -12,6 +12,7 @@ import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { useEnvironments } from "~/state/environments";
 import { projectEnvironment } from "~/state/projects";
 import { useAtomCommand } from "~/state/use-atom-command";
+import { useNoProjectDefaultHost } from "~/lib/projectDefaultHost";
 import { useNewThreadHandler } from "./useHandleNewThread";
 
 function reportScratchFailure(title: string, error: unknown) {
@@ -77,16 +78,17 @@ export function useScratchProject() {
     [openScratch],
   );
 
+  const noProjectDefaultHost = useNoProjectDefaultHost(); // Tangent(FORK-HOST-001)
   const startScratchThread = useCallback(
     async (environmentId: EnvironmentId) => {
-      const project = await openScratchProject(environmentId);
+      const project = await openScratchProject(noProjectDefaultHost ?? environmentId);
       if (project) {
         await handleNewThread(scopeProjectRef(project.environmentId, project.id)).catch(
           (error: unknown) => reportScratchFailure("Could not start without a project", error),
         );
       }
     },
-    [handleNewThread, openScratchProject],
+    [handleNewThread, noProjectDefaultHost, openScratchProject],
   );
 
   return { scratchWorkspaceRootFor, scratchEnvironmentId, openScratchProject, startScratchThread };

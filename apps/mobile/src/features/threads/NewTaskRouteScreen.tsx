@@ -32,6 +32,10 @@ import type { WorkspaceState } from "../../state/workspaceModel";
 import { useWorkspaceState } from "../../state/workspace";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
 import { usePromptLinkResolver } from "../prompt-links/usePromptLinkResolver";
+import {
+  useNoProjectDefaultHost,
+  useResolveProjectDefaultHost,
+} from "../projects/projectDefaultHost";
 import { useIncomingShare } from "../sharing/IncomingShareProvider";
 import { useNewTaskFlow } from "./new-task-flow-provider";
 import { filterProjectScopes, getProjectScopeSelectionTarget } from "./new-task-project-selection";
@@ -152,6 +156,7 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
   const insets = useSafeAreaInsets();
   const { getShare, releaseShareReservation } = useIncomingShare();
   usePromptLinkResolver(route.params);
+  const resolveDefaultHost = useResolveProjectDefaultHost(); // Tangent(FORK-HOST-001)
   const routeShareId = Array.isArray(route.params?.incomingShareId)
     ? route.params.incomingShareId[0]
     : route.params?.incomingShareId;
@@ -197,7 +202,10 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
         serverConfigs.get(environment.environmentId),
       ) !== null,
   );
+  // Tangent(FORK-HOST-001): No project's default host comes first.
+  const noProjectDefaultHost = useNoProjectDefaultHost();
   const scratchEnvironment =
+    scratchEnvironments.find((environment) => environment.environmentId === noProjectDefaultHost) ??
     scratchEnvironments.find(
       (environment) => environment.environmentId === selectedEnvironmentId,
     ) ??
@@ -457,9 +465,9 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
             >
               {visibleScopes.map((scope, scopeIndex) => {
                 const hasMultipleProjects = scope.projects.length > 1;
-                const selectionTarget = getProjectScopeSelectionTarget(
-                  scope,
-                  selectedEnvironmentId,
+                // Tangent(FORK-HOST-001): the project's default host, when connected.
+                const selectionTarget = resolveDefaultHost(
+                  getProjectScopeSelectionTarget(scope, selectedEnvironmentId),
                 );
                 if (Platform.OS === "android") {
                   return (
