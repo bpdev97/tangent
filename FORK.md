@@ -46,6 +46,7 @@ rebased onto upstream rather than merging it, so each feature stays one commit.
 | `FORK-IMAGE-001`   | Photos from iPhones must work with every provider: HEIC conversion, mobile shrinking, and camera capture                                      | [image normalization](docs/fork/image-normalization.md) | Active |
 | `FORK-PALETTE-001` | Control-N and Control-P move through the command palette, matching macOS and Emacs habits                                                     | [command palette](docs/fork/palette.md)                 | Active |
 | `FORK-MCP-001`     | Agents on every provider reach the same HTTP MCP servers, such as executor, configured once per environment                                   | [MCP servers](docs/fork/mcp-servers.md)                 | Active |
+| `FORK-HOST-001`    | Each client can choose which server new threads start on for a project that lives on several                                                  | [default host](docs/fork/project-default-host.md)       | Active |
 
 ## Removed, do not reintroduce
 
