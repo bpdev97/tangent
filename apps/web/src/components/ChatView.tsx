@@ -120,6 +120,7 @@ import { formatModelSlugName, resolveSelectableModel } from "@t3tools/shared/mod
 import { projectScriptCwd, resolveProjectScripts } from "@t3tools/shared/projectScripts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { orchestrationV2WorktreePending } from "@t3tools/shared/orchestrationV2ThreadError";
+import { useProjectDefaultHostActive } from "../lib/projectDefaultHost";
 import { resolveThreadReferenceCopyTarget } from "@t3tools/client-runtime/thread-reference";
 import { resolveTerminalSessionLabel } from "@t3tools/shared/terminalLabels";
 import { useAtomValue } from "@effect/atom-react";
@@ -1312,6 +1313,11 @@ export default function ChatView(props: ChatViewProps) {
     loadBalancingEnabled: settings.loadBalancingEnabled,
     loadBalancingWeights: settings.loadBalancingWeights,
   }));
+  // Tangent(FORK-HOST-001): a project's default host outranks load balancing until Auto is picked.
+  const projectDefaultHostActive = useProjectDefaultHostActive(
+    activeProject,
+    logicalProjectEnvironments,
+  );
   const automaticEnvironment = Boolean(
     clientSettingsHydrated &&
     draftId &&
@@ -1319,6 +1325,7 @@ export default function ChatView(props: ChatViewProps) {
     canAutoBalanceEnvironments &&
     loadBalancingSettings.loadBalancingEnabled &&
     draftThread?.environmentSelection !== "manual" &&
+    (draftThread?.environmentSelection === "auto" || !projectDefaultHostActive) &&
     (!composerHasAttachments || Boolean(draftThread?.loadBalancedEnvironmentId)) &&
     (!draftThread?.branch || draftThread.environmentSelection === "auto") &&
     !draftThread?.worktreePath,
