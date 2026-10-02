@@ -8,6 +8,7 @@ import { useNavigation, useNavigationState } from "@react-navigation/native";
 import { scopedThreadKey } from "../../../lib/scopedEntities";
 import { uuidv4 } from "../../../lib/uuid";
 import { usePendingTaskListActions } from "../../home/usePendingTaskListActions";
+import { useResolveProjectDefaultHost } from "../../projects/projectDefaultHost";
 import { useAdaptiveWorkspaceLayout, useWorkspacePaneState } from "../adaptive-workspace-context";
 import { openSettings } from "../../settings/settings-navigation";
 import { ThreadNavigationSidebar } from "../../threads/ThreadNavigationSidebar";
@@ -51,6 +52,7 @@ export function WorkspaceThreadSidebar() {
   const selectThreadRoute = (params: ReactNavigation.RootParamList["Thread"]) =>
     selectDetail({ name: "Thread", params });
   const { openPendingTask } = usePendingTaskListActions(selectThreadRoute);
+  const resolveDefaultHost = useResolveProjectDefaultHost(); // Tangent(FORK-HOST-001)
   return (
     <ThreadNavigationSidebar
       width={layout.listPaneWidth ?? 0}
@@ -59,7 +61,8 @@ export function WorkspaceThreadSidebar() {
       selectedThreadKey={selectedThread}
       onOpenSettings={() => openWorkspaceTab("settings")}
       onOpenEnvironmentSettings={() => openSettings(navigation, "SettingsEnvironments")}
-      onNewThreadInProject={(project: EnvironmentProject) =>
+      onNewThreadInProject={(requestedProject: EnvironmentProject) => {
+        const project = resolveDefaultHost(requestedProject);
         selectThreadRoute({
           draft: {
             requestId: uuidv4(),
@@ -67,8 +70,8 @@ export function WorkspaceThreadSidebar() {
             projectId: String(project.id),
             title: project.title,
           },
-        })
-      }
+        });
+      }}
       onNewThreadOnBranch={(thread: EnvironmentThreadShell) =>
         selectThreadRoute({
           draft: {
