@@ -35,6 +35,7 @@ import {
 } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsScreen } from "./components/SettingsScreen";
+import { ProjectDefaultHostSection } from "./ProjectDefaultHostSection";
 import { SettingsSection } from "./components/SettingsSection";
 import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActionRow";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
@@ -121,6 +122,13 @@ export function SettingsProjectOverviewRouteScreen() {
               onProjectRemoved={finishProjectRemoval}
             />
           )}
+          {/* Tangent(FORK-HOST-001) */}
+          {group ? (
+            <ProjectDefaultHostSection
+              projectKey={group.key}
+              members={group.members.map((entry) => entry.project)}
+            />
+          ) : null}
         </ScrollView>
       </SettingsScreen>
     </>

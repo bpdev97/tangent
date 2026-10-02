@@ -45,6 +45,7 @@ import {
 } from "./ProjectFaviconPickerDialog";
 import { ProjectActionsSettings } from "./ProjectActionsSettings";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
+import { ProjectDefaultHostSetting } from "./ProjectDefaultHostSetting";
 import {
   defaultProjectIcon,
   hasDefaultProjectIcon,
@@ -515,6 +516,8 @@ function ProjectDetail({
               </div>
             }
           />
+          {/* Tangent(FORK-HOST-001) */}
+          <ProjectDefaultHostSetting group={group} />
           {canOrganize ? (
             <>
               <SettingsRow

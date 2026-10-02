@@ -10,6 +10,7 @@ import {
   type StaticScreenProps,
 } from "@react-navigation/native";
 import { SymbolView } from "../../components/ui/AppSymbol";
+import { availableScratchWorkspaceRoot } from "@t3tools/client-runtime/operations/projects";
 import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import {
@@ -33,6 +34,10 @@ import { useRemoteConnectionStatus } from "../../state/use-remote-environment-re
 import type { WorkspaceState } from "../../state/workspaceModel";
 import { useWorkspaceState } from "../../state/workspace";
 
+import {
+  useNoProjectDefaultHost,
+  useResolveProjectDefaultHost,
+} from "../projects/projectDefaultHost";
 import { useIncomingShare } from "../sharing/IncomingShareProvider";
 import { useNewTaskFlow } from "./new-task-flow-provider";
 import {
@@ -162,6 +167,7 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const { getShare, releaseShareReservation } = useIncomingShare();
+  const resolveDefaultHost = useResolveProjectDefaultHost(); // Tangent(FORK-HOST-001)
   const routeShareId = Array.isArray(route.params?.incomingShareId)
     ? route.params.incomingShareId[0]
     : route.params?.incomingShareId;
@@ -200,12 +206,23 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
   const openScratch = useAtomCommand(projectEnvironment.openScratch, {
     reportFailure: false,
   });
+  // Tangent(FORK-HOST-001): No project's default host comes first.
+  const noProjectDefaultHost = useNoProjectDefaultHost();
+  const noProjectDefaultEnvironment = connectedEnvironments.find(
+    (environment) =>
+      environment.environmentId === noProjectDefaultHost &&
+      availableScratchWorkspaceRoot(
+        environment.connectionState,
+        serverConfigs.get(environment.environmentId),
+      ) !== null,
+  );
   const scratchOption =
     reservedDestinationProject === null
       ? resolveNewTaskScratchOption({
           environments: connectedEnvironments,
           serverConfigs,
-          selectedEnvironmentId,
+          selectedEnvironmentId:
+            noProjectDefaultEnvironment?.environmentId ?? selectedEnvironmentId,
         })
       : null;
   const canStartScratch = scratchOption?.ready === true;
@@ -468,10 +485,13 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
             >
               {visibleScopes.map((scope, scopeIndex) => {
                 const hasMultipleProjects = scope.projects.length > 1;
-                const selectionTarget = getProjectScopeSelectionTarget(
-                  scope,
-                  selectedEnvironmentId,
-                  connectedEnvironmentIds,
+                // Tangent(FORK-HOST-001): the project's default host, when connected.
+                const selectionTarget = resolveDefaultHost(
+                  getProjectScopeSelectionTarget(
+                    scope,
+                    selectedEnvironmentId,
+                    connectedEnvironmentIds,
+                  ),
                 );
                 if (Platform.OS === "android") {
                   return (

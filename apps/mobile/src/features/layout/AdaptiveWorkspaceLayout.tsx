@@ -83,6 +83,7 @@ import { newTaskDestination } from "../threads/new-task-project-selection";
 import { usePendingTaskListActions } from "../home/usePendingTaskListActions";
 import { ThreadNavigationSidebar } from "../threads/ThreadNavigationSidebar";
 import { useOpenThreadPullRequests } from "../threads/use-open-thread-pull-requests";
+import { useResolveProjectDefaultHost } from "../projects/projectDefaultHost";
 import { RenderErrorBoundary, RenderFailureView } from "../../components/RenderErrorBoundary";
 import { WORKSPACE_PANE_TIMING } from "./workspace-pane-animation";
 import { WorkspaceInspectorPane } from "./workspace-inspector-pane";
@@ -656,7 +657,9 @@ function AdaptiveWorkspaceLayoutContent(
     });
   };
 
-  const handleNewThreadInProject = (project: EnvironmentProject) => {
+  const resolveDefaultHost = useResolveProjectDefaultHost(); // Tangent(FORK-HOST-001)
+  const handleNewThreadInProject = (requestedProject: EnvironmentProject) => {
+    const project = resolveDefaultHost(requestedProject);
     handleSelectThreadRoute({
       draft: {
         requestId: uuidv4(),
