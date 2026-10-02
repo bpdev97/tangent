@@ -112,6 +112,11 @@ vi.mock("../../state/use-remote-environment-registry", () => ({
 vi.mock("../../state/workspace", () => ({
   useWorkspaceState: () => ({ state: { hasReadyEnvironment: true } }),
 }));
+// Tangent(FORK-HOST-001): no default hosts; the hook reads device preferences.
+vi.mock("../projects/projectDefaultHost", () => ({
+  useNoProjectDefaultHost: () => null,
+  useResolveProjectDefaultHost: () => (project: unknown) => project,
+}));
 vi.mock("../sharing/IncomingShareProvider", () => ({
   useIncomingShare: () => ({ getShare: () => null, releaseShareReservation: vi.fn() }),
 }));
