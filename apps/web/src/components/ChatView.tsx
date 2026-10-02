@@ -134,6 +134,7 @@ import {
   usageLimitRunPresentedAsLatest,
 } from "@t3tools/shared/orchestrationV2ThreadError";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import { useProjectDefaultHostActive } from "../lib/projectDefaultHost";
 import { sourceControlRepositorySelector } from "@t3tools/shared/sourceControl";
 import { truncate } from "@t3tools/shared/String";
 import { resolveThreadReferenceCopyTarget } from "@t3tools/shared/threadReference";
@@ -2947,6 +2948,11 @@ export default function ChatView(props: ChatViewProps) {
   const envLocked = Boolean(activeThread && (activeMessageCount > 0 || activeRuntime !== null));
 
   const loadBalancingSettings = useClientSettings();
+  // Tangent(FORK-HOST-001): a project's default host outranks load balancing until Auto is picked.
+  const projectDefaultHostActive = useProjectDefaultHostActive(
+    activeProject,
+    logicalProjectEnvironments,
+  );
   const automaticEnvironment = Boolean(
     clientSettingsHydrated &&
     draftId &&
@@ -2954,6 +2960,7 @@ export default function ChatView(props: ChatViewProps) {
     canAutoBalanceEnvironments &&
     loadBalancingSettings.loadBalancingEnabled &&
     draftThread?.environmentSelection !== "manual" &&
+    (draftThread?.environmentSelection === "auto" || !projectDefaultHostActive) &&
     (!composerHasAttachments || Boolean(draftThread?.loadBalancedEnvironmentId)) &&
     (!draftThread?.branch || draftThread.environmentSelection === "auto") &&
     !draftThread?.worktreePath,
