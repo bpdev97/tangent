@@ -68,6 +68,7 @@ import { AndroidWorkspaceSidebar } from "../workspace/AndroidWorkspaceSidebar";
 import { useAndroidWorkspaceSelection } from "../workspace/useAndroidWorkspaceSelection";
 import { HomeListOptionsProvider } from "../home/home-list-options";
 import { ThreadNavigationSidebar } from "../threads/ThreadNavigationSidebar";
+import { useResolveProjectDefaultHost } from "../projects/projectDefaultHost";
 import { RenderErrorBoundary, RenderFailureView } from "../../components/RenderErrorBoundary";
 import { WORKSPACE_PANE_TIMING } from "./workspace-pane-animation";
 import { WorkspaceInspectorPane } from "./workspace-inspector-pane";
@@ -477,8 +478,10 @@ function AdaptiveWorkspaceLayoutContent(
     [navigation],
   );
 
+  const resolveDefaultHost = useResolveProjectDefaultHost(); // Tangent(FORK-HOST-001)
   const handleNewThreadInProject = useCallback(
-    (project: EnvironmentProject) => {
+    (requestedProject: EnvironmentProject) => {
+      const project = resolveDefaultHost(requestedProject);
       navigation.navigate("NewTaskSheet", {
         screen: "NewTaskDraft",
         params: {
@@ -488,7 +491,7 @@ function AdaptiveWorkspaceLayoutContent(
         },
       });
     },
-    [navigation],
+    [navigation, resolveDefaultHost],
   );
 
   const inspectorColumnTargetWidth =
