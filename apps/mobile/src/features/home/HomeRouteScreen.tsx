@@ -29,6 +29,7 @@ import { useHomeListOptions } from "./home-list-options";
 import { useAtomValueWhileVisible, useHomeRouteVisible } from "./home-route-visibility";
 import { buildHomeProjectScopes } from "./homeThreadList";
 import { usePendingTaskListActions } from "./usePendingTaskListActions";
+import { useResolveProjectDefaultHost } from "../projects/projectDefaultHost";
 import { useThreadListActions } from "./useThreadListActions";
 import { useWorkspaceTabs } from "../layout/workspace/WorkspaceTabsContext";
 import { openSettings } from "../settings/settings-navigation";
@@ -133,6 +134,7 @@ export function HomeRouteScreen() {
       sidebarProjectGroupingOverrides: {},
     },
   );
+  const resolveDefaultHost = useResolveProjectDefaultHost(); // Tangent(FORK-HOST-001)
   const projectFilterOptions = useMemo(
     () =>
       pickableProjectGroups(
@@ -212,7 +214,8 @@ export function HomeRouteScreen() {
           onSelectPendingTask={openPendingTask}
           onDeletePendingTask={confirmDeletePendingTask}
           onNewThreadOnBranch={handleNewThreadOnBranch}
-          onNewThreadInProject={(project) => {
+          onNewThreadInProject={(requestedProject) => {
+            const project = resolveDefaultHost(requestedProject);
             selectThreadRoute({
               draft: {
                 requestId: uuidv4(),
