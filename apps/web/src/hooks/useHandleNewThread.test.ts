@@ -143,6 +143,10 @@ vi.mock("../lib/chatThreadActions", async (importOriginal) => ({
   hasExplicitComposerModelSelection: () => false,
   resolveNewThreadModelSelectionOverride: () => null,
 }));
+// Tangent(FORK-HOST-001): no default hosts in these tests.
+vi.mock("../lib/projectDefaultHost", () => ({
+  resolveNewThreadProjectRef: <T>(projectRef: T) => projectRef,
+}));
 vi.mock("../lib/t3ProjectFileDefaults", () => ({
   readT3ProjectFile: () => testState.projectFileRead,
 }));

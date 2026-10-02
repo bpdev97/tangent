@@ -12,6 +12,7 @@ import { waitForProject } from "~/state/entities";
 import { useEnvironments } from "~/state/environments";
 import { projectEnvironment } from "~/state/projects";
 import { useAtomCommand } from "~/state/use-atom-command";
+import { useNoProjectDefaultHost } from "~/lib/projectDefaultHost";
 import { useNewThreadHandler } from "./useHandleNewThread";
 
 function reportScratchFailure(error: unknown) {
@@ -82,16 +83,17 @@ export function useScratchProject() {
     [ensureScratch],
   );
 
+  const noProjectDefaultHost = useNoProjectDefaultHost(); // Tangent(FORK-HOST-001)
   const startScratchThread = useCallback(
     async (environmentId: EnvironmentId) => {
-      const project = await openScratchProject(environmentId);
+      const project = await openScratchProject(noProjectDefaultHost ?? environmentId);
       if (project) {
         await handleNewThread(scopeProjectRef(project.environmentId, project.id)).catch(
           reportScratchFailure,
         );
       }
     },
-    [handleNewThread, openScratchProject],
+    [handleNewThread, noProjectDefaultHost, openScratchProject],
   );
 
   return { scratchWorkspaceRootFor, scratchEnvironmentId, openScratchProject, startScratchThread };
