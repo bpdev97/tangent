@@ -27,6 +27,7 @@ import { useAtomValueWhileVisible, useHomeRouteVisible } from "./home-route-visi
 import { useHomeThreadSelection } from "./home-thread-navigation";
 import { buildHomeProjectScopes } from "./homeThreadList";
 import { usePendingTaskListActions } from "./usePendingTaskListActions";
+import { useResolveProjectDefaultHost } from "../projects/projectDefaultHost";
 import { useThreadListActions } from "./useThreadListActions";
 import { getConnectionAwareBrandHeaderOptions } from "./WorkspaceConnectionTitle";
 
@@ -111,6 +112,7 @@ export function HomeRouteScreen() {
     useHomeListOptions(availableEnvironmentIds);
   const selectedEnvironmentId = listOptions.selectedEnvironmentId;
   const [selectedProjectKey, setSelectedProjectKey] = useState<string | null>(null);
+  const resolveDefaultHost = useResolveProjectDefaultHost(); // Tangent(FORK-HOST-001)
   const projectFilterOptions = useMemo(
     () =>
       buildHomeProjectScopes({
@@ -256,7 +258,8 @@ export function HomeRouteScreen() {
           onSelectPendingTask={openPendingTask}
           onDeletePendingTask={confirmDeletePendingTask}
           onNewThreadOnBranch={handleNewThreadOnBranch}
-          onNewThreadInProject={(project) => {
+          onNewThreadInProject={(requestedProject) => {
+            const project = resolveDefaultHost(requestedProject);
             navigation.navigate("NewTaskSheet", {
               screen: "NewTaskDraft",
               params: {
