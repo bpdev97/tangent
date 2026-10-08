@@ -64,9 +64,14 @@ UNATTACHED = "This Hermes session is not attached to a Tangent thread, so Tangen
 INTERRUPTED = "The turn was stopped before Tangent answered."
 
 _lock = threading.Lock()
-# Other ids a call can arrive under, each pointing at the session it belongs to: a Hermes
-# subagent's session and task id point at the session that spawned it.
+# Other ids a call can arrive under, each pointing at the id it belongs to. A subagent's
+# session and task id point at the session that spawned it, and a session id Hermes handed
+# out when it compressed a conversation points at the task id its turn started under.
 _parents = {}
+# Each subagent alias -> every alias registered for that subagent, to forget them together.
+_siblings = {}
+# Hermes does not always say which ids a finished subagent had, so the map is bounded too.
+MAX_ALIASES = 4096
 # Sessions already given Tangent's instructions by this process.
 _briefed = set()
 
@@ -88,8 +93,9 @@ def _send(call, method, endpoint, authorization, payload=None, mcp_session=None,
 
     http.client connects directly: it follows no redirect and uses no proxy, so
     the credential never goes anywhere else. The connection is shared through
-    call so a stopped turn can close it under a blocked read. The request is
-    written under the call's lock, so once _stop returns nothing more is sent.
+    call so a stopped turn can shut its socket down under a blocked read or
+    write. Once _stop returns nothing more is sent: a request not yet started
+    sees the flag, and one already past it writes to a socket that is shut.
     """
     target = urllib.parse.urlsplit(endpoint)
     connect = http.client.HTTPSConnection if target.scheme == "https" else http.client.HTTPConnection
@@ -115,7 +121,7 @@ def _send(call, method, endpoint, authorization, payload=None, mcp_session=None,
         with call["lock"]:
             if call["stopped"].is_set():
                 raise _Stopped()
-            connection.request(method, (target.path or "/") + ("?" + target.query if target.query else ""), body=body, headers=headers)
+        connection.request(method, (target.path or "/") + ("?" + target.query if target.query else ""), body=body, headers=headers)
         response = connection.getresponse()
         text = response.read().decode("utf-8")
         if not 200 <= response.status < 300:
@@ -191,12 +197,13 @@ def _stop(call):
     with call["lock"]:
         call["stopped"].set()
         connection = call["connection"]
-        try:
-            if connection is not None and connection.sock is not None:
-                # close() alone does not wake a thread blocked in recv().
-                connection.sock.shutdown(socket.SHUT_RDWR)
-        except OSError:
-            pass
+    # Outside the lock: the worker may be blocked writing a large request.
+    try:
+        if connection is not None and connection.sock is not None:
+            # close() alone does not wake a thread blocked in recv() or send().
+            connection.sock.shutdown(socket.SHUT_RDWR)
+    except OSError:
+        pass
 
 
 def _call_until_stopped(endpoint, authorization, name, arguments):
@@ -316,24 +323,55 @@ def _handler(bridge, name):
     return handle
 
 
-def _subagent_started(bridge):
-    def on_start(parent_session_id=None, child_session_id=None, child_subagent_id=None, **kwargs):
-        if not parent_session_id:
-            return
-        with _lock:
-            # A subagent's turns run under its subagent id as their task id.
-            for key in (child_session_id, child_subagent_id):
-                if key:
-                    _parents[str(key)] = str(parent_session_id)
+def _alias(key, target):
+    """Point key at target unless it already points somewhere. Caller holds _lock."""
+    if not key or not target or key == target or key in _parents:
+        return
+    if len(_parents) >= MAX_ALIASES:
+        for old in list(_parents)[: MAX_ALIASES // 2]:
+            _parents.pop(old, None)
+            _siblings.pop(old, None)
+    _parents[key] = target
 
-    return on_start
+
+def _note_call(task_id="", session_id="", **kwargs):
+    """Before every tool call: a session id that differs from its task id is a newer name for it.
+
+    This runs before delegate_task spawns a subagent, so a subagent started
+    after its parent was compressed still leads back to an attached session.
+    """
+    with _lock:
+        _alias(str(session_id or ""), str(task_id or ""))
+
+
+def _subagent_started(parent_session_id=None, parent_subagent_id=None, child_session_id=None, child_subagent_id=None, **kwargs):
+    if not parent_session_id:
+        return
+    parent = str(parent_session_id)
+    # A subagent's turns run under its subagent id as their task id.
+    aliases = [str(key) for key in (child_session_id, child_subagent_id) if key]
+    with _lock:
+        # A subagent that spawns one of its own may have been compressed since it started.
+        _alias(parent, str(parent_subagent_id or ""))
+        for key in aliases:
+            _alias(key, parent)
+            _siblings[key] = aliases
 
 
 def _subagent_stopped(child_session_id=None, child_subagent_id=None, **kwargs):
     with _lock:
+        found = set()
         for key in (child_session_id, child_subagent_id):
-            if key:
-                _parents.pop(str(key), None)
+            if not key:
+                continue
+            key = str(key)
+            found.add(key)
+            # Hermes may name only the session, and by then under an id it rotated to.
+            for known in (key, _parents.get(key)):
+                found.update(_siblings.get(known) or ())
+        for key in found:
+            _parents.pop(key, None)
+            _siblings.pop(key, None)
 
 
 def _brief(bridge):
@@ -385,7 +423,8 @@ def register(ctx):
         )
         registered += 1
     ctx.register_hook("pre_llm_call", _brief(bridge))
-    ctx.register_hook("subagent_start", _subagent_started(bridge))
+    ctx.register_hook("pre_tool_call", _note_call)
+    ctx.register_hook("subagent_start", _subagent_started)
     ctx.register_hook("subagent_stop", _subagent_stopped)
     # Tells Tangent this profile has the plugin enabled.
     try:
