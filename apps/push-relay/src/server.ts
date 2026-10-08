@@ -180,12 +180,17 @@ export async function startServer(
     state: ReturnType<typeof decodePublish>["state"],
     aggregate: ReturnType<RelayStore["aggregate"]>,
     updateNotificationWatermark: boolean,
+    silent: boolean,
   ): Promise<boolean> => {
-    const alert = liveActivityAlert({
-      state,
-      previous: state ? store.notificationPhase(target, state) : null,
-      preferences: target.preferences,
-    });
+    // A silent publication still records its phase below, so the same phase
+    // published again later cannot alert in its place.
+    const alert = silent
+      ? null
+      : liveActivityAlert({
+          state,
+          previous: state ? store.notificationPhase(target, state) : null,
+          preferences: target.preferences,
+        });
 
     let retryNotification = false;
     let retryLiveActivity = false;
@@ -264,7 +269,7 @@ export async function startServer(
     await mapConcurrent(store.pendingDeliveries(), 4, async (delivery) => {
       const target = store.target(delivery.deviceId);
       try {
-        if (target && (await deliver(target, delivery.state, aggregate, true))) {
+        if (target && (await deliver(target, delivery.state, aggregate, true, delivery.silent))) {
           store.retryDelivery(delivery);
         } else {
           store.completeDelivery(delivery);
@@ -354,7 +359,7 @@ export async function startServer(
           });
           const target = store.target(registration.deviceId);
           if (target?.activityPushToken && target.preferences.liveActivitiesEnabled) {
-            await deliver(target, null, store.aggregate(), false);
+            await deliver(target, null, store.aggregate(), false, false);
           }
           json(response, 200, { ok: true });
           return;

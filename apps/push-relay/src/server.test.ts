@@ -160,6 +160,7 @@ async function publish(
 async function publishState(
   server: PushRelayServer,
   state: RelayAgentActivityState,
+  options: { readonly silent?: boolean } = {},
 ): Promise<void> {
   const result = await request(server, "/v1/agent-activities", {
     method: "POST",
@@ -167,6 +168,7 @@ async function publishState(
       environmentId: state.environmentId,
       threadId: state.threadId,
       state,
+      ...options,
     },
   });
   expect(result).toEqual({ status: 200, body: { ok: true } });
@@ -403,6 +405,52 @@ describe("personal push relay HTTP integration", () => {
       title: "Implement notifications",
       body: "Approval needed: Push relay",
     });
+  });
+
+  it("updates the Live Activity without alerting for a silent publication", async () => {
+    const apns = new RecordingApnsClient();
+    server = await startServer(config, { apns });
+    await registerDevice(server);
+    await publish(server, "running");
+    await request(server, "/v1/live-activities", {
+      method: "POST",
+      body: { deviceId: "device-1", activityPushToken: "live-activity-token" },
+    });
+
+    await publishState(server, activityState("completed"), { silent: true });
+    expect(apns.notifications).toHaveLength(0);
+    expect(apns.liveActivities.at(-1)).toMatchObject({
+      alert: null,
+      aggregate: { activeCount: 0 },
+    });
+
+    // The silenced phase counts as delivered: publishing it again must not alert late.
+    await publishState(server, { ...activityState("completed"), threadTitle: "Renamed" });
+    expect(apns.notifications).toHaveLength(0);
+
+    await publish(server, "running");
+    await publish(server, "completed");
+    expect(apns.notifications.map((delivery) => delivery.state.phase)).toEqual(["completed"]);
+  });
+
+  it("keeps a publication silent across a retry", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const apns = new RecordingApnsClient();
+    server = await startServer(config, { apns });
+    await registerDevice(server);
+    await publish(server, "running");
+    await request(server, "/v1/live-activities", {
+      method: "POST",
+      body: { deviceId: "device-1", activityPushToken: "live-activity-token" },
+    });
+    apns.liveActivityResults.push(transientFailure, success);
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    await publishState(server, activityState("completed"), { silent: true });
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(apns.notifications).toHaveLength(0);
+    expect(apns.liveActivities.slice(1).map((delivery) => delivery.alert)).toEqual([null, null]);
   });
 
   it("notifies separately and keeps a completed Live Activity reusable until its grace period", async () => {

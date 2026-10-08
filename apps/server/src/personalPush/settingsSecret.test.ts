@@ -49,6 +49,15 @@ it.layer(NodeServices.layer)("personal push relay password", (it) => {
       assert.equal(reread.personalPushRelay.url, "https://relay2.example.test");
       assert.equal(reread.personalPushRelay.password, PASSWORD);
 
+      // So does changing only the quiet window, which the settings UI saves on its own.
+      yield* settings.updateSettings({
+        personalPushRelay: { quietAfterDesktopActivityMinutes: 5 },
+      });
+      const quieted = yield* settings.getSettings;
+      assert.equal(quieted.personalPushRelay.quietAfterDesktopActivityMinutes, 5);
+      assert.equal(quieted.personalPushRelay.password, PASSWORD);
+      assert.equal(quieted.personalPushRelay.url, "https://relay2.example.test");
+
       // Echoing the marker back from a client also keeps it.
       yield* settings.updateSettings({
         personalPushRelay: { password: PERSONAL_PUSH_RELAY_PASSWORD_REDACTED },

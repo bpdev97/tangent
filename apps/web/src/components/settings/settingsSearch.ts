@@ -530,6 +530,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     scope: "environment",
     searchTerms: ["notifications live activities apns ios tailnet password"],
   },
+  {
+    id: "personal-push-quiet",
+    title: "Quiet phone after desktop activity",
+    to: "/settings/general",
+    scope: "environment",
+    searchTerms: ["notifications quiet silence mute phone desktop active away done finished"],
+  },
   // Tangent(FORK-NOTES-001)
   {
     id: "release-notes",

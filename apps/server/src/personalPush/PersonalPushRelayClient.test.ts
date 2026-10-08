@@ -25,6 +25,7 @@ describe("personal push relay settings", () => {
       {
         ...DEFAULT_SERVER_SETTINGS,
         personalPushRelay: {
+          ...DEFAULT_SERVER_SETTINGS.personalPushRelay,
           url: "https://settings.example.ts.net/",
           password: "settings-password",
         },

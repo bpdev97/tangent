@@ -14,6 +14,8 @@ export const PersonalPushActivityPublishRequest = Schema.Struct({
   environmentId: EnvironmentId,
   threadId: ThreadId,
   state: Schema.NullOr(RelayAgentActivityState),
+  /** Updates the Live Activity without alerting; the server sets it while the user is at the desktop. */
+  silent: Schema.optionalKey(Schema.Boolean),
 });
 export type PersonalPushActivityPublishRequest = typeof PersonalPushActivityPublishRequest.Type;
 
@@ -23,15 +25,30 @@ export type PersonalPushActivityPublishRequest = typeof PersonalPushActivityPubl
  */
 export const PERSONAL_PUSH_RELAY_PASSWORD_REDACTED = "••••••";
 
+/** Choices offered for the quiet window; 0 turns it off. */
+export const PERSONAL_PUSH_QUIET_MINUTES_OPTIONS = [0, 1, 2, 5, 15] as const;
+const DEFAULT_PERSONAL_PUSH_QUIET_MINUTES = 2;
+
+/**
+ * Minutes after the last desktop or web interaction during which finished and
+ * failed threads do not alert the phone. Whole minutes: the server only learns
+ * of an interaction to within about a minute.
+ */
+const PersonalPushQuietMinutes = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 60 }));
+
 export const PersonalPushRelaySettings = Schema.Struct({
   url: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   password: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  quietAfterDesktopActivityMinutes: PersonalPushQuietMinutes.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_PERSONAL_PUSH_QUIET_MINUTES)),
+  ),
 }).pipe(Schema.withDecodingDefault(Effect.succeed({})));
 export type PersonalPushRelaySettings = typeof PersonalPushRelaySettings.Type;
 
 export const PersonalPushRelaySettingsPatch = Schema.Struct({
   url: Schema.optionalKey(TrimmedString),
   password: Schema.optionalKey(TrimmedString),
+  quietAfterDesktopActivityMinutes: Schema.optionalKey(PersonalPushQuietMinutes),
 });
 export type PersonalPushRelaySettingsPatch = typeof PersonalPushRelaySettingsPatch.Type;
 
