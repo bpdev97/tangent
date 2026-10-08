@@ -193,10 +193,16 @@ Usage:
 - Because Hermes rewrites a row as its session goes on, each profile is a usage source of its own
   that is read in full or reported as failed, never partial. The merge across servers adds a newer
   partial scan on top of an older complete one, which is only safe for history that is appended
-  to.
-- Turns that ran on Hermes's Codex app-server runtime are left out: Codex wrote them to its own
-  history, which the Codex scan counts. Hermes marks such a session with `codex_thread_id` in
-  `sessions.model_config`. Hermes's own background calls for it still count.
+  to. A source is named by the directory its database really is in, and a database is read once
+  however many roots or links reach it.
+- Turns that ran on Hermes's Codex app-server runtime are also in Codex's own history, so they
+  are left to the Codex scan, but only when that scan read them. Hermes binds such a session to
+  its Codex thread with `codex_thread_id` in `sessions.model_config`; a row is dropped when the
+  Codex scan read that thread, the row is the session's own (no task), and its provider is one
+  that runtime serves. A session that switched to another provider keeps those rows, and a thread
+  in a Codex home T3 does not read stays under Hermes. Hermes does not tell Codex which model to
+  use, so the rows cannot be matched by model; one provider used through both runtimes in one
+  session has a single total, which is left to Codex.
 - Cost is what Hermes recorded (the billed amount when it knows it, else its own estimate). A
   subscription call records none, and T3's price table estimates it as it does for Codex and
   Claude. A vendor-prefixed model name is priced under `openrouter/` only when OpenRouter billed

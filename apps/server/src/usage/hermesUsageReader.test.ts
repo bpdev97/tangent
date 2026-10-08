@@ -79,7 +79,9 @@ async function writeDatabase(
   }
 }
 
-const makeRoot = () => NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-hermes-usage-"));
+// Real paths, as sources are named by where their database really is.
+const makeRoot = async () =>
+  NodeFSP.realpath(await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-hermes-usage-")));
 
 describe("readHermesUsage", () => {
   it("reads each profile's per-model totals as Hermes recorded them", async () => {
@@ -126,12 +128,12 @@ describe("readHermesUsage", () => {
       { session: "r3", model: "openai/gpt-5.6-sol", billing: "openai-codex", input: 5, output: 5 },
     ]);
 
-    const [main, other] = await readHermesUsage(root, SINCE);
+    const [main, other] = await readHermesUsage([root], SINCE);
     assert.deepStrictEqual(
-      [main, other].map((profile) => [profile?.home, profile?.failed, profile?.records.length]),
+      [main, other].map((profile) => [profile?.home, profile?.status, profile?.records.length]),
       [
-        [root, false, 2],
-        [research, false, 3],
+        [root, "ok", 2],
+        [research, "ok", 3],
       ],
     );
 
@@ -164,27 +166,39 @@ describe("readHermesUsage", () => {
     assert.strictEqual(billed?.reportedCostUsd, 0.4);
   });
 
-  it("leaves turns that ran on Hermes's Codex runtime to Codex's own history", async () => {
+  it("leaves turns that ran on Hermes's Codex runtime to the Codex history that holds them", async () => {
     const root = await makeRoot();
     await writeDatabase(
       NodePath.join(root, "state.db"),
       [
-        { session: "codex", model: "gpt-5.6-sol", input: 100, output: 10 },
+        { session: "codex", model: "gpt-5.6-sol", billing: "openai-codex", input: 100, output: 10 },
         // Hermes made this call itself, so Codex never saw it.
-        { session: "codex", model: "gpt-5.6-sol", task: "title_generation", input: 7, output: 1 },
-        { session: "plain", model: "gpt-5.6-sol", input: 3, output: 1 },
-        { session: "cleared", model: "gpt-5.6-sol", input: 4, output: 1 },
+        {
+          session: "codex",
+          model: "gpt-5.6-sol",
+          billing: "openai-codex",
+          task: "title_generation",
+          input: 7,
+          output: 1,
+        },
+        // The session switched to a model Hermes calls itself and kept its thread.
+        { session: "codex", model: "claude-fable-5", billing: "anthropic", input: 9, output: 1 },
+        // Its thread is in a Codex home this server does not read.
+        { session: "elsewhere", model: "gpt-5.6-sol", billing: "openai", input: 5, output: 1 },
+        { session: "plain", model: "gpt-5.6-sol", billing: "openai-codex", input: 3, output: 1 },
+        { session: "cleared", model: "gpt-5.6-sol", billing: "openai-codex", input: 4, output: 1 },
       ],
       {
         codex: '{"codex_thread_id":"thr_1"}',
+        elsewhere: '{"codex_thread_id":"thr_2"}',
         plain: '{"reasoning_config":null}',
         cleared: '{"codex_thread_id":null}',
       },
     );
-    const [profile] = await readHermesUsage(root, SINCE);
+    const [profile] = await readHermesUsage([root], SINCE, new Set(["thr_1"]));
     assert.sameMembers(
       profile!.records.map((record) => record.totals.uncachedInputTokens),
-      [7, 3, 4],
+      [7, 9, 5, 3, 4],
     );
   });
 
@@ -198,31 +212,38 @@ describe("readHermesUsage", () => {
     const linked = NodePath.join(root, "profiles", "linked");
     await NodeFSP.mkdir(linked, { recursive: true });
     await NodeFSP.symlink(database, NodePath.join(linked, "state.db"));
+    // So is a second Hermes root that links to it.
+    const second = await makeRoot();
+    await NodeFSP.symlink(database, NodePath.join(second, "state.db"));
     // A profile whose database cannot be read reports nothing rather than part of itself.
     const broken = NodePath.join(root, "profiles", "broken");
     await NodeFSP.mkdir(broken, { recursive: true });
     await NodeFSP.writeFile(NodePath.join(broken, "state.db"), "not a database");
 
-    const usage = await readHermesUsage(root, SINCE);
+    const expected = [
+      [root, "ok", 1],
+      [broken, "failed", 0],
+    ];
+    const usage = await readHermesUsage([root, second], SINCE);
     assert.deepStrictEqual(
-      usage.map((profile) => [profile.home, profile.failed, profile.records.length]),
-      [
-        [root, false, 1],
-        [broken, true, 0],
-      ],
+      usage.map((profile) => [profile.home, profile.status, profile.records.length]),
+      expected,
+    );
+    // Reached through the link first, the history still belongs to the same source.
+    const reversed = await readHermesUsage([second, root], SINCE);
+    assert.deepStrictEqual(
+      reversed.map((profile) => [profile.home, profile.status, profile.records.length]),
+      expected,
     );
   });
 
-  it("reports nothing for a root without Hermes, or a database from before usage was recorded", async () => {
-    assert.deepStrictEqual(
-      await readHermesUsage(NodePath.join(await makeRoot(), "nowhere"), SINCE),
-      [],
-    );
-
+  it("reports a root without Hermes as missing, and a database from before usage as empty", async () => {
+    const nowhere = NodePath.join(await makeRoot(), "nowhere");
     const root = await makeRoot();
     await writeDatabase(NodePath.join(root, "state.db"), null);
-    assert.deepStrictEqual(await readHermesUsage(root, SINCE), [
-      { home: root, path: NodePath.join(root, "state.db"), records: [], failed: false },
+    assert.deepStrictEqual(await readHermesUsage([nowhere, root], SINCE), [
+      { home: nowhere, path: nowhere, records: [], status: "missing" },
+      { home: root, path: NodePath.join(root, "state.db"), records: [], status: "ok" },
     ]);
   });
 
@@ -254,23 +275,59 @@ describe("readHermesUsage", () => {
       const root = NodePath.join(home, ".hermes");
       const broken = NodePath.join(root, "profiles", "broken");
       yield* Effect.promise(async () => {
-        await writeDatabase(NodePath.join(root, "state.db"), [
-          { session: "s1", model: "gpt-5.6-sol", input: 100, output: 10 },
-        ]);
+        await writeDatabase(
+          NodePath.join(root, "state.db"),
+          [
+            {
+              session: "s1",
+              model: "gpt-5.6-sol",
+              billing: "openai-codex",
+              input: 100,
+              output: 10,
+            },
+            { session: "s2", model: "gpt-5.6-sol", billing: "openai-codex", input: 50, output: 5 },
+          ],
+          { s2: '{"codex_thread_id":"thr_1"}' },
+        );
         await NodeFSP.mkdir(broken, { recursive: true });
         await NodeFSP.writeFile(NodePath.join(broken, "state.db"), "not a database");
       });
-      const realRoot = yield* Effect.promise(() => NodeFSP.realpath(root));
-      const sources = yield* scanHermesUsage([{ HOME: home }], SINCE);
+      // The Codex scan read thread `thr_1`, so its turns are already counted.
+      const codex = {
+        provider: "codex",
+        files: [
+          {
+            records: [
+              {
+                provider: "codex" as const,
+                timestampMs: IN_WINDOW * 1_000,
+                model: "gpt-5.6-sol",
+                sessionId: "thr_1",
+                totals: {
+                  uncachedInputTokens: 50,
+                  cachedInputTokens: 0,
+                  cacheCreationTokens: 0,
+                  outputTokens: 5,
+                  reasoningTokens: 0,
+                },
+                reportedCostUsd: null,
+                speed: "standard" as const,
+                dedupeKey: null,
+              },
+            ],
+          },
+        ],
+      };
+      const sources = yield* scanHermesUsage([{ HOME: home }], SINCE, [codex]);
       assert.deepStrictEqual(
-        sources.map((source) => [source.dir, source.status, source.files?.length]),
+        sources.map((source) => [source.dir, source.status, source.files?.[0]?.records.length]),
         [
-          [realRoot, "ok", 1],
-          [NodePath.join(realRoot, "profiles", "broken"), "failed", 0],
+          [root, "ok", 1],
+          [broken, "failed", undefined],
         ],
       );
       // No Hermes on the machine is one missing source, like any other provider.
-      const none = yield* scanHermesUsage([{ HOME: yield* Effect.promise(makeRoot) }], SINCE);
+      const none = yield* scanHermesUsage([{ HOME: yield* Effect.promise(makeRoot) }], SINCE, []);
       assert.deepStrictEqual(
         none.map((source) => [source.status, source.files]),
         [["ok", null]],

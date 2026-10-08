@@ -16,6 +16,11 @@ const USAGE_TABLE = "session_model_usage";
 const DATABASE_NAME = "state.db";
 /** `sessions.model_config` key Hermes sets on a session bound to a Codex app-server thread. */
 const CODEX_THREAD_KEY = "codex_thread_id";
+/**
+ * The providers Hermes can hand to that runtime (`openai_runtime: codex_app_server`),
+ * `custom` being a named provider Codex also knows.
+ */
+const CODEX_RUNTIME_PROVIDERS: ReadonlySet<string> = new Set(["openai", "openai-codex", "custom"]);
 
 function tokens(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
@@ -85,11 +90,15 @@ function parseHermesUsageRow(row: Record<string, unknown>): UsageRecord | null {
 }
 
 /**
- * Sessions whose turns ran on Hermes's Codex app-server runtime. Codex wrote
- * those turns to its own history, which the Codex scan already counts.
+ * Sessions bound to a Codex app-server thread whose history the Codex scan
+ * read. Codex wrote those turns there, and that scan already counts them.
  */
-function codexRuntimeSessions(database: NodeSqlite.DatabaseSync): ReadonlySet<string> {
+function codexRuntimeSessions(
+  database: NodeSqlite.DatabaseSync,
+  codexThreads: ReadonlySet<string>,
+): ReadonlySet<string> {
   const sessions = new Set<string>();
+  if (codexThreads.size === 0) return sessions;
   const columns = new Set(
     database
       .prepare("PRAGMA table_info(sessions)")
@@ -106,7 +115,7 @@ function codexRuntimeSessions(database: NodeSqlite.DatabaseSync): ReadonlySet<st
       if (
         typeof config === "object" &&
         config !== null &&
-        text((config as Record<string, unknown>)[CODEX_THREAD_KEY]) !== ""
+        codexThreads.has(text((config as Record<string, unknown>)[CODEX_THREAD_KEY]))
       ) {
         sessions.add(text(row.id));
       }
@@ -119,14 +128,19 @@ function codexRuntimeSessions(database: NodeSqlite.DatabaseSync): ReadonlySet<st
 
 /** One profile's usage. A database that could not be read in full reports nothing. */
 export interface HermesProfileUsage {
-  /** The profile's home, which identifies it as a usage source. */
+  /** The directory that holds the profile's database, which identifies it as a usage source. */
   readonly home: string;
   readonly path: string;
   readonly records: readonly UsageRecord[];
-  readonly failed: boolean;
+  /** "missing" is a Hermes root with no database at all. */
+  readonly status: "ok" | "failed" | "missing";
 }
 
-async function readDatabase(path: string, sinceMs: number): Promise<UsageRecord[]> {
+async function readDatabase(
+  path: string,
+  sinceMs: number,
+  codexThreads: ReadonlySet<string>,
+): Promise<UsageRecord[]> {
   const records: UsageRecord[] = [];
   const database = new NodeSqlite.DatabaseSync(path, { readOnly: true });
   try {
@@ -138,7 +152,7 @@ async function readDatabase(path: string, sinceMs: number): Promise<UsageRecord[
       .get(USAGE_TABLE);
     // A database from before Hermes recorded per-model usage has nothing to report.
     if (hasUsage === undefined) return records;
-    const onCodex = codexRuntimeSessions(database);
+    const onCodex = codexRuntimeSessions(database, codexThreads);
     const statement = database.prepare(
       `SELECT session_id, model, billing_provider, task, input_tokens, output_tokens,
               cache_read_tokens, cache_write_tokens, reasoning_tokens, estimated_cost_usd,
@@ -148,8 +162,14 @@ async function readDatabase(path: string, sinceMs: number): Promise<UsageRecord[
     );
     let count = 0;
     for (const row of statement.iterate(sinceMs / 1_000)) {
-      // Hermes's own background calls for such a session never went through Codex.
-      const viaCodex = text(row.task) === "" && onCodex.has(text(row.session_id));
+      // A session keeps its thread when it switches to a model Hermes calls
+      // itself, and Hermes's own background calls carry a task: neither went
+      // through Codex. One provider used both ways in a session has a single
+      // total, which is left to Codex.
+      const viaCodex =
+        text(row.task) === "" &&
+        CODEX_RUNTIME_PROVIDERS.has(text(row.billing_provider)) &&
+        onCodex.has(text(row.session_id));
       const record = viaCodex ? null : parseHermesUsageRow(row);
       if (record !== null && record.timestampMs >= sinceMs) records.push(record);
       // The driver is synchronous; let the server answer other work during a long history.
@@ -162,49 +182,67 @@ async function readDatabase(path: string, sinceMs: number): Promise<UsageRecord[
 }
 
 /**
- * Reads every profile under a Hermes root (`state.db` and
+ * Reads every profile under each Hermes root (`state.db` and
  * `profiles/<name>/state.db`) without modifying any of them. This includes
  * Hermes sessions started outside T3 Code.
  *
  * Each profile is its own source, read in full or not at all. Hermes rewrites a
  * row as its session goes on, so half a history mixed with an older complete
  * copy from another server on this machine would count the same usage twice.
+ *
+ * `codexThreads` are the Codex sessions the Codex scan read (see
+ * `codexRuntimeSessions`).
  */
 export async function readHermesUsage(
-  root: string,
+  roots: ReadonlyArray<string>,
   sinceMs: number,
+  codexThreads: ReadonlySet<string> = new Set(),
 ): Promise<ReadonlyArray<HermesProfileUsage>> {
-  const homes = [root];
-  const profiles = NodePath.join(root, "profiles");
   const usage: HermesProfileUsage[] = [];
-  try {
-    // Do not follow symlinks: a profile is a real directory under the root.
-    for (const entry of await NodeFSP.readdir(profiles, { withFileTypes: true })) {
-      if (entry.isDirectory()) homes.push(NodePath.join(profiles, entry.name));
-    }
-  } catch (cause) {
-    if (errorCode(cause) !== "ENOENT") {
-      usage.push({ home: profiles, path: profiles, records: [], failed: true });
-    }
-  }
-
+  const unreadable = (home: string) =>
+    usage.push({ home, path: home, records: [], status: "failed" });
+  // A database reached twice, through a link or a second root, is one history.
   const read = new Set<string>();
-  for (const home of homes.toSorted()) {
-    const path = NodePath.join(home, DATABASE_NAME);
+  for (const root of roots) {
+    const homes = [root];
+    const profiles = NodePath.join(root, "profiles");
+    let found = false;
     try {
-      // A database reached twice, through a link, is one history.
-      const real = await NodeFSP.realpath(path);
-      if (read.has(real)) continue;
-      read.add(real);
+      // Do not follow symlinks: a profile is a real directory under the root.
+      for (const entry of await NodeFSP.readdir(profiles, { withFileTypes: true })) {
+        if (entry.isDirectory()) homes.push(NodePath.join(profiles, entry.name));
+      }
     } catch (cause) {
-      if (errorCode(cause) !== "ENOENT") usage.push({ home, path, records: [], failed: true });
-      continue;
+      if (errorCode(cause) !== "ENOENT") {
+        unreadable(profiles);
+        found = true;
+      }
     }
-    try {
-      usage.push({ home, path, records: await readDatabase(path, sinceMs), failed: false });
-    } catch {
-      usage.push({ home, path, records: [], failed: true });
+
+    for (const home of homes.toSorted()) {
+      let path: string;
+      try {
+        path = await NodeFSP.realpath(NodePath.join(home, DATABASE_NAME));
+      } catch (cause) {
+        if (errorCode(cause) !== "ENOENT") {
+          unreadable(home);
+          found = true;
+        }
+        continue;
+      }
+      found = true;
+      if (read.has(path)) continue;
+      read.add(path);
+      // Where the database really is names the source, so every server that reaches it agrees.
+      const source = NodePath.dirname(path);
+      try {
+        const records = await readDatabase(path, sinceMs, codexThreads);
+        usage.push({ home: source, path, records, status: "ok" });
+      } catch {
+        usage.push({ home: source, path, records: [], status: "failed" });
+      }
     }
+    if (!found) usage.push({ home: root, path: root, records: [], status: "missing" });
   }
   return usage;
 }
@@ -230,43 +268,41 @@ export const hermesUsageRoots = Effect.fn("hermesUsageRoots")(function* (
  * Every Hermes profile those environments can reach, as the usage service's
  * scanned sources. A profile is "ok" or "failed", never partial (see
  * `readHermesUsage`), and a root with no database is one missing source.
+ *
+ * `scanned` is what the service has read so far. Its Codex sessions decide
+ * which turns of Hermes's Codex runtime are already counted.
  */
 export const scanHermesUsage = Effect.fn("scanHermesUsage")(function* (
   environments: ReadonlyArray<NodeJS.ProcessEnv>,
   sinceMs: number,
+  scanned: ReadonlyArray<{
+    readonly provider: string;
+    readonly files: ReadonlyArray<{ readonly records: readonly UsageRecord[] }> | null;
+  }>,
 ) {
-  const sources: Array<{
-    readonly provider: "hermes";
-    readonly dir: string;
-    readonly files: ReadonlyArray<{
-      readonly path: string;
-      readonly records: readonly UsageRecord[];
-    }> | null;
-    readonly status: "ok" | "failed";
-    readonly message?: string;
-  }> = [];
-  for (const root of yield* hermesUsageRoots(environments)) {
-    const profiles = yield* Effect.promise(() => readHermesUsage(root, sinceMs));
-    if (profiles.length === 0)
-      sources.push({ provider: "hermes", dir: root, files: null, status: "ok" });
-    for (const profile of profiles) {
-      sources.push(
-        profile.failed
-          ? {
-              provider: "hermes",
-              dir: profile.home,
-              files: [],
-              status: "failed",
-              message: "This Hermes profile's history could not be read.",
-            }
-          : {
-              provider: "hermes",
-              dir: profile.home,
-              files: [{ path: profile.path, records: profile.records }],
-              status: "ok",
-            },
-      );
+  const codexThreads = new Set<string>();
+  for (const source of scanned) {
+    if (source.provider !== "codex") continue;
+    for (const file of source.files ?? []) {
+      for (const record of file.records) {
+        if (record.sessionId.length > 0) codexThreads.add(record.sessionId);
+      }
     }
   }
-  return sources;
+  const roots = yield* hermesUsageRoots(environments);
+  const profiles = yield* Effect.promise(() => readHermesUsage(roots, sinceMs, codexThreads));
+  return profiles.map((profile) => ({
+    provider: "hermes" as const,
+    dir: profile.home,
+    files:
+      profile.status === "missing"
+        ? null
+        : profile.status === "failed"
+          ? []
+          : [{ path: profile.path, records: profile.records }],
+    status: profile.status === "failed" ? ("failed" as const) : ("ok" as const),
+    ...(profile.status === "failed"
+      ? { message: "This Hermes profile's history could not be read." }
+      : {}),
+  }));
 });

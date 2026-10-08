@@ -636,6 +636,7 @@ export const make = Effect.gen(function* () {
           ),
       ],
       windowStartMs,
+      scanned,
     ).pipe(
       Effect.provideService(Path.Path, path),
       Effect.provideService(FileSystem.FileSystem, fileSystem),
