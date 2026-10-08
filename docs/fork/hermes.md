@@ -121,14 +121,16 @@ Mapping to v2 (`apps/server/src/orchestration-v2/ProviderAdapter.ts`):
   starts, and one owner-only file per attached session with that thread's endpoint, credential,
   and instructions. The file is rewritten at every turn start, because the credential can rotate.
   Compression gives a conversation a new key in the middle of a turn, so the plugin looks a call
-  up by its session id and by its task id (the key the turn started under), and the adapter keeps
-  every key a session has had attached until it closes. One gateway still serves every thread.
+  up by its session id and by its task id (the key the turn started under), remembers from every
+  tool call which newer id belongs to which task, and the adapter keeps every key a session has
+  had attached until it closes. One gateway still serves every thread.
 - The plugin calls T3's MCP endpoint itself with the standard library (a source install of Hermes
   has no MCP SDK). It connects straight to the endpoint the adapter wrote, follows no redirect and
   uses no proxy, and opens and ends one MCP session per call. It returns an image as a `MEDIA:`
   path the way Hermes's own MCP client does. When the turn is interrupted it stops waiting, breaks
   the request in flight, and sends nothing further. A Hermes subagent's calls act as the thread
-  that spawned it, found through its session id or its subagent id. The adapter reports these calls as `mcp__t3-code__<name>`, the name clients
+  that spawned it, found through its session id or its subagent id, including a subagent of a
+  subagent and one started after its parent was compressed. The adapter reports these calls as `mcp__t3-code__<name>`, the name clients
   already know.
 - The session file also carries T3's orchestration instructions, with a preface on Hermes's tool
   names. The plugin adds them to a session's first turn through Hermes's `pre_llm_call` hook.
@@ -285,6 +287,7 @@ To move the baseline to a new Hermes release:
    `DESKTOP_BACKEND_CONTRACT`.
 2. Update mappings and fixtures only for changes that affect them.
 3. Run the focused tests and both live tests. The `t3-code` plugin depends on Hermes's plugin
-   API (`register_tool` handlers receiving `session_id`, the `pre_llm_call`, `subagent_start`, and
-   `subagent_stop` hooks, and `tools.interrupt.is_interrupted`).
+   API (`register_tool` handlers receiving `session_id` and `task_id`, the `pre_llm_call`,
+   `pre_tool_call`, `subagent_start`, and `subagent_stop` hooks, and
+   `tools.interrupt.is_interrupted`).
 4. Update `hermes` in `downstream/fork.json`. Raising the minimum contract blocks automatic release.
