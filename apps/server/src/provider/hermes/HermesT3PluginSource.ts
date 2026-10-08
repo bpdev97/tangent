@@ -64,7 +64,8 @@ UNATTACHED = "This Hermes session is not attached to a Tangent thread, so Tangen
 INTERRUPTED = "The turn was stopped before Tangent answered."
 
 _lock = threading.Lock()
-# A Hermes subagent has its own session; its calls belong to the thread that spawned it.
+# Other ids a call can arrive under, each pointing at the session it belongs to: a Hermes
+# subagent's session and task id point at the session that spawned it.
 _parents = {}
 # Sessions already given Tangent's instructions by this process.
 _briefed = set()
@@ -87,7 +88,8 @@ def _send(call, method, endpoint, authorization, payload=None, mcp_session=None,
 
     http.client connects directly: it follows no redirect and uses no proxy, so
     the credential never goes anywhere else. The connection is shared through
-    call so a stopped turn can close it under a blocked read.
+    call so a stopped turn can close it under a blocked read. The request is
+    written under the call's lock, so once _stop returns nothing more is sent.
     """
     target = urllib.parse.urlsplit(endpoint)
     connect = http.client.HTTPSConnection if target.scheme == "https" else http.client.HTTPConnection
@@ -103,19 +105,24 @@ def _send(call, method, endpoint, authorization, payload=None, mcp_session=None,
     if payload is not None:
         headers["Content-Type"] = "application/json"
         body = json.dumps(payload).encode("utf-8")
-    with _lock:
+    with call["lock"]:
         if call["stopped"].is_set():
             raise _Stopped()
         call["connection"] = connection
     try:
-        connection.request(method, (target.path or "/") + ("?" + target.query if target.query else ""), body=body, headers=headers)
+        # Opening can block and has no socket to shut down yet, so stop is checked again after it.
+        connection.connect()
+        with call["lock"]:
+            if call["stopped"].is_set():
+                raise _Stopped()
+            connection.request(method, (target.path or "/") + ("?" + target.query if target.query else ""), body=body, headers=headers)
         response = connection.getresponse()
         text = response.read().decode("utf-8")
         if not 200 <= response.status < 300:
             raise _Refused(response.status)
         return response.getheader("Mcp-Session-Id"), (response.getheader("Content-Type") or "").split(";")[0].strip().lower(), text
     finally:
-        with _lock:
+        with call["lock"]:
             call["connection"] = None
         connection.close()
 
@@ -161,7 +168,7 @@ def _call_tool(call, endpoint, authorization, name, arguments):
     finally:
         if mcp_session:
             try:
-                _send({"stopped": threading.Event(), "connection": None}, "DELETE", endpoint, authorization, None, mcp_session, CLOSE_TIMEOUT_SECONDS)
+                _send(_new_call(), "DELETE", endpoint, authorization, None, mcp_session, CLOSE_TIMEOUT_SECONDS)
             except Exception:
                 pass
 
@@ -175,17 +182,21 @@ def _turn_stopped():
         return False
 
 
+def _new_call():
+    return {"stopped": threading.Event(), "connection": None, "lock": threading.Lock()}
+
+
 def _stop(call):
     """Refuse further requests and break the one in flight, which ends the worker."""
-    with _lock:
+    with call["lock"]:
         call["stopped"].set()
         connection = call["connection"]
-    try:
-        if connection is not None and connection.sock is not None:
-            # close() alone does not wake a thread blocked in recv().
-            connection.sock.shutdown(socket.SHUT_RDWR)
-    except OSError:
-        pass
+        try:
+            if connection is not None and connection.sock is not None:
+                # close() alone does not wake a thread blocked in recv().
+                connection.sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
 
 
 def _call_until_stopped(endpoint, authorization, name, arguments):
@@ -194,7 +205,7 @@ def _call_until_stopped(endpoint, authorization, name, arguments):
     Hermes marks the handler's own thread as interrupted, so that thread polls.
     Returns (frame, stopped).
     """
-    call = {"stopped": threading.Event(), "connection": None}
+    call = _new_call()
 
     def run():
         try:
@@ -271,22 +282,27 @@ def _attached(bridge, session_key):
     return binding
 
 
-def _binding(bridge, session_key):
-    """This session's binding, or the binding of the session whose subagent it is."""
+def _binding(bridge, *keys):
+    """The binding for a call, or for the session whose subagent made it.
+
+    Hermes gives a compressed conversation a new session id mid-turn, but the
+    turn's task id stays the id it started under, so a call is looked up by both.
+    """
     seen = set()
-    while session_key and session_key not in seen:
-        seen.add(session_key)
-        binding = _attached(bridge, session_key)
-        if binding is not None:
-            return binding
-        with _lock:
-            session_key = _parents.get(session_key)
+    for key in keys:
+        while key and key not in seen:
+            seen.add(key)
+            binding = _attached(bridge, key)
+            if binding is not None:
+                return binding
+            with _lock:
+                key = _parents.get(key)
     return None
 
 
 def _handler(bridge, name):
     def handle(params, **kwargs):
-        binding = _binding(bridge, str(kwargs.get("session_id") or kwargs.get("task_id") or ""))
+        binding = _binding(bridge, str(kwargs.get("session_id") or ""), str(kwargs.get("task_id") or ""))
         if binding is None:
             return json.dumps({"error": UNATTACHED})
         try:
@@ -301,18 +317,23 @@ def _handler(bridge, name):
 
 
 def _subagent_started(bridge):
-    def on_start(parent_session_id=None, child_session_id=None, **kwargs):
-        if parent_session_id and child_session_id:
-            with _lock:
-                _parents[str(child_session_id)] = str(parent_session_id)
+    def on_start(parent_session_id=None, child_session_id=None, child_subagent_id=None, **kwargs):
+        if not parent_session_id:
+            return
+        with _lock:
+            # A subagent's turns run under its subagent id as their task id.
+            for key in (child_session_id, child_subagent_id):
+                if key:
+                    _parents[str(key)] = str(parent_session_id)
 
     return on_start
 
 
-def _subagent_stopped(child_session_id=None, **kwargs):
-    if child_session_id:
-        with _lock:
-            _parents.pop(str(child_session_id), None)
+def _subagent_stopped(child_session_id=None, child_subagent_id=None, **kwargs):
+    with _lock:
+        for key in (child_session_id, child_subagent_id):
+            if key:
+                _parents.pop(str(key), None)
 
 
 def _brief(bridge):
