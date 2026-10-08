@@ -12,6 +12,8 @@ import { HostProcessEnvironment } from "@t3tools/shared/hostProcess";
 import { causeErrorTag } from "@t3tools/shared/observability";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { HttpClient } from "effect/http";
 import { ChildProcessSpawner } from "effect/process";
@@ -50,6 +52,7 @@ import {
   readHermesInfoOrNull,
 } from "./HermesMaintenance.ts";
 import { buildInitialHermesProviderSnapshot, checkHermesProviderStatus } from "./HermesProvider.ts";
+import { hermesProfileHome, installHermesT3Plugin, makeHermesT3Bridge } from "./HermesT3Tools.ts";
 import { makeHermesTextGeneration } from "./HermesTextGeneration.ts";
 
 const decodeHermesSettings = Schema.decodeSync(HermesSettings);
@@ -58,8 +61,10 @@ const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
 export type HermesDriverEnv =
   | BackgroundPolicy.BackgroundPolicy
   | ChildProcessSpawner.ChildProcessSpawner
+  | FileSystem.FileSystem
   | HttpClient.HttpClient
   | IdAllocatorV2
+  | Path.Path
   | ServerConfig
   | ServerSettingsService;
 
@@ -107,10 +112,31 @@ export const HermesDriver: ProviderDriver<HermesSettings, HermesDriverEnv> = {
         continuationGroupKey: continuationIdentity.continuationKey,
       });
 
+      const serverConfig = yield* ServerConfig;
+      const path = yield* Path.Path;
+      const profileHome = yield* hermesProfileHome(processEnv, effectiveConfig.profile);
+      if (effectiveConfig.enabled) {
+        yield* installHermesT3Plugin(processEnv, effectiveConfig.profile);
+      }
+      const t3Bridge = yield* makeHermesT3Bridge(
+        path.join(serverConfig.stateDir, "hermes-t3-code", instanceId),
+        profileHome === undefined ? undefined : path.join(profileHome, "config.yaml"),
+      ).pipe(
+        Effect.mapError(
+          (cause) =>
+            new ProviderDriverError({
+              driver: HERMES_DRIVER_KIND,
+              instanceId,
+              detail: "Failed to prepare the Hermes t3-code tool bridge.",
+              cause,
+            }),
+        ),
+      );
       const runtime = yield* makeHermesGatewayRuntime({
         binaryPath: effectiveConfig.binaryPath,
         profile: effectiveConfig.profile,
         environment: processEnv,
+        t3Bridge,
       });
       const utility = yield* makeHermesGatewayUtility(runtime);
       const orchestrationAdapter = makeHermesAdapterV2({
@@ -118,7 +144,8 @@ export const HermesDriver: ProviderDriver<HermesSettings, HermesDriverEnv> = {
         runtime,
         homeDirectory: processEnv.HOME ?? processEnv.USERPROFILE,
         idAllocator: yield* IdAllocatorV2,
-        serverConfig: yield* ServerConfig,
+        serverConfig,
+        t3Bridge,
         // Shared with the continuation worker by ProviderOrchestrationAdapterInfrastructure.
         continuationRequests: yield* ProviderContinuationRequests,
       });
@@ -151,7 +178,15 @@ export const HermesDriver: ProviderDriver<HermesSettings, HermesDriverEnv> = {
         haveSettingsChanged: haveProviderSnapshotSettingsChanged,
         initialSnapshot: (settings) =>
           buildInitialHermesProviderSnapshot(settings.provider).pipe(Effect.map(stampIdentity)),
-        checkProvider: checkHermesProviderStatus(effectiveConfig, processEnv, utility).pipe(
+        checkProvider: checkHermesProviderStatus(effectiveConfig, processEnv, utility, {
+          loaded: t3Bridge.pluginLoaded,
+          restartIfEnabledSince: Effect.gen(function* () {
+            if (!(yield* t3Bridge.profileConfigChanged)) return false;
+            if ((yield* runtime.activeTurns) > 0) return false;
+            yield* runtime.stop;
+            return true;
+          }),
+        }).pipe(
           Effect.map(stampIdentity),
           Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         ),

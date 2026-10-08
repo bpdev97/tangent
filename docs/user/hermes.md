@@ -39,8 +39,23 @@ When background work Hermes started finishes, such as a background command or de
 Hermes replies on its own. The reply appears in the chat after a "Hermes background work finished"
 notice. A message you send while Hermes is still writing that reply waits until it finishes.
 
-Hermes does not get Tangent's built-in agent tools, so it cannot publish
-[visual replies](./html-renders.md) in a chat.
+## Tangent's tools
+
+Hermes can use Tangent's built-in agent tools, such as [visual replies](./html-renders.md),
+delegating to another provider, and linking pull requests. They are off until you enable Tangent's
+plugin for the profile, once:
+
+```bash
+hermes --profile default plugins enable t3-code
+```
+
+Then refresh the provider in Settings. Until you do, the provider's status shows this command for
+its profile. To turn the tools off again, run the same command with `disable`.
+
+Hermes lists these tools as `t3code__…` and finds them through its tool search. They only work in
+chats Tangent started; Hermes sessions you start elsewhere are told they are unavailable. Browser
+tools also need a Tangent desktop app connected to the same environment, as they do for every
+provider.
 
 ## Runtime modes
 
