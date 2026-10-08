@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { HttpClient, HttpClientResponse } from "effect/http";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import * as HttpClientError from "effect/http/HttpClientError";
 import * as TestClock from "effect/testing/TestClock";
 
@@ -42,6 +42,30 @@ interface Reply {
   readonly body: unknown;
 }
 
+/** The saved link and sign-in `t3 connect` leaves behind. */
+const layerLinked = (options: { readonly linked?: boolean; readonly signedIn?: boolean }) =>
+  Layer.mergeAll(
+    Layer.mock(ServerSecretStore.ServerSecretStore)({
+      get: (name) =>
+        Effect.succeed(
+          name === RELAY_URL_SECRET && options.linked !== false
+            ? Option.some(new TextEncoder().encode("https://relay.example.test/"))
+            : Option.none(),
+        ),
+    }),
+    Layer.mock(CliTokenManager.CloudCliTokenManager)({
+      getExisting: Effect.succeed(
+        options.signedIn === false
+          ? Option.none()
+          : Option.some({
+              accessToken: "cli-access-token",
+              refreshToken: "cli-refresh-token",
+              expiresAtEpochMs: Number.MAX_SAFE_INTEGER,
+            }),
+      ),
+    }),
+  );
+
 const resolve = (options: {
   readonly linked?: boolean;
   readonly signedIn?: boolean;
@@ -64,25 +88,7 @@ const resolve = (options: {
       ? { status: 200, body: descriptor(THIS_ENVIRONMENT) }
       : options.tunnel;
   const layer = Layer.mergeAll(
-    Layer.mock(ServerSecretStore.ServerSecretStore)({
-      get: (name) =>
-        Effect.succeed(
-          name === RELAY_URL_SECRET && options.linked !== false
-            ? Option.some(new TextEncoder().encode("https://relay.example.test/"))
-            : Option.none(),
-        ),
-    }),
-    Layer.mock(CliTokenManager.CloudCliTokenManager)({
-      getExisting: Effect.succeed(
-        options.signedIn === false
-          ? Option.none()
-          : Option.some({
-              accessToken: "cli-access-token",
-              refreshToken: "cli-refresh-token",
-              expiresAtEpochMs: Number.MAX_SAFE_INTEGER,
-            }),
-      ),
-    }),
+    layerLinked(options),
     Layer.succeed(
       HttpClient.HttpClient,
       HttpClient.make((request) => {
@@ -221,11 +227,37 @@ it.effect("makes no link for an address that answers as something else", () =>
   }),
 );
 
-it.effect("does not treat a redirect as this server answering", () =>
+it.effect("asks the tunnel not to follow redirects, and refuses one", () =>
   Effect.gen(function* () {
-    const { error } = yield* resolve({ tunnel: { status: 302, body: "" } }).pipe(Effect.flip);
+    // Real fetch would follow the redirect to whatever answers there; only the
+    // option on the request keeps the answer the tunnel address's own.
+    const redirectModes: Array<RequestInit["redirect"]> = [];
+    const fetch: typeof globalThis.fetch = Object.assign(
+      (input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
+        if (String(input) === RELAY_LIST_URL) {
+          return Promise.resolve(
+            Response.json({
+              environments: [
+                tunnelRecord(THIS_ENVIRONMENT, "prod-0123456789abcdef.tunnel.example.test"),
+              ],
+            }),
+          );
+        }
+        redirectModes.push(init?.redirect);
+        return Promise.resolve(
+          new Response(null, { status: 302, headers: { location: "http://127.0.0.1:3773/" } }),
+        );
+      },
+      { preconnect: () => {} },
+    );
+    const error = yield* resolveConnectPairingBase({ environmentId: THIS_ENVIRONMENT }).pipe(
+      Effect.provide(Layer.mergeAll(layerLinked({}), FetchHttpClient.layer)),
+      Effect.provideService(FetchHttpClient.Fetch, fetch),
+      Effect.flip,
+    );
 
     assert.strictEqual(error._tag, "ConnectPairingWrongServerError");
+    assert.deepEqual(redirectModes, ["manual"]);
   }),
 );
 
