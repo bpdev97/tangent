@@ -128,6 +128,8 @@ function AppSettingsSection() {
         target="SettingsOpenSourceLicenses"
       />
       <SettingsRow icon="doc.text" label="Legal" fullScreenTarget="SettingsLegal" />
+      {/* Tangent(FORK-NOTES-001) */}
+      <SettingsRow icon="tag" label="Release notes" target="SettingsReleaseNotes" />
       {updateCheckAvailable ? (
         <Pressable
           accessibilityLabel={`Version ${versionLabel}`}

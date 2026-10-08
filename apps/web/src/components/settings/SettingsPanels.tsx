@@ -35,6 +35,7 @@ import { APP_VERSION, HOSTED_APP_CHANNEL, HOSTED_APP_CHANNEL_LABEL } from "../..
 import { AboutVersionTitle } from "./AboutVersionTitle";
 import { CliCommandSettingsRow } from "./CliCommandSettingsRow";
 import { MobileAppSettingsRow } from "./MobileAppSettingsRow";
+import { ReleaseNotesSettingsRow } from "./ReleaseNotesSettingsRow";
 import {
   canCheckForUpdate,
   getDesktopUpdateButtonTooltip,
@@ -2341,6 +2342,8 @@ export function AboutSettingsPanel() {
             }
           />
         )}
+        {/* Tangent(FORK-NOTES-001) */}
+        <ReleaseNotesSettingsRow />
       </SettingsSection>
 
       <SettingsSection id="legal" title="Legal">

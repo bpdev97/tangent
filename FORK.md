@@ -48,6 +48,7 @@ rebased onto upstream rather than merging it, so each feature stays one commit.
 | `FORK-MCP-001`     | Agents on every provider reach the same HTTP MCP servers, such as executor, configured once per environment                                   | [MCP servers](docs/fork/mcp-servers.md)                         | Active |
 | `FORK-HOST-001`    | Each client can choose which server new threads start on for a project that lives on several                                                  | [default host](docs/fork/project-default-host.md)               | Active |
 | `FORK-STATUS-001`  | An asleep or unreachable laptop is normal; the header shows a small mark beside the brand instead of "Reconnecting" text                      | [quiet connection status](docs/fork/quiet-connection-status.md) | Active |
+| `FORK-NOTES-001`   | Tangent's release notes live on GitHub; each client offers them once after an update and keeps them in Settings                               | [release notes](docs/fork/release-notes.md)                     | Active |
 
 ## Removed, do not reintroduce
 
