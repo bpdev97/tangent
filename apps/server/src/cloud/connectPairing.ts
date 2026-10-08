@@ -8,7 +8,7 @@
  * address, so it is read from the relay's list of linked environments with
  * the credential `t3 connect` saved.
  */
-import type { EnvironmentId } from "@t3tools/contracts";
+import { type EnvironmentId, ExecutionEnvironmentDescriptor } from "@t3tools/contracts";
 import {
   type RelayClientEnvironmentRecord,
   RelayListEnvironmentsResponse,
@@ -28,6 +28,8 @@ import { RELAY_URL_SECRET } from "./config.ts";
 import { filterRelayResponse, relayRequestError } from "./relayResponse.ts";
 
 const RELAY_LIST_TIMEOUT = Duration.seconds(15);
+const TUNNEL_PROBE_TIMEOUT = Duration.seconds(5);
+const WELL_KNOWN_ENVIRONMENT_PATH = "/.well-known/t3/environment";
 
 export class ConnectPairingNotLinkedError extends Schema.TaggedError<ConnectPairingNotLinkedError>()(
   "ConnectPairingNotLinkedError",
@@ -61,7 +63,7 @@ export class ConnectPairingWrongServerError extends Schema.TaggedError<ConnectPa
   { baseUrl: Schema.String },
 ) {
   override get message(): string {
-    return `${this.baseUrl} does not answer as this server, so no pairing link was made. Check \`t3 connect status\` and restart the server.`;
+    return `${this.baseUrl} answers, but not as this server, so no pairing link was made. Check \`t3 connect status\`.`;
   }
 }
 
@@ -86,86 +88,95 @@ function connectPairingBaseUrl(
   }
 }
 
-export type ConnectPairingProbe =
-  | {
-      readonly _tag: "descriptor";
-      readonly descriptor: { readonly environmentId: EnvironmentId };
-    }
-  | { readonly _tag: "unreachable" }
-  | { readonly _tag: "not-a-t3-server" };
+/**
+ * Who answers at the tunnel address: an environment, nobody yet, or something
+ * else. Cloudflare answers 530 while a tunnel has no connected origin and
+ * other 5xx codes while one comes up, so a server error means "not there
+ * yet", never "someone else".
+ */
+const probeTunnel = Effect.fn("pair.probeConnectTunnel")(function* (baseUrl: string) {
+  const httpClient = yield* HttpClient.HttpClient;
+  const response = yield* HttpClientRequest.get(
+    new URL(WELL_KNOWN_ENVIRONMENT_PATH, baseUrl).toString(),
+  ).pipe(httpClient.execute, Effect.timeout(TUNNEL_PROBE_TIMEOUT), Effect.option);
+  if (Option.isNone(response) || response.value.status >= 500) {
+    return { _tag: "unreachable" } as const;
+  }
+  return yield* HttpClientResponse.filterStatusOk(response.value).pipe(
+    Effect.flatMap(HttpClientResponse.schemaBodyJson(ExecutionEnvironmentDescriptor)),
+    Effect.map(({ environmentId }) => ({ _tag: "environment", environmentId }) as const),
+    Effect.orElseSucceed(() => ({ _tag: "other" }) as const),
+  );
+});
 
 /**
- * The base URL for a pairing link that goes through T3 Connect, checked
- * against the running server so a link is never made for an address that
- * reaches something else.
+ * The base URL for a pairing link that goes through T3 Connect. An address
+ * that answers as anything but this server is refused. One that does not
+ * answer yet is used with a warning: the relay is the only source for it, and
+ * a tunnel can take a moment to come up.
  */
-export const resolveConnectPairingBase = Effect.fn("pair.resolveConnectPairingBase")(function* <
-  R,
->(input: {
-  readonly environmentId: EnvironmentId;
-  readonly probe: (baseUrl: string) => Effect.Effect<ConnectPairingProbe, never, R>;
-}) {
-  const secrets = yield* ServerSecretStore.ServerSecretStore;
-  const tokens = yield* CliTokenManager.CloudCliTokenManager;
-  const httpClient = yield* HttpClient.HttpClient;
+export const resolveConnectPairingBase = Effect.fn("pair.resolveConnectPairingBase")(
+  function* (input: { readonly environmentId: EnvironmentId }) {
+    const secrets = yield* ServerSecretStore.ServerSecretStore;
+    const tokens = yield* CliTokenManager.CloudCliTokenManager;
+    const httpClient = yield* HttpClient.HttpClient;
 
-  // The link belongs to the relay it was made against, which is the URL the
-  // server saved, not whatever this build would use for a new link.
-  const relayUrl = yield* secrets.get(RELAY_URL_SECRET).pipe(
-    Effect.map(Option.map((bytes) => new TextDecoder().decode(bytes).replace(/\/+$/, ""))),
-    Effect.mapError(
-      () =>
-        new ConnectPairingRelayError({
-          description: "The saved T3 Connect link could not be read.",
-        }),
-    ),
-  );
-  // A sign-in that exists but cannot be refreshed is not "not linked":
-  // sending the owner back through `t3 connect` would not say why.
-  const token = yield* tokens.getExisting.pipe(
-    Effect.mapError(
-      () =>
-        new ConnectPairingRelayError({
-          description:
-            "The saved T3 Connect sign-in could not be refreshed. Run `t3 connect login`, then retry.",
-        }),
-    ),
-  );
-  if (Option.isNone(relayUrl) || relayUrl.value === "" || Option.isNone(token)) {
-    return yield* new ConnectPairingNotLinkedError();
-  }
+    // The link belongs to the relay it was made against, which is the URL the
+    // server saved, not whatever this build would use for a new link.
+    const relayUrl = yield* secrets.get(RELAY_URL_SECRET).pipe(
+      Effect.map(Option.map((bytes) => new TextDecoder().decode(bytes).replace(/\/+$/, ""))),
+      Effect.mapError(
+        () =>
+          new ConnectPairingRelayError({
+            description: "The saved T3 Connect link could not be read.",
+          }),
+      ),
+    );
+    // A sign-in that exists but cannot be refreshed is not "not linked":
+    // sending the owner back through `t3 connect` would not say why.
+    const token = yield* tokens.getExisting.pipe(
+      Effect.mapError(
+        () =>
+          new ConnectPairingRelayError({
+            description:
+              "The saved T3 Connect sign-in could not be refreshed. Run `t3 connect login`, then retry.",
+          }),
+      ),
+    );
+    if (Option.isNone(relayUrl) || relayUrl.value === "" || Option.isNone(token)) {
+      return yield* new ConnectPairingNotLinkedError();
+    }
 
-  const { environments } = yield* HttpClientRequest.get(`${relayUrl.value}/v1/environments`).pipe(
-    HttpClientRequest.bearerToken(token.value.accessToken),
-    httpClient.execute,
-    Effect.flatMap(filterRelayResponse),
-    Effect.flatMap(HttpClientResponse.schemaBodyJson(RelayListEnvironmentsResponse)),
-    Effect.timeout(RELAY_LIST_TIMEOUT),
-    Effect.mapError(
-      (cause) => new ConnectPairingRelayError({ description: relayRequestError(cause).message }),
-    ),
-  );
-  const baseUrl = connectPairingBaseUrl(environments, input.environmentId);
-  if (baseUrl === null) {
-    return yield* new ConnectPairingNoAddressError();
-  }
+    const { environments } = yield* HttpClientRequest.get(`${relayUrl.value}/v1/environments`).pipe(
+      HttpClientRequest.bearerToken(token.value.accessToken),
+      httpClient.execute,
+      Effect.flatMap(filterRelayResponse),
+      Effect.flatMap(HttpClientResponse.schemaBodyJson(RelayListEnvironmentsResponse)),
+      Effect.timeout(RELAY_LIST_TIMEOUT),
+      Effect.mapError(
+        (cause) => new ConnectPairingRelayError({ description: relayRequestError(cause).message }),
+      ),
+    );
+    const baseUrl = connectPairingBaseUrl(environments, input.environmentId);
+    if (baseUrl === null) {
+      return yield* new ConnectPairingNoAddressError();
+    }
 
-  const probed = yield* input.probe(baseUrl);
-  if (probed._tag === "not-a-t3-server") {
-    return yield* new ConnectPairingWrongServerError({ baseUrl });
-  }
-  if (probed._tag === "descriptor") {
-    return probed.descriptor.environmentId === input.environmentId
-      ? { baseUrl, notes: [] }
-      : yield* new ConnectPairingWrongServerError({ baseUrl });
-  }
-  return {
-    baseUrl,
-    notes: [
-      "The T3 Connect address has not answered yet. A new link can take a moment; if pairing fails, check `t3 connect status` and that the server is running.",
-    ],
-  };
-});
+    const answer = yield* probeTunnel(baseUrl);
+    if (answer._tag === "unreachable") {
+      return {
+        baseUrl,
+        notes: [
+          "The T3 Connect address has not answered yet. A tunnel can take a moment to come up; if pairing fails, check `t3 connect status` and that the server is running.",
+        ],
+      };
+    }
+    if (answer._tag === "other" || answer.environmentId !== input.environmentId) {
+      return yield* new ConnectPairingWrongServerError({ baseUrl });
+    }
+    return { baseUrl, notes: [] };
+  },
+);
 
 /** What `resolveConnectPairingBase` needs beyond an HTTP client. */
 export const layerConnectPairing = (config: ServerConfig.ServerConfig["Service"]) =>

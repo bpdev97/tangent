@@ -519,7 +519,6 @@ export const pairCommand = Command.make("pair", {
         // Tangent(FORK-CONNECT-001)
         const resolved = yield* resolveConnectPairingBase({
           environmentId: target.descriptor.environmentId,
-          probe: awaitEnvironmentDescriptor,
         }).pipe(
           Effect.provide(layerConnectPairing(yield* makePairServerConfig({ target, logLevel }))),
         );

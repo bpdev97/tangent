@@ -101,6 +101,7 @@ import {
 import { getOrCreateEnvironmentKeyPairFromSecretStore } from "./environmentKeys.ts";
 import * as ManagedEndpointRuntime from "./ManagedEndpointRuntime.ts";
 import { relayUrlConfig } from "./publicConfig.ts";
+import { RelayCredentialMinting } from "./relayCredentialMinting.ts";
 import {
   filterRelayResponse,
   relayRequestError,
@@ -576,6 +577,8 @@ const make = Effect.gen(function* () {
   const awarenessRelay = yield* AgentAwarenessRelay.AgentAwarenessRelay;
   const crypto = yield* Crypto.Crypto;
   const config = yield* ServerConfig.ServerConfig;
+  // Tangent(FORK-CONNECT-001)
+  const relayCredentialMinting = yield* RelayCredentialMinting;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
@@ -1552,6 +1555,10 @@ const make = Effect.gen(function* () {
 
   const mintCredential = Effect.fn("environment.cloud.mintCredential")(
     function* (request: RelayCloudMintCredentialRequest) {
+      // Tangent(FORK-CONNECT-001): no Tangent client signs in to T3 Connect.
+      if (!relayCredentialMinting) {
+        return yield* new CloudLinkProofRejectedError({ request: "mint" });
+      }
       const cloudMintPublicKey = yield* secrets
         .get(CLOUD_MINT_PUBLIC_KEY)
         .pipe(
