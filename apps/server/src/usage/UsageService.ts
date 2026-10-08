@@ -53,7 +53,7 @@ import { resolveAntigravityInstanceDirectories } from "../provider/antigravityAu
 import { mergeProviderInstanceEnvironment } from "../provider/ProviderInstanceEnvironment.ts";
 import { readOpenCodeUsage } from "./opencodeUsageReader.ts";
 // Tangent(FORK-HERMES-001)
-import { scanHermesUsage } from "./hermesUsageReader.ts";
+import { hermesCodexInstances, scanHermesUsage } from "./hermesUsageReader.ts";
 import { readAntigravityUsage } from "./antigravityUsageReader.ts";
 import { readCursorAccountUsage } from "./cursorUsageReader.ts";
 import { resolveModelAliases, UsageAggregator } from "./usageAggregation.ts";
@@ -325,6 +325,8 @@ export const make = Effect.gen(function* () {
           instanceId: ProviderInstanceId.make(driver),
         });
       }
+      // Tangent(FORK-HERMES-001): Hermes's Codex runtime writes to the Codex home it runs with.
+      if (driver === "codex") instances.push(...hermesCodexInstances(settings.providerInstances));
       for (const instance of instances) {
         const environment = mergeProviderInstanceEnvironment(instance.environment, hostEnvironment);
         const provider = driver === "claudeAgent" ? "claude" : driver;
@@ -636,7 +638,6 @@ export const make = Effect.gen(function* () {
           ),
       ],
       windowStartMs,
-      scanned,
     ).pipe(
       Effect.provideService(Path.Path, path),
       Effect.provideService(FileSystem.FileSystem, fileSystem),
