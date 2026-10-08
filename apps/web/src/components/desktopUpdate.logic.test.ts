@@ -65,18 +65,25 @@ describe("desktop update button state", () => {
 });
 
 describe("desktop update UI helpers", () => {
+  // Tangent(FORK-NOTES-001): release URLs use Tangent's repository and tag prefix.
+  it("builds the stable release URL for a downloaded version", () => {
+    expect(getDesktopUpdateReleaseUrl("0.0.30", "bpdev97/tangent")).toBe(
+      "https://github.com/bpdev97/tangent/releases/tag/personal-v0.0.30",
+    );
+  });
+
   it.each([
     "owner/repo/extra",
     "owner#notes/repo",
     "owner/repo#notes",
     "owner?tab=notes/repo",
     "owner/repo?tab=notes",
-  ])("falls back to upstream for an invalid configured repository: %s", (repository) => {
+  ])("falls back to Tangent for an invalid configured repository: %s", (repository) => {
     expect(getDesktopUpdateReleaseHistoryUrl(repository)).toBe(
-      "https://github.com/pingdotgg/t3code/releases",
+      "https://github.com/bpdev97/tangent/releases",
     );
     expect(getDesktopUpdateReleaseUrl("1.2.3", repository)).toBe(
-      "https://github.com/pingdotgg/t3code/releases/tag/v1.2.3",
+      "https://github.com/bpdev97/tangent/releases/tag/personal-v1.2.3",
     );
   });
 });
