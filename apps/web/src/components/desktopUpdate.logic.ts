@@ -1,8 +1,10 @@
 import type { DesktopUpdateActionResult, DesktopUpdateState } from "@t3tools/contracts";
+import { RELEASE_NOTES_HISTORY_URL, RELEASE_NOTES_TAG_PREFIX } from "@t3tools/shared/releaseNotes";
 
 export type DesktopUpdateButtonAction = "download" | "install" | "none";
 
-const DESKTOP_RELEASE_HISTORY_URL = "https://github.com/pingdotgg/t3code/releases";
+// Tangent(FORK-NOTES-001): Tangent's releases and tags, not upstream's.
+const DESKTOP_RELEASE_HISTORY_URL = RELEASE_NOTES_HISTORY_URL;
 const DESKTOP_RELEASE_TAG_URL = `${DESKTOP_RELEASE_HISTORY_URL}/tag`;
 
 /**
@@ -18,7 +20,7 @@ export function getDesktopUpdateDownloadedVersion(state: DesktopUpdateState): st
 export function getDesktopUpdateReleaseUrl(version: string | null): string | null {
   const normalizedVersion = version?.trim();
   if (!normalizedVersion) return null;
-  return `${DESKTOP_RELEASE_TAG_URL}/v${encodeURIComponent(normalizedVersion)}`;
+  return `${DESKTOP_RELEASE_TAG_URL}/${RELEASE_NOTES_TAG_PREFIX}${encodeURIComponent(normalizedVersion)}`;
 }
 
 export function getDesktopUpdateReleaseHistoryUrl(): string {

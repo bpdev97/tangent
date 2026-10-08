@@ -151,6 +151,10 @@
       "types": "./src/projectDefaultHost.ts",
       "import": "./src/projectDefaultHost.ts"
     },
+    "./releaseNotes": {
+      "types": "./src/releaseNotes.ts",
+      "import": "./src/releaseNotes.ts"
+    },
     "./t3ProjectFile": {
       "types": "./src/t3ProjectFile.ts",
       "import": "./src/t3ProjectFile.ts"

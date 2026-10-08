@@ -27,6 +27,7 @@ import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPr
 import { isSidebarUtilityPage, useNavigateToMainApp } from "./mainAppLocation";
 import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
+import { SidebarReleaseNotesPill } from "./SidebarReleaseNotesPill";
 import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 
@@ -241,6 +242,8 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
     <SidebarFooter>
       <SidebarThreadUndoNotice />
       <SidebarProviderUpdatePill />
+      {/* Tangent(FORK-NOTES-001) */}
+      <SidebarReleaseNotesPill />
       <SidebarUpdateArchitectureWarning />
       <SidebarUtilityMenu />
     </SidebarFooter>

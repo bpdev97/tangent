@@ -111,6 +111,7 @@ import { SettingsProjectOverviewRouteScreen } from "./features/settings/Settings
 import { UsageLimitAccountScreen } from "./features/usage/UsageLimitsPooled";
 import { UsageRouteScreen } from "./features/usage/UsageRouteScreen";
 import { SettingsAboutRouteScreen } from "./features/settings/SettingsAboutRouteScreen";
+import { SettingsReleaseNotesRouteScreen } from "./features/release-notes/SettingsReleaseNotesRouteScreen";
 import { SettingsNotificationsRouteScreen } from "./features/settings/SettingsNotificationsRouteScreen";
 import { SettingsRouteScreen } from "./features/settings/SettingsRouteScreen";
 import { SettingsThreadsRouteScreen } from "./features/settings/SettingsThreadsRouteScreen";
@@ -382,6 +383,12 @@ const SettingsContentStack = createV5SheetStackNavigator({
       options: {
         title: "Open source licenses",
       },
+    }),
+    // Tangent(FORK-NOTES-001)
+    SettingsReleaseNotes: createNativeStackScreen({
+      screen: SettingsReleaseNotesRouteScreen,
+      linking: "release-notes",
+      options: { title: "Release notes" },
     }),
     SettingsOpenSourceLicense: createNativeStackScreen({
       screen: SettingsOpenSourceLicenseRouteScreen,
