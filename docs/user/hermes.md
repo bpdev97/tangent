@@ -53,8 +53,10 @@ Hermes does not get Tangent's built-in agent tools, so it cannot publish
 
 When a newer Hermes release is available, the provider's version details show an update action on
 any client. Tangent runs the update command Hermes reports for its install method, then checks the
-new version. Stop or finish running Hermes turns first; the update restarts Hermes for every
-profile, and open chats reconnect on their next message. Tangent never updates Hermes on its own.
+new version. A source install pinned to a release tag moves to the newest release and stays on
+releases; one that follows a branch keeps following it. Stop or finish running Hermes turns first;
+the update restarts Hermes for every profile, and open chats reconnect on their next message.
+Tangent never updates Hermes on its own.
 
 If Hermes is too old for Tangent, the provider shows as incompatible with the same update action.
 Installs that Hermes cannot update in place (for example Nix) have no update action; update them

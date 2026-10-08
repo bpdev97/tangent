@@ -45,7 +45,7 @@ import { HermesGatewayFleet, makeHermesGatewayRuntime } from "./HermesGatewayRun
 import { HERMES_DRIVER_KIND } from "./HermesGatewaySupport.ts";
 import { makeHermesGatewayUtility } from "./HermesGatewayUtility.ts";
 import {
-  fetchHermesLatestVersion,
+  fetchHermesLatestRelease,
   hermesMaintenanceCapabilities,
   readHermesInfoOrNull,
 } from "./HermesMaintenance.ts";
@@ -128,7 +128,7 @@ export const HermesDriver: ProviderDriver<HermesSettings, HermesDriverEnv> = {
           const info = effectiveConfig.enabled
             ? yield* readHermesInfoOrNull(utility.readInfo)
             : null;
-          const latestVersion = yield* fetchHermesLatestVersion.pipe(
+          const latest = yield* fetchHermesLatestRelease.pipe(
             Effect.provideService(HttpClient.HttpClient, httpClient),
             Effect.provideService(ProviderVersionCache, versionCache),
           );
@@ -136,7 +136,8 @@ export const HermesDriver: ProviderDriver<HermesSettings, HermesDriverEnv> = {
             info,
             binaryPath: effectiveConfig.binaryPath,
             environment: processEnv,
-            latestVersion,
+            latestVersion: latest.version,
+            latestTag: latest.tag,
             fleet,
           });
         }),
