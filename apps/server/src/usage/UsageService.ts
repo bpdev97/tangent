@@ -52,6 +52,8 @@ import { resolveCodexHomeLayout } from "../provider/Drivers/CodexHomeLayout.ts";
 import { resolveAntigravityInstanceDirectories } from "../provider/antigravityAuthSupport.ts";
 import { mergeProviderInstanceEnvironment } from "../provider/ProviderInstanceEnvironment.ts";
 import { readOpenCodeUsage } from "./opencodeUsageReader.ts";
+// Tangent(FORK-HERMES-001)
+import { hermesUsageRoots, readHermesUsage } from "./hermesUsageReader.ts";
 import { readAntigravityUsage } from "./antigravityUsageReader.ts";
 import { readCursorAccountUsage } from "./cursorUsageReader.ts";
 import { resolveModelAliases, UsageAggregator } from "./usageAggregation.ts";
@@ -621,6 +623,27 @@ export const make = Effect.gen(function* () {
         files: result.missing && !result.error ? null : result.files,
         status: result.error ? "partial" : "ok",
         ...(result.error ? { message: "Some OpenCode history could not be read." } : {}),
+      });
+    }
+    // Tangent(FORK-HERMES-001): each Hermes root holds every profile's own usage database.
+    const hermesRoots = yield* hermesUsageRoots([
+      hostEnvironment,
+      ...Object.values(settings.providerInstances)
+        .filter((instance) => instance.driver === "hermes")
+        .map((instance) => mergeProviderInstanceEnvironment(instance.environment, hostEnvironment)),
+    ]).pipe(
+      Effect.provideService(Path.Path, path),
+      Effect.provideService(FileSystem.FileSystem, fileSystem),
+    );
+    for (const dir of hermesRoots) {
+      const result = yield* Effect.promise(() => readHermesUsage(dir, windowStartMs));
+      scanned.push({
+        provider: "hermes",
+        dir,
+        volumeId: yield* Effect.promise(() => readDirectoryVolumeId(dir)),
+        files: result.missing ? null : result.files,
+        status: result.error ? "partial" : "ok",
+        ...(result.error ? { message: "Some Hermes history could not be read." } : {}),
       });
     }
     const antigravityRoots = yield* envRoots("ANTIGRAVITY_DATA_DIR", [

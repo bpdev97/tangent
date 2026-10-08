@@ -181,6 +181,19 @@ Updates:
 - A gateway below the minimum contract is reported as incompatible, with the update action, instead
   of failing mid-turn.
 
+Usage:
+
+- The Usage page includes Hermes, read from Hermes's own records like every other provider:
+  each profile's `state.db` under the Hermes root (`session_model_usage`), opened read-only on
+  every scan. That covers sessions started outside Tangent, subagents, and Hermes's background
+  calls such as title generation.
+- Hermes keeps a running total per session and model, not one row per request. A row is dated by
+  its last activity and counts in full on that day, so a conversation resumed over several days
+  lands on its last one.
+- Cost is what Hermes recorded (the billed amount when it knows it, else its own estimate). A
+  subscription call records none, and T3's price table estimates it as it does for Codex and
+  Claude. Names with a vendor prefix are OpenRouter ids and are priced under `openrouter/`.
+
 Compatibility baseline: Hermes Agent 0.21.5 (`v2026.9.24`), gateway contract 8. The minimum is
 contract 7 (0.21.4); contract 8 only added the desktop Connectors API. Because Tangent can update Hermes itself, it does not keep workarounds for older gateways.
 The values live in `downstream/fork.json` under `hermes`.
@@ -207,13 +220,21 @@ Registration follows Pi's (`PiDriver`, `PiAdapterV2`). Each hook carries a
 - `apps/web/src/components/settings/ProviderModelsSection.tsx`: the custom-model placeholder.
 - `apps/mobile/src/components/ProviderIcon.tsx` and `apps/mobile/src/lib/modelOptions.ts`: the icon
   and provider label.
+- `packages/contracts/src/usage.ts`: `hermes` in `UsageProviderKind`. Adding a provider is additive
+  in that contract, so it needs no version bump.
+- `apps/server/src/usage/UsageService.ts`: scans each Hermes root beside OpenCode's.
+- `apps/web/src/components/usage/usageProviders.ts` and
+  `apps/mobile/src/features/usage/usageProviders.ts`: the Usage label and color.
+  `apps/web/src/components/usage/UsageProviderChart.test.ts` lists every provider, so it lists
+  Hermes too.
 
 Fork-owned files: `apps/server/src/provider/hermes/` (gateway client, supervised runtime and fleet,
 support, media links, tool projection, background-turn buffer, utility calls, provider snapshot,
 driver, text generation, updater, the `t3-code` plugin source and its bridge),
 `apps/web/src/components/HermesIcon.tsx`,
 `apps/server/src/orchestration-v2/Adapters/HermesAdapterV2.ts` with its testkit and fixtures,
-`apps/server/src/orchestration-v2/HermesOrchestratorV2.live.test.ts`, and `docs/user/hermes.md`.
+`apps/server/src/orchestration-v2/HermesOrchestratorV2.live.test.ts`,
+`apps/server/src/usage/hermesUsageReader.ts`, and `docs/user/hermes.md`.
 
 ## Resolving conflicts
 
@@ -274,6 +295,9 @@ against the Behavior section, then delete this adapter and move to upstream's.
   server. Each call must arrive with its own thread's credential, and stopping a run must not wait
   for a tool that has not answered. It needs no real model: any OpenAI-compatible endpoint that
   follows the prompt will do.
+- `hermesUsageReader.test.ts` reads usage from databases built with Hermes's table layout: token
+  mapping, which cost wins, the window, every profile under a root, and a database from before
+  Hermes recorded usage.
 - `HermesT3Tools.test.ts` fails when a toolkit directory or tool under `apps/server/src/mcp/toolkits`
   is missing from the list Hermes is given. Add it to `HERMES_T3_TOOLKITS`.
 - Approval prompts need a profile with `approvals.mode: manual`; the default `smart` mode lets
