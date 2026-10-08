@@ -65,7 +65,7 @@ on the machine, so Hermes sessions you run outside Tangent count too. Hermes kee
 total per conversation and model, so a conversation you return to over several days is counted on
 the last day you used it. Calls covered by a subscription are shown at their estimated API price,
 as they are for Codex and Claude. Turns Hermes ran through its Codex runtime appear under Codex,
-not Hermes.
+not Hermes, when Tangent also reads that Codex history.
 
 ## Runtime modes
 
