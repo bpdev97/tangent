@@ -77,7 +77,7 @@ describe("showDesktopUpdateDownloadedToast", () => {
 
     await vi.waitFor(() => {
       expect(openExternal).toHaveBeenCalledWith(
-        "https://github.com/JustYannicc/t3code/releases/tag/v0.0.30",
+        "https://github.com/JustYannicc/t3code/releases/tag/personal-v0.0.30",
       );
     });
   });
@@ -90,7 +90,7 @@ describe("showDesktopUpdateDownloadedToast", () => {
     link?.props.onClick?.();
     await vi.waitFor(() => {
       expect(openExternal).toHaveBeenCalledWith(
-        "https://github.com/pingdotgg/t3code/releases/tag/v0.0.30",
+        "https://github.com/bpdev97/tangent/releases/tag/personal-v0.0.30",
       );
     });
     expect(testState.addToast).toHaveBeenCalledTimes(1);
@@ -108,7 +108,7 @@ describe("showDesktopUpdateDownloadedToast", () => {
 
     await vi.waitFor(() => {
       expect(openExternal).toHaveBeenCalledWith(
-        "https://github.com/pingdotgg/t3code/releases/tag/v0.0.30",
+        "https://github.com/bpdev97/tangent/releases/tag/personal-v0.0.30",
       );
     });
   });
