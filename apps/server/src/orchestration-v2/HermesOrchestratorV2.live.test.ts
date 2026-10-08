@@ -444,6 +444,7 @@ describe.runIf(process.env.T3_HERMES_LIVE_T3_TOOLS === "1")("Hermes t3-code tool
         const registerTools = Effect.gen(function* () {
           const server = yield* McpServer.McpServer;
           const register = (name: string, content: McpSchema.CallToolResult["content"]) =>
+            // oxlint-disable-next-line t3code/no-raw-mcp-registration -- A stand-in server for this test; it never serves T3's tools.
             server.addTool({
               tool: new McpSchema.Tool({
                 name,
@@ -467,6 +468,7 @@ describe.runIf(process.env.T3_HERMES_LIVE_T3_TOOLS === "1")("Hermes t3-code tool
             },
           ]);
           // Waits on another thread in the real server; here it never answers.
+          // oxlint-disable-next-line t3code/no-raw-mcp-registration -- A stand-in server for this test; it never serves T3's tools.
           yield* server.addTool({
             tool: new McpSchema.Tool({
               name: "t3_thread_wait",
