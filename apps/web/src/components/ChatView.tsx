@@ -180,6 +180,8 @@ import { AsyncResult } from "effect/reactivity";
 import { isElectron } from "../env";
 import { readLocalApi } from "../localApi";
 import { useDiffPanelStore } from "../diffPanelStore";
+import { openWalkthrough } from "../walkthroughStore"; // Tangent(FORK-WALK-001)
+import type { WalkthroughReference } from "@t3tools/shared/walkthrough"; // Tangent(FORK-WALK-001)
 import { useActiveThreadRef } from "../hooks/useActiveThreadRef";
 import {
   type ComposerSubmissionIntent,
@@ -1547,6 +1549,13 @@ function chatActionErrorMessage(error: unknown): string {
 const ENVIRONMENT_UNAVAILABLE_SEND_TOAST_TRAIL_SIZE = 3;
 const EMPTY_HELD_TURN_DIFF_SUMMARIES: readonly never[] = [];
 const noopHeldTurnDiff = (_turnId: RunId, _filePath?: string) => {};
+// Tangent(FORK-WALK-001)
+const noopHeldWalkthrough = (
+  _source: { readonly id: string; readonly runId: string | null },
+  _walkthrough: WalkthroughReference,
+  _sectionIndex: number,
+  _reveal?: { readonly path: string; readonly line?: number },
+) => {};
 const noopHeldRevert = (_targetTurnCount: number) => {};
 const noopHeldAttachment = (_attachment: ChatFileAttachment) => {};
 
@@ -10832,6 +10841,23 @@ export default function ChatView(props: ChatViewProps) {
     },
     [activeThreadRef, diffOpen, isServerThread, onDiffPanelOpen],
   );
+  // Tangent(FORK-WALK-001): a walkthrough section opens the diff panel on the
+  // diff it was written against, with the panel reading that section.
+  const onOpenWalkthrough = useCallback(
+    (
+      source: { readonly id: string; readonly runId: string | null },
+      walkthrough: WalkthroughReference,
+      sectionIndex: number,
+      reveal?: { readonly path: string; readonly line?: number },
+    ) => {
+      if (!isServerThread || !activeThreadRef) return;
+      explicitDiffOpenRef.current = diffOpen ? null : activeThreadRef;
+      openWalkthrough(activeThreadRef, source, walkthrough, sectionIndex, reveal);
+      useRightPanelStore.getState().open(activeThreadRef, "diff");
+      onDiffPanelOpen?.();
+    },
+    [activeThreadRef, diffOpen, isServerThread, onDiffPanelOpen],
+  );
   // The revert handler is read from a ref at call-time so the callback
   // reference is fully stable and never busts TimelineRowCtx identity.
   const onRevertToTurnCountRef = useRef(onRevertToTurnCount);
@@ -11333,6 +11359,9 @@ export default function ChatView(props: ChatViewProps) {
                 routeThreadKey={displayedTimelineKey}
                 displayThreadKey={displayedTimelineKey}
                 onOpenTurnDiff={paintOnlyDisplayedTimeline ? noopHeldTurnDiff : onOpenTurnDiff}
+                onOpenWalkthrough={
+                  paintOnlyDisplayedTimeline ? noopHeldWalkthrough : onOpenWalkthrough
+                } // Tangent(FORK-WALK-001)
                 onOpenThread={onOpenRelatedThread}
                 parentThreadLink={paintOnlyDisplayedTimeline ? null : parentThreadLink}
                 onForkFromRun={paintOnlyDisplayedTimeline ? async () => {} : onForkFromRun}

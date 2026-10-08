@@ -119,6 +119,10 @@
       "types": "./src/htmlRender.ts",
       "import": "./src/htmlRender.ts"
     },
+    "./walkthrough": {
+      "types": "./src/walkthrough.ts",
+      "import": "./src/walkthrough.ts"
+    },
     "./favicon": {
       "types": "./src/favicon.ts",
       "import": "./src/favicon.ts"

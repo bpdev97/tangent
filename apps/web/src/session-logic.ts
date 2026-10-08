@@ -25,7 +25,12 @@ import {
 import type { HtmlRenderReference } from "@t3tools/shared/htmlRender";
 import { turnItemDetailRevision } from "@t3tools/client-runtime/work-log/item-detail";
 import type { McpAppReference } from "@t3tools/shared/mcpApp";
-import { htmlRenderFromToolItem, mcpAppFromToolItem } from "@t3tools/shared/toolOutput";
+import {
+  htmlRenderFromToolItem,
+  mcpAppFromToolItem,
+  walkthroughFromToolItem, // Tangent(FORK-WALK-001)
+} from "@t3tools/shared/toolOutput";
+import type { WalkthroughReference } from "@t3tools/shared/walkthrough"; // Tangent(FORK-WALK-001)
 import {
   contextCompactionLabel,
   workEntryIndicatesToolFailure,
@@ -143,6 +148,14 @@ export type TimelineEntry = (
       readonly createdAt: string;
       readonly runId: RunId | null;
       readonly htmlRender: HtmlRenderReference;
+    }
+  | {
+      /** Tangent(FORK-WALK-001): a walkthrough a completed `walkthrough_publish` call published. */
+      readonly id: string;
+      readonly kind: "walkthrough";
+      readonly createdAt: string;
+      readonly runId: RunId | null;
+      readonly walkthrough: WalkthroughReference;
     }
   | {
       /** An MCP App a completed tool call captured, hosted where the call happened. */
@@ -725,6 +738,23 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
         createdAt,
         runId: item.runId,
         htmlRender,
+        ...attemptMetadata,
+      });
+      continue;
+    }
+
+    // Tangent(FORK-WALK-001)
+    const walkthrough =
+      item.type === "dynamic_tool" && item.status === "completed"
+        ? walkthroughFromToolItem(item)
+        : undefined;
+    if (walkthrough !== undefined) {
+      entries.push({
+        id: item.id,
+        kind: "walkthrough",
+        createdAt,
+        runId: item.runId,
+        walkthrough,
         ...attemptMetadata,
       });
       continue;

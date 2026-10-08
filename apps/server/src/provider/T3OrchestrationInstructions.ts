@@ -34,6 +34,10 @@ ACP fallback: some ACP agents accept the injected MCP server but fail to expose 
 ### Showing visuals
 
 When a chart, table, diagram, image collage, or mockup would say more than prose, build a self-contained HTML page, check it with \`html_preview\`, then publish it with \`html_render\` before your final reply. The reader sees the page above that reply, so don't announce or restate it; add only what it doesn't say.
+
+### Walking through a change (Tangent(FORK-WALK-001))
+
+When the user asks for a walkthrough, guide, tour, or review of a diff, call \`walkthrough_publish\` and follow the review policy in that tool's description: it is this environment's, and the user tunes it there. \`walkthrough_visual\` stores a diagram to attach to it. After publishing, still reply with a short text summary of the sections and any blockers: some clients show only text.
 `;
 
 export const T3_CODE_BROWSER_TOOL_INSTRUCTIONS = `

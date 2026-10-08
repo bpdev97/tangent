@@ -18,6 +18,7 @@ import {
   HERMES_T3_TOOLKITS,
   hermesProfileHome,
   hermesT3ToolManifest,
+  makeHermesT3ToolManifest,
   installHermesT3Plugin,
   makeHermesT3Bridge,
 } from "./HermesT3Tools.ts";
@@ -51,6 +52,18 @@ describe("Hermes t3-code tools", () => {
         assert.isNotEmpty(tool.description, tool.name);
         assert.propertyVal(tool.inputSchema, "type", "object", tool.name);
       }
+    }),
+  );
+
+  // Tangent(FORK-WALK-001)
+  it.effect("carries the environment's walkthrough policy in the publish tool", () =>
+    Effect.gen(function* () {
+      const description = (tools: ReadonlyArray<{ name: string; description: string }>) =>
+        tools.find((tool) => tool.name === "walkthrough_publish")?.description ?? "";
+      const tuned = yield* makeHermesT3ToolManifest({ walkthroughPolicy: "Only blockers." });
+      assert.include(description(tuned), "Only blockers.");
+      assert.notInclude(description(yield* hermesT3ToolManifest), "Only blockers.");
+      assert.isNotEmpty(description(yield* hermesT3ToolManifest));
     }),
   );
 

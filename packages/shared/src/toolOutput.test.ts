@@ -120,7 +120,8 @@ describe("compactDynamicToolOutput", () => {
   });
 
   it("bounds parsing and envelope scanning while preserving an outer failure marker", () => {
-    const oversizedJson = JSON.stringify({ threadId: "hidden", body: "😄".repeat(5_000) });
+    // Tangent(FORK-WALK-001): past the raised parse budget.
+    const oversizedJson = JSON.stringify({ threadId: "hidden", body: "😄".repeat(60_000) });
     for (const content of [
       "x".repeat(1_000_000),
       oversizedJson,
@@ -144,6 +145,29 @@ describe("compactDynamicToolOutput", () => {
       },
     });
     expect(compactDynamicToolOutput(compact)).toEqual(compact);
+  });
+});
+
+// Tangent(FORK-WALK-001)
+describe("compactDynamicToolOutput walkthroughs", () => {
+  it("keeps a walkthrough larger than the metadata budget, through a text envelope", () => {
+    const flags = Array.from({ length: 3 }, () => ({ severity: "note", text: "y".repeat(300) }));
+    const sections = Array.from({ length: 12 }, (_, index) => ({
+      title: `Section ${index}`,
+      summary: "x".repeat(1_100),
+      files: [{ path: `src/file-${index}.ts`, flags }],
+    }));
+    const walkthrough = { id: "walkthrough-1", title: "Big", scope: { kind: "branch" }, sections };
+    const text = JSON.stringify({ walkthrough, message: "Shown above your reply." });
+    expect(text.length).toBeGreaterThan(16_384);
+    const envelope = { content: [{ type: "text", text }] };
+    // A serialized envelope is charged again on the way in, on top of its text block.
+    for (const value of [envelope, JSON.stringify(envelope)]) {
+      const output = compactDynamicToolOutput(value);
+      expect(output?.walkthrough?.sections).toHaveLength(12);
+      expect(output?.walkthrough?.sections[11]?.summary).toBe("x".repeat(1_100));
+      expect(output?.walkthrough?.sections[11]?.files[0]?.flags).toHaveLength(3);
+    }
   });
 });
 
