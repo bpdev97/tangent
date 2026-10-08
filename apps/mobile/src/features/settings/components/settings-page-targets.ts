@@ -22,6 +22,8 @@ export const SETTINGS_PAGE_TARGETS = [
   "SettingsClientStorage",
   "SettingsDiagnostics",
   "SettingsOpenSourceLicenses",
+  // Tangent(FORK-NOTES-001)
+  "SettingsReleaseNotes",
   "SettingsUsage",
 ] as const;
 

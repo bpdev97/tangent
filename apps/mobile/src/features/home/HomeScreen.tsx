@@ -55,6 +55,7 @@ import { requestThreadMessageJump } from "../threads/threadMessageJump";
 import { useThreadListSearchMatches } from "../threads/useThreadListSearchMatches";
 import { useThreadListV2 } from "../threads/useThreadListV2";
 import { useThreadJumpShortcuts } from "../keyboard/threadKeyboardShortcuts";
+import { ReleaseNotesListHeader } from "../release-notes/ReleaseNotesListHeader";
 import { usePendingThreadOrder } from "../../state/thread-order";
 import { threadListEnvironmentsAtom } from "../../state/server";
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
@@ -726,8 +727,9 @@ export function HomeScreen(props: HomeScreenProps) {
 
   const listHeader = Platform.OS === "ios" ? undefined : <HomeTopContentSpacer />;
 
+  // Tangent(FORK-NOTES-001): the "Updated" row sits above the first thread.
   const v2ListHeader = (
-    <>
+    <ReleaseNotesListHeader>
       {listHeader}
       {Platform.OS === "ios" && workspace ? (
         <ThreadListFilters
@@ -739,7 +741,7 @@ export function HomeScreen(props: HomeScreenProps) {
           onProjectChange={props.onProjectChange}
         />
       ) : null}
-    </>
+    </ReleaseNotesListHeader>
   );
 
   const v2ListEmpty =
