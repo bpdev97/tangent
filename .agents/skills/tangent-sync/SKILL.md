@@ -156,8 +156,9 @@ It re-checks the decision, then:
   `publish <version>`, which only a person chooses) and the release notes as the
   release body, unless a release for this commit already exists or is running. The workflow creates
   the `personal-v*` tag itself;
-- starts `personal-ios-release.yml` in `auto` mode, which ships an OTA update when an iOS build
-  with this native fingerprint exists and queues a TestFlight build otherwise;
+- starts `personal-ios-release.yml` in `auto` mode with the same version, which ships an OTA
+  update when an iOS build with this native fingerprint exists and queues a TestFlight build
+  otherwise. The version is stamped into the bundle so the app can offer the release notes;
 - disables any upstream workflow a sync brought in, since GitHub enables new workflow files by
   default.
 

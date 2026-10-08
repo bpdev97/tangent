@@ -16,6 +16,10 @@ on:
         description: "Release message"
         required: false
         type: string
+      version:
+        description: "Tangent release this build ships, for example 1.0.0; the app offers its release notes"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -84,6 +88,21 @@ jobs:
 
       - name: Typecheck
         run: vp run typecheck
+
+      # The app's own version is the App Store version and does not change between releases, so
+      # the bundle carries the Tangent release it was built for. EAS uploads the working tree, so
+      # the native build and the OTA update below both pick this up.
+      - name: Stamp release version
+        if: inputs.version != ''
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid release version: $RELEASE_VERSION" >&2
+            exit 1
+          fi
+          printf '{ "version": "%s" }\n' "$RELEASE_VERSION" \
+            > apps/mobile/src/features/release-notes/release-version.json
 
       # auto ships an OTA update when an iOS build with this native fingerprint already exists
       # (production builds use the fingerprint runtime policy) and queues a native build otherwise.

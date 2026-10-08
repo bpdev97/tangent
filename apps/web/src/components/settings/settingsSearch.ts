@@ -530,6 +530,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     scope: "environment",
     searchTerms: ["notifications live activities apns ios tailnet password"],
   },
+  // Tangent(FORK-NOTES-001)
+  {
+    id: "release-notes",
+    title: "Release notes",
+    to: "/settings/general",
+    searchTerms: ["whats new changelog changes update version"],
+  },
   {
     id: "open-source-licenses",
     title: "Open source licenses",
