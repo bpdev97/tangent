@@ -64,12 +64,13 @@ UNATTACHED = "This Hermes session is not attached to a Tangent thread, so Tangen
 INTERRUPTED = "The turn was stopped before Tangent answered."
 
 _lock = threading.Lock()
-# Other ids a call can arrive under, each pointing at the id it belongs to. A subagent's
-# session and task id point at the session that spawned it, and a session id Hermes handed
-# out when it compressed a conversation points at the task id its turn started under.
+# Other ids a call can arrive under, each pointing at the id whose binding it uses. A
+# subagent's session and task id point at the session that started the work, and a session
+# id Hermes handed out when it compressed a conversation points where its task id does.
 _parents = {}
-# Each subagent alias -> every alias registered for that subagent, to forget them together.
-_siblings = {}
+# Each id a subagent goes by -> the set of all its ids, shared between them, so a finished
+# subagent is forgotten whole and nothing else is.
+_subagent_ids = {}
 # Hermes does not always say which ids a finished subagent had, so the map is bounded too.
 MAX_ALIASES = 4096
 # Sessions already given Tangent's instructions by this process.
@@ -323,15 +324,34 @@ def _handler(bridge, name):
     return handle
 
 
-def _alias(key, target):
-    """Point key at target unless it already points somewhere. Caller holds _lock."""
+def _point(key, target):
+    """Calls under key belong wherever target's do, unless key is already known. Caller holds _lock.
+
+    It points at the end of target's chain, so a subagent that outlives the
+    subagent that spawned it still reaches its thread.
+    """
     if not key or not target or key == target or key in _parents:
         return
     if len(_parents) >= MAX_ALIASES:
         for old in list(_parents)[: MAX_ALIASES // 2]:
             _parents.pop(old, None)
-            _siblings.pop(old, None)
+            _subagent_ids.pop(old, None)
+    seen = set()
+    while target in _parents and target not in seen:
+        seen.add(target)
+        target = _parents[target]
     _parents[key] = target
+
+
+def _rename(key, known):
+    """key is a newer id for known, so also one of that subagent's ids. Caller holds _lock."""
+    if not key or not known or key == known:
+        return
+    _point(key, known)
+    ids = _subagent_ids.get(known)
+    if ids is not None:
+        ids.add(key)
+        _subagent_ids[key] = ids
 
 
 def _note_call(task_id="", session_id="", **kwargs):
@@ -341,7 +361,7 @@ def _note_call(task_id="", session_id="", **kwargs):
     after its parent was compressed still leads back to an attached session.
     """
     with _lock:
-        _alias(str(session_id or ""), str(task_id or ""))
+        _rename(str(session_id or ""), str(task_id or ""))
 
 
 def _subagent_started(parent_session_id=None, parent_subagent_id=None, child_session_id=None, child_subagent_id=None, **kwargs):
@@ -349,29 +369,26 @@ def _subagent_started(parent_session_id=None, parent_subagent_id=None, child_ses
         return
     parent = str(parent_session_id)
     # A subagent's turns run under its subagent id as their task id.
-    aliases = [str(key) for key in (child_session_id, child_subagent_id) if key]
+    ids = {str(key) for key in (child_session_id, child_subagent_id) if key}
     with _lock:
         # A subagent that spawns one of its own may have been compressed since it started.
-        _alias(parent, str(parent_subagent_id or ""))
-        for key in aliases:
-            _alias(key, parent)
-            _siblings[key] = aliases
+        _rename(parent, str(parent_subagent_id or ""))
+        for key in ids:
+            _point(key, parent)
+            _subagent_ids[key] = ids
 
 
 def _subagent_stopped(child_session_id=None, child_subagent_id=None, **kwargs):
+    """Forget the finished subagent's own ids. Hermes may name only its session."""
     with _lock:
-        found = set()
+        finished = set()
         for key in (child_session_id, child_subagent_id):
-            if not key:
-                continue
-            key = str(key)
-            found.add(key)
-            # Hermes may name only the session, and by then under an id it rotated to.
-            for known in (key, _parents.get(key)):
-                found.update(_siblings.get(known) or ())
-        for key in found:
+            if key:
+                finished.add(str(key))
+                finished.update(_subagent_ids.get(str(key)) or ())
+        for key in finished:
             _parents.pop(key, None)
-            _siblings.pop(key, None)
+            _subagent_ids.pop(key, None)
 
 
 def _brief(bridge):
