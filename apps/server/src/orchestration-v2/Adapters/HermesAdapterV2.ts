@@ -92,6 +92,7 @@ import {
   shouldAutoApproveHermes,
   text,
 } from "../../provider/hermes/HermesGatewaySupport.ts";
+import type { HermesT3Bridge } from "../../provider/hermes/HermesT3Tools.ts";
 import {
   consumeHermesMediaText,
   renderHermesMediaText,
@@ -248,6 +249,8 @@ export interface HermesAdapterV2Options {
   readonly homeDirectory: string | undefined;
   readonly idAllocator: IdAllocatorV2["Service"];
   readonly serverConfig: ServerConfig["Service"];
+  /** Gives each Hermes session its thread's `t3-code` credential; absent in tests. */
+  readonly t3Bridge?: HermesT3Bridge;
   /** Sink for background-turn continuation requests; defaults to dropping them. */
   readonly continuationRequests?: {
     readonly offer: (request: ProviderContinuationRequest) => Effect.Effect<void>;
@@ -2045,11 +2048,25 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
         );
       }).pipe(Effect.forkIn(scope));
 
+      const attachT3Tools = (state: ThreadState, threadId: ThreadId) => {
+        const sessionKey = state.providerThread.nativeThreadRef?.nativeId;
+        return sessionKey == null
+          ? Effect.void
+          : (options.t3Bridge?.attach(sessionKey, threadId) ?? Effect.void);
+      };
+      const detachT3Tools = (state: ThreadState) => {
+        const sessionKey = state.providerThread.nativeThreadRef?.nativeId;
+        return sessionKey == null
+          ? Effect.void
+          : (options.t3Bridge?.detach(sessionKey) ?? Effect.void);
+      };
+
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
           stopRequested = true;
           const state = threadState;
           if (state !== null) {
+            yield* detachT3Tools(state);
             yield* rpc(
               "session.close",
               { session_id: state.liveSessionId },
@@ -2089,6 +2106,7 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
           const previous = threadState;
           threadState = null;
           yield* dropAllBackgrounds;
+          yield* detachT3Tools(previous);
           yield* rpc("session.close", { session_id: previous.liveSessionId }).pipe(Effect.ignore);
         }
 
@@ -2168,6 +2186,8 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
                 updatedAt: createdAt,
               };
         threadState = { providerThread, liveSessionId, activeTurn: null, subagents: new Map() };
+        // Before any prompt: the plugin resolves a tool call by this session key.
+        yield* attachT3Tools(threadState, threadInput.threadId);
         if (publish) {
           yield* emit({ type: "provider_thread.updated", driver: HERMES_PROVIDER, providerThread });
         }
@@ -2358,6 +2378,8 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
           ...turnInput.providerThread,
           nativeThreadRef: state.providerThread.nativeThreadRef,
         };
+        // The thread's credential can rotate while this session stays open.
+        yield* attachT3Tools(state, turnInput.threadId);
         // A continuation run attaches to a turn Hermes already ran; its message
         // text is a placeholder that never reaches Hermes.
         const continuation = overrideText === undefined && isProviderContinuationTurn(turnInput);

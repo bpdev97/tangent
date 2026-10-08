@@ -39,6 +39,8 @@ import {
   record,
   text,
 } from "./HermesGatewaySupport.ts";
+import { HERMES_T3_BRIDGE_ENV } from "./HermesT3PluginSource.ts";
+import type { HermesT3Bridge } from "./HermesT3Tools.ts";
 
 const READY_PREFIX = "HERMES_BACKEND_READY port=";
 const START_TIMEOUT_MS = 30_000;
@@ -88,6 +90,8 @@ export interface HermesGatewayRuntimeOptions {
   readonly binaryPath: string;
   readonly profile: string;
   readonly environment: NodeJS.ProcessEnv;
+  /** Where the `t3-code` plugin finds its tool list and per-session credentials. */
+  readonly t3Bridge?: Pick<HermesT3Bridge, "directory" | "gatewayStarting">;
   readonly clientOptions?: HermesGatewayClientOptions;
 }
 
@@ -97,9 +101,15 @@ interface GatewayProcess {
   readonly scope: Scope.Closeable;
 }
 
-function gatewayEnvironment(environment: NodeJS.ProcessEnv, token: string): NodeJS.ProcessEnv {
+function gatewayEnvironment(
+  environment: NodeJS.ProcessEnv,
+  token: string,
+  t3BridgeDirectory: string | undefined,
+): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...environment, HERMES_DASHBOARD_SESSION_TOKEN: token };
   delete env.HERMES_DESKTOP;
+  if (t3BridgeDirectory === undefined) delete env[HERMES_T3_BRIDGE_ENV];
+  else env[HERMES_T3_BRIDGE_ENV] = t3BridgeDirectory;
   return env;
 }
 
@@ -142,6 +152,7 @@ export const makeHermesGatewayRuntime = Effect.fn("makeHermesGatewayRuntime")(fu
       if (blockedReason !== null) return yield* gatewayError(blockedReason);
       if (current !== null) return current;
 
+      yield* options.t3Bridge?.gatewayStarting ?? Effect.void;
       const token = NodeCrypto.randomBytes(32).toString("base64url");
       const scope = yield* Scope.fork(parentScope, "sequential");
       const spawnInput = yield* resolveSpawnCommand(
@@ -152,7 +163,7 @@ export const makeHermesGatewayRuntime = Effect.fn("makeHermesGatewayRuntime")(fu
       const handle = yield* spawner
         .spawn(
           ChildProcess.make(spawnInput.command, spawnInput.args, {
-            env: gatewayEnvironment(options.environment, token),
+            env: gatewayEnvironment(options.environment, token, options.t3Bridge?.directory),
             extendEnv: false,
             shell: spawnInput.shell,
           }),

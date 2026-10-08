@@ -8,6 +8,7 @@
  * @module provider/hermes/HermesTools
  */
 import { record, text } from "./HermesGatewaySupport.ts";
+import { HERMES_T3_TOOL_PREFIX } from "./HermesT3PluginSource.ts";
 
 const MAX_TOOL_OUTPUT_CHARS = 20_000;
 
@@ -51,6 +52,17 @@ function firstText(value: unknown): string | undefined {
     if (candidate) return candidate;
   }
   return undefined;
+}
+
+/**
+ * Tangent's own tools reach Hermes through its plugin under a prefix (Hermes
+ * already has a `delegate_task`). Clients know them by the name every other
+ * provider reports.
+ */
+function canonicalToolName(name: string): string {
+  return name.startsWith(HERMES_T3_TOOL_PREFIX)
+    ? `mcp__t3-code__${name.slice(HERMES_T3_TOOL_PREFIX.length)}`
+    : name;
 }
 
 function mcpToolIdentity(
@@ -174,7 +186,7 @@ export function projectHermesTool(
   payload: Readonly<Record<string, unknown>>,
   start?: Readonly<Record<string, unknown>>,
 ): HermesToolProjection {
-  const name = text(payload.name) ?? text(start?.name) ?? "tool";
+  const name = canonicalToolName(text(payload.name) ?? text(start?.name) ?? "tool");
   const args = { ...record(start?.args), ...record(payload.args) };
   const context = text(payload.context) ?? text(start?.context);
   const completed = payload.result !== undefined || payload.result_text !== undefined;

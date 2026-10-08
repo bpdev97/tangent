@@ -39,6 +39,7 @@ import type {
   HermesModelOptions,
 } from "./HermesGatewayUtility.ts";
 import { readHermesInfoOrNull } from "./HermesMaintenance.ts";
+import { HERMES_T3_PLUGIN_NAME } from "./HermesT3PluginSource.ts";
 
 const HERMES_PRESENTATION = {
   displayName: "Hermes",
@@ -146,6 +147,18 @@ const runVersionCommand = (settings: HermesSettings, environment: NodeJS.Process
     );
   });
 
+/** How the status check learns whether Tangent's `t3-code` plugin is on for the profile. */
+export interface HermesT3ToolsStatus {
+  /** Whether the running gateway loaded the plugin. */
+  readonly loaded: Effect.Effect<boolean>;
+  /**
+   * Stop an idle gateway whose profile config changed after it started, so
+   * the next request starts one that sees a newly enabled plugin. `true` when
+   * it stopped one.
+   */
+  readonly restartIfEnabledSince: Effect.Effect<boolean>;
+}
+
 function hermesContractMessage(info: HermesGatewayInfo | null): string | undefined {
   if (info?.contract == null || info.contract >= HERMES_MIN_GATEWAY_CONTRACT) return undefined;
   return `Hermes ${info.version ?? "on this host"} uses gateway contract ${info.contract}; T3 Code needs contract ${HERMES_MIN_GATEWAY_CONTRACT} or newer. Update Hermes.`;
@@ -155,6 +168,7 @@ export const checkHermesProviderStatus = Effect.fn("checkHermesProviderStatus")(
   settings: HermesSettings,
   environment: NodeJS.ProcessEnv,
   utility: HermesGatewayUtility,
+  t3Tools?: HermesT3ToolsStatus,
 ): Effect.fn.Return<ServerProviderDraft, never, ChildProcessSpawner.ChildProcessSpawner> {
   if (!settings.enabled) return yield* buildInitialHermesProviderSnapshot(settings);
   const checkedAt = DateTime.formatIso(yield* DateTime.now);
@@ -263,12 +277,24 @@ export const checkHermesProviderStatus = Effect.fn("checkHermesProviderStatus")(
     Result.isSuccess(commands) && Option.isSome(commands.success)
       ? buildHermesSlashCommandsFromGateway(commands.success.value)
       : [];
+  // Hermes only loads a plugin its profile lists as enabled, and that file is the user's.
+  let t3ToolsOff = t3Tools !== undefined && !(yield* t3Tools.loaded);
+  if (t3Tools !== undefined && t3ToolsOff && (yield* t3Tools.restartIfEnabledSince)) {
+    // Plugins load when the gateway process starts, before it answers anything.
+    yield* utility.getSetupStatus.pipe(Effect.timeoutOption(DISCOVERY_TIMEOUT_MS), Effect.ignore);
+    t3ToolsOff = !(yield* t3Tools.loaded);
+  }
   return snapshot(
     {
       installed: true,
       version,
       status: "ready",
       auth: { status: "authenticated", label: settings.profile },
+      ...(t3ToolsOff
+        ? {
+            message: `Tangent's tools are off for Hermes profile '${settings.profile}'. To turn them on, run \`hermes --profile ${settings.profile} plugins enable ${HERMES_T3_PLUGIN_NAME}\` in a terminal, then refresh.`,
+          }
+        : {}),
     },
     { models: models(settings, discovered), slashCommands },
   );

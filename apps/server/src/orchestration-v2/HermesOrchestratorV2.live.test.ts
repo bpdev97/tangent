@@ -1,6 +1,7 @@
 // Tangent(FORK-HERMES-001): opt-in live test against a real Hermes install.
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import { SourceControlProviderRegistry } from "../sourceControl/SourceControlProviderRegistry.ts";
+import { NodeHttpServer } from "@effect/platform-node";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import {
@@ -15,10 +16,15 @@ import {
   type OrchestrationV2ThreadProjection,
 } from "@t3tools/contracts";
 import * as Console from "effect/Console";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { McpProtocol, McpSchema, McpServer } from "effect/ai";
+import { HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http";
 import * as ResetCreditCoordinator from "../provider/resetCreditCoordinator.ts";
 import { FetchHttpClient } from "effect/http";
+import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
+import { HERMES_T3_TOOL_PREFIX } from "../provider/hermes/HermesT3PluginSource.ts";
 import { describe } from "vite-plus/test";
 
 import * as CheckpointStore from "../checkpointing/CheckpointStore.ts";
@@ -131,23 +137,27 @@ const providerInstanceRegistryLayer = ProviderInstanceRegistryHydration.layer.pi
 
 // The production layer adds the continuation worker; Hermes's background
 // wake turns (async delegation results) need it.
-const liveLayer = Layer.provideMerge(
-  ProviderContinuationService.layer.pipe(
-    Layer.provide(Layer.mergeAll(providerContinuationRequestsLayer, idAllocatorLayer)),
-  ),
-  RuntimeLayer.layer,
-).pipe(
-  Layer.provide(ProviderTurnStartServiceTestkit.layer),
-  Layer.provide(mcpSessionRegistryTestLayer),
-  Layer.provide(SqlitePersistence.layerMemory),
-  Layer.provide(checkpointStoreLayer),
-  Layer.provide(serverConfigLayer),
-  Layer.provide(serverSettingsLayer),
-  Layer.provide(providerInstanceRegistryLayer),
-  Layer.provide(ResetCreditCoordinator.layer),
-  Layer.provide(backgroundPolicyLayer),
-  Layer.provide(PlatformTestLayer),
-);
+const makeLiveLayer = (
+  mcpSessionRegistryLayer: Layer.Layer<McpSessionRegistry.McpSessionRegistry>,
+) =>
+  Layer.provideMerge(
+    ProviderContinuationService.layer.pipe(
+      Layer.provide(Layer.mergeAll(providerContinuationRequestsLayer, idAllocatorLayer)),
+    ),
+    RuntimeLayer.layer,
+  ).pipe(
+    Layer.provide(ProviderTurnStartServiceTestkit.layer),
+    Layer.provide(mcpSessionRegistryLayer),
+    Layer.provide(SqlitePersistence.layerMemory),
+    Layer.provide(checkpointStoreLayer),
+    Layer.provide(serverConfigLayer),
+    Layer.provide(serverSettingsLayer),
+    Layer.provide(providerInstanceRegistryLayer),
+    Layer.provide(ResetCreditCoordinator.layer),
+    Layer.provide(backgroundPolicyLayer),
+    Layer.provide(PlatformTestLayer),
+  );
+const liveLayer = makeLiveLayer(mcpSessionRegistryTestLayer);
 
 const waitForIdle = Effect.fn("HermesOrchestratorV2Live.waitForIdle")(function* (
   threadId: ThreadId,
@@ -365,5 +375,214 @@ describe.runIf(process.env.T3_HERMES_LIVE_GATEWAY === "1")("Hermes live gateway"
         ),
       ),
     120_000,
+  );
+});
+
+/**
+ * Opt-in: two Hermes threads on one gateway each call a `t3-code` tool through
+ * the Tangent plugin, and each call must arrive with its own thread's
+ * credential. T3_HERMES_LIVE_T3_TOOLS=1 HERMES_HOME=/tmp/... with a disposable
+ * home whose config lists `t3-code` under `plugins.enabled`. The driver writes
+ * the plugin into that home. The model only has to follow the prompt.
+ */
+const T3_TOOLS_MARKER = "T3_TOOLS_MARKER_9F3K";
+const ONE_PIXEL_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==";
+const t3ToolsEndpoint = { url: "http://127.0.0.1/mcp" };
+/** The bearer credential of the HTTP request a tool call arrived on. */
+const T3ToolsCaller = Context.Reference<string>("@t3tools/server/test/HermesT3ToolsCaller", {
+  defaultValue: () => "",
+});
+const t3ToolsRegistryLayer = Layer.succeed(
+  McpSessionRegistry.McpSessionRegistry,
+  McpSessionRegistry.McpSessionRegistry.of({
+    issue: ({ threadId, providerInstanceId }) =>
+      Effect.succeed({
+        config: {
+          environmentId: EnvironmentId.make("environment:mcp-test"),
+          threadId,
+          providerSessionId: `mcp-test:${threadId}`,
+          providerInstanceId,
+          endpoint: t3ToolsEndpoint.url,
+          authorizationHeader: `Bearer mcp-test:${threadId}`,
+          browserToolsAvailable: true,
+        },
+      }),
+    resolve: () => Effect.succeed(undefined),
+    touch: () => Effect.void,
+    revokeProviderSession: () => Effect.void,
+    revokeThread: () => Effect.void,
+    revokeAll: Effect.void,
+  }),
+);
+
+describe.runIf(process.env.T3_HERMES_LIVE_T3_TOOLS === "1")("Hermes t3-code tools", () => {
+  it.live(
+    "each thread's tool call reaches Tangent with that thread's credential",
+    () =>
+      Effect.gen(function* () {
+        // A stand-in for the `t3-code` MCP server: same transport and protocol,
+        // two of its tool names, and a record of who called.
+        const calls: Array<{ readonly authorization: string; readonly tool: string }> = [];
+        const recordCaller = HttpRouter.middleware()(
+          Effect.succeed((httpEffect) =>
+            Effect.gen(function* () {
+              const request = yield* HttpServerRequest.HttpServerRequest;
+              const authorization = request.headers.authorization ?? "";
+              if (!authorization.startsWith("Bearer mcp-test:")) {
+                return HttpServerResponse.empty({ status: 401 });
+              }
+              return yield* httpEffect.pipe(Effect.provideService(T3ToolsCaller, authorization));
+            }),
+          ),
+        ).layer;
+        const registerTools = Effect.gen(function* () {
+          const server = yield* McpServer.McpServer;
+          const register = (name: string, content: McpSchema.CallToolResult["content"]) =>
+            server.addTool({
+              tool: new McpSchema.Tool({
+                name,
+                description: `Test stand-in for ${name}.`,
+                inputSchema: { type: "object", properties: {} },
+              }),
+              annotations: Context.empty(),
+              handle: () =>
+                Effect.gen(function* () {
+                  calls.push({ authorization: yield* T3ToolsCaller, tool: name });
+                  return new McpSchema.CallToolResult({ isError: false, content });
+                }),
+            });
+          yield* register("list_thread_pull_requests", [{ type: "text", text: T3_TOOLS_MARKER }]);
+          yield* register("html_preview", [
+            { type: "text", text: "preview ready" },
+            {
+              type: "image",
+              data: new Uint8Array(Buffer.from(ONE_PIXEL_PNG, "base64")),
+              mimeType: "image/png",
+            },
+          ]);
+          // Waits on another thread in the real server; here it never answers.
+          yield* server.addTool({
+            tool: new McpSchema.Tool({
+              name: "t3_thread_wait",
+              description: "Test stand-in for t3_thread_wait.",
+              inputSchema: { type: "object", properties: {} },
+            }),
+            annotations: Context.empty(),
+            handle: () =>
+              Effect.gen(function* () {
+                calls.push({ authorization: yield* T3ToolsCaller, tool: "t3_thread_wait" });
+                return yield* Effect.never;
+              }),
+          });
+        });
+        yield* HttpRouter.serve(
+          Layer.effectDiscard(registerTools).pipe(
+            Layer.provideMerge(
+              McpServer.layerHttp({
+                name: "t3-code stand-in",
+                version: "1.0.0",
+                path: "/mcp",
+                protocols: [McpProtocol.v2025_06_18],
+              }).pipe(Layer.provide(recordCaller)),
+            ),
+          ),
+          { disableListenLog: true, disableLogger: true },
+        ).pipe(Layer.build);
+        const address = (yield* HttpServer.HttpServer).address;
+        assert.notEqual(address._tag, "UnixPathAddress");
+        if (address._tag === "UnixPathAddress") return;
+        t3ToolsEndpoint.url = `http://127.0.0.1:${address.port}/mcp`;
+
+        yield* Effect.gen(function* () {
+          yield* runEffectWorkerDaemonWithOptions({ concurrency: 2 }).pipe(Effect.forkScoped);
+          const orchestrator = yield* OrchestratorV2;
+          const run = Effect.fnUntraced(function* (name: string) {
+            const threadId = ThreadId.make(`thread:hermes-live-t3-tools-${name}`);
+            yield* orchestrator.dispatch({
+              type: "thread.create",
+              createdBy: "user",
+              creationSource: "web",
+              commandId: CommandId.make(`command:hermes-live-t3-tools-${name}:create`),
+              threadId,
+              projectId: ProjectId.make("project:hermes-live"),
+              title: `Hermes t3-code tools ${name}`,
+              modelSelection: HERMES_MODEL_SELECTION,
+              runtimeMode: "full-access",
+              interactionMode: "default",
+              branch: null,
+              worktreePath: process.cwd(),
+            });
+            yield* orchestrator.dispatch({
+              type: "message.dispatch",
+              createdBy: "user",
+              creationSource: "web",
+              commandId: CommandId.make(`command:hermes-live-t3-tools-${name}:send`),
+              threadId,
+              messageId: MessageId.make(`message:hermes-live-t3-tools-${name}:send`),
+              text:
+                `Call the tool ${HERMES_T3_TOOL_PREFIX}list_thread_pull_requests with no arguments ` +
+                `(use tool_call if it is not listed directly), then call ${HERMES_T3_TOOL_PREFIX}html_preview ` +
+                "with html set to <p>hi</p>, then reply with exactly the text the first tool returned.",
+              attachments: [],
+              modelSelection: HERMES_MODEL_SELECTION,
+              dispatchMode: { type: "start_immediately" },
+            });
+            const projection = yield* waitForIdle(threadId);
+            assert.deepEqual(
+              projection.runs.map((entry) => entry.status),
+              ["completed"],
+            );
+            return threadId;
+          });
+          const first = yield* run("a");
+          const second = yield* run("b");
+          assert.deepEqual(calls, [
+            { authorization: `Bearer mcp-test:${first}`, tool: "list_thread_pull_requests" },
+            { authorization: `Bearer mcp-test:${first}`, tool: "html_preview" },
+            { authorization: `Bearer mcp-test:${second}`, tool: "list_thread_pull_requests" },
+            { authorization: `Bearer mcp-test:${second}`, tool: "html_preview" },
+          ]);
+
+          // Stopping a run must not wait for a tool Tangent has not answered.
+          yield* orchestrator.dispatch({
+            type: "message.dispatch",
+            createdBy: "user",
+            creationSource: "web",
+            commandId: CommandId.make("command:hermes-live-t3-tools-a:wait"),
+            threadId: first,
+            messageId: MessageId.make("message:hermes-live-t3-tools-a:wait"),
+            text:
+              `Call the tool ${HERMES_T3_TOOL_PREFIX}t3_thread_wait with threadId set to thread:none ` +
+              "(use tool_call if it is not listed directly) and wait for its result.",
+            attachments: [],
+            modelSelection: HERMES_MODEL_SELECTION,
+            dispatchMode: { type: "start_immediately" },
+          });
+          for (let attempt = 0; attempt < 240 && calls.length < 5; attempt += 1) {
+            yield* Effect.sleep("500 millis");
+          }
+          assert.deepEqual(calls.at(-1), {
+            authorization: `Bearer mcp-test:${first}`,
+            tool: "t3_thread_wait",
+          });
+          const waiting = yield* orchestrator.getThreadProjection(first);
+          yield* orchestrator.dispatch({
+            type: "run.interrupt",
+            commandId: CommandId.make("command:hermes-live-t3-tools-a:stop"),
+            threadId: first,
+            runId: waiting.runs.at(-1)!.id,
+          });
+          const stopped = yield* waitForIdle(first).pipe(Effect.timeout("30 seconds"));
+          assert.deepEqual(
+            stopped.runs.map((entry) => entry.status),
+            ["completed", "interrupted"],
+          );
+        }).pipe(Effect.provide(makeLiveLayer(t3ToolsRegistryLayer)));
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(Layer.merge(NodeHttpServer.layerTest, NodeServices.layer)),
+      ),
+    360_000,
   );
 });

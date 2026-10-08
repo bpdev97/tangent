@@ -111,10 +111,36 @@ Mapping to v2 (`apps/server/src/orchestration-v2/ProviderAdapter.ts`):
   queue, then settles the run. Steering it is refused until its own turn starts. A question the
   background turn raises while nothing waits surfaces in its continuation run. A self-started turn
   that begins while a T3 run is active is part of that run.
-- Hermes does not attach the `t3-code` MCP server. T3 issues one MCP credential per thread, and a
-  gateway loads the profile's `mcp_servers` once for every session it serves, so a call could not
-  be tied to its thread. Features that reach agents only as `t3-code` tools (visual replies, secret
-  request cards, delegation) are unsupported for Hermes.
+- Hermes reaches the `t3-code` tools through a Tangent-owned Hermes plugin, not as an MCP server.
+  T3 issues one MCP credential per thread, and a gateway connects to the profile's `mcp_servers`
+  once for every session it serves, so an MCP call could not be tied to its thread. Hermes does
+  pass the durable session key to a plugin's tool handlers, and that key is the provider thread's
+  native ID. So the plugin registers each tool natively as `t3code__<name>` (Hermes already has a
+  `delegate_task`) and, per call, looks the calling session up in a private directory
+  (`<state>/hermes-t3-code/<instance>/`) that the adapter fills: the tool list before the gateway
+  starts, and one owner-only file per attached session with that thread's endpoint, credential,
+  and instructions. The file is rewritten at every turn start, because the credential can rotate.
+  One gateway still serves every thread.
+- The plugin calls T3's MCP endpoint itself with the standard library (a source install of Hermes
+  has no MCP SDK), returns an image as a `MEDIA:` path the way Hermes's own MCP client does, and
+  stops waiting as soon as the turn is interrupted. A Hermes subagent's calls act as the thread
+  that spawned it. The adapter reports these calls as `mcp__t3-code__<name>`, the name clients
+  already know.
+- The session file also carries T3's orchestration instructions, with a preface on Hermes's tool
+  names. The plugin adds them to a session's first turn through Hermes's `pre_llm_call` hook.
+  Hermes keeps that with the turn's message, so later turns and restarts see them once.
+- Tangent writes the plugin into the profile's `plugins/t3-code/` when the instance starts. Hermes
+  loads it only if the profile's config lists `t3-code` under `plugins.enabled`, and Tangent never
+  edits that file. The plugin writes a marker when it loads; while the marker is missing, the
+  provider status gives the command that turns it on
+  (`hermes --profile <profile> plugins enable t3-code`). Hermes reads `plugins.enabled` once per
+  process, so a status check that finds the plugin off stops an idle gateway whose profile config
+  changed since it started; the next request starts one that loads it. Outside Tangent the plugin
+  registers nothing.
+- The session files are readable by anything Hermes runs for that instance, since every thread
+  shares one gateway and one OS user. That user is the boundary, as it is for the credentials
+  other providers hold in their own process. Shared MCP servers (`FORK-MCP-001`) are still not
+  attached.
 - An unexpected socket close fails the active turn and reports a recoverable session exit.
 - Ordering: every gateway frame and supervised-RPC result enters one inbox per session and is
   handled under one permit, which adapter calls that change turn state also take. The v2 session
@@ -177,7 +203,8 @@ Registration follows Pi's (`PiDriver`, `PiAdapterV2`). Each hook carries a
 
 Fork-owned files: `apps/server/src/provider/hermes/` (gateway client, supervised runtime and fleet,
 support, media links, tool projection, background-turn buffer, utility calls, provider snapshot,
-driver, text generation, updater), `apps/web/src/components/HermesIcon.tsx`,
+driver, text generation, updater, the `t3-code` plugin source and its bridge),
+`apps/web/src/components/HermesIcon.tsx`,
 `apps/server/src/orchestration-v2/Adapters/HermesAdapterV2.ts` with its testkit and fixtures,
 `apps/server/src/orchestration-v2/HermesOrchestratorV2.live.test.ts`, and `docs/user/hermes.md`.
 
@@ -212,6 +239,9 @@ driver, text generation, updater), `apps/web/src/components/HermesIcon.tsx`,
 - Never run the update command while a Hermes turn is active, or without stopping the
   gateways first.
 - Never enable Hermes's desktop cron ticker, and do not bring back automation management.
+- Never edit a Hermes profile's config to enable the `t3-code` plugin. Report the command.
+- Never put a thread's `t3-code` credential in the gateway's environment or arguments. Every
+  thread shares that process.
 
 ## Remove when
 
@@ -232,6 +262,13 @@ against the Behavior section, then delete this adapter and move to upstream's.
   delegation that must settle into a child thread and the wake turn that reports it. The live
   layer adds the continuation worker, which only the production layer includes; without it
   wake turns never start.
+- A second opt-in live test (`T3_HERMES_LIVE_T3_TOOLS=1` with a disposable `HERMES_HOME` whose
+  config enables `t3-code`) runs two threads on one gateway against a stand-in for the `t3-code`
+  server. Each call must arrive with its own thread's credential, and stopping a run must not wait
+  for a tool that has not answered. It needs no real model: any OpenAI-compatible endpoint that
+  follows the prompt will do.
+- `HermesT3Tools.test.ts` fails when a toolkit directory or tool under `apps/server/src/mcp/toolkits`
+  is missing from the list Hermes is given. Add it to `HERMES_T3_TOOLKITS`.
 - Approval prompts need a profile with `approvals.mode: manual`; the default `smart` mode lets
   Hermes's guardian model approve ordinary commands itself, so they never reach T3. Use a
   throwaway profile (`hermes profile create <name> --clone`), which inherits the root login
@@ -242,5 +279,7 @@ To move the baseline to a new Hermes release:
 1. Compare the reference sources above between the two release tags, including
    `DESKTOP_BACKEND_CONTRACT`.
 2. Update mappings and fixtures only for changes that affect them.
-3. Run the focused tests and the live test.
+3. Run the focused tests and both live tests. The `t3-code` plugin depends on Hermes's plugin
+   API (`register_tool` handlers receiving `session_id`, the `pre_llm_call`, `subagent_start`, and
+   `subagent_stop` hooks, and `tools.interrupt.is_interrupted`).
 4. Update `hermes` in `downstream/fork.json`. Raising the minimum contract blocks automatic release.

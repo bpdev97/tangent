@@ -152,6 +152,18 @@ describe("Hermes tool projection", () => {
       toolName: "mcp__github__list_prs",
       input: { repo: "t3" },
     });
+    // Tangent's plugin tools are reported under the name other providers use.
+    const tangent = projectHermesTool({
+      tool_id: "6",
+      name: "t3code__html_render",
+      args: { title: "Chart" },
+    });
+    expect(tangent.title).toBe("t3-code · html_render");
+    expect(tangent.item).toEqual({
+      type: "dynamic_tool",
+      toolName: "mcp__t3-code__html_render",
+      input: { title: "Chart" },
+    });
     // Typed browser input is not copied; only the bounded display field is kept.
     expect(
       projectHermesTool({
