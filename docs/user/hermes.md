@@ -50,7 +50,8 @@ hermes --profile default plugins enable t3-code
 ```
 
 Then refresh the provider in Settings. Until you do, the provider's status shows this command for
-its profile. To turn the tools off again, run the same command with `disable`.
+its profile. To turn the tools off again, run the same command with `disable` and refresh. A
+refresh applies the change once no Hermes turn or subagent is running for that profile.
 
 Hermes lists these tools as `t3code__…` and finds them through its tool search. They only work in
 chats Tangent started; Hermes sessions you start elsewhere are told they are unavailable. Browser

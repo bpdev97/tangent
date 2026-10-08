@@ -156,7 +156,7 @@ function makeHermesUpdateGuard(
         if (running.some((count) => count > 0)) {
           return yield* new HermesUpdateRefusedError({
             detail:
-              "A Hermes turn is running. Stop it or wait for it to finish, then update Hermes.",
+              "A Hermes turn or subagent is running. Stop it or wait for it to finish, then update Hermes.",
           });
         }
         yield* Effect.forEach(runtimes, (runtime) => runtime.stop, { discard: true });

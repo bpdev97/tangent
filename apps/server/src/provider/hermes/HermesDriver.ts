@@ -180,8 +180,9 @@ export const HermesDriver: ProviderDriver<HermesSettings, HermesDriverEnv> = {
           buildInitialHermesProviderSnapshot(settings.provider).pipe(Effect.map(stampIdentity)),
         checkProvider: checkHermesProviderStatus(effectiveConfig, processEnv, utility, {
           loaded: t3Bridge.pluginLoaded,
-          restartIfEnabledSince: Effect.gen(function* () {
+          restartIfConfigChanged: Effect.gen(function* () {
             if (!(yield* t3Bridge.profileConfigChanged)) return false;
+            // Counts running subagents too; stopping the gateway would end them.
             if ((yield* runtime.activeTurns) > 0) return false;
             yield* runtime.stop;
             return true;

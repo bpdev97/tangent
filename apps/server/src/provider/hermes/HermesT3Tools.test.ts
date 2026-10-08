@@ -140,14 +140,18 @@ describe("Hermes t3-code tools", () => {
       yield* bridge.gatewayStarting;
       assert.isFalse(yield* bridge.pluginLoaded);
 
-      // Enabling the plugin edits the profile's config; only a new gateway sees it.
+      // Turning the plugin on or off edits the profile's config; only a new gateway sees it.
+      // Nothing counts as a change until a gateway has read the config.
+      assert.isFalse(yield* bridge.profileConfigChanged);
+      yield* bridge.gatewayReady;
       assert.isFalse(yield* bridge.profileConfigChanged);
       // File times are in seconds.
       const later = DateTime.toEpochMillis(yield* DateTime.now) / 1_000 + 60;
       yield* fs.utimes(config, later, later);
       assert.isTrue(yield* bridge.profileConfigChanged);
-      yield* fs.utimes(config, 0, 0);
+      // The gateway that replaces it reads the new config.
       yield* bridge.gatewayStarting;
+      yield* bridge.gatewayReady;
       assert.isFalse(yield* bridge.profileConfigChanged);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
@@ -160,21 +164,29 @@ describe("Hermes t3-code tools", () => {
         yield* hermesProfileHome(home, "Research"),
         "/home/me/.hermes/profiles/research",
       );
-      // A profile-mode HERMES_HOME under the default root does not move the root.
-      assert.equal(
-        yield* hermesProfileHome({ ...home, HERMES_HOME: "/home/me/.hermes/profiles/a" }, "b"),
-        "/home/me/.hermes/profiles/b",
-      );
-      // A custom root, given directly or as one of its profiles.
+      // An exported HERMES_HOME is the root, wherever it is.
       assert.equal(
         yield* hermesProfileHome({ ...home, HERMES_HOME: "/opt/data" }, "default"),
         "/opt/data",
       );
       assert.equal(
+        yield* hermesProfileHome({ ...home, HERMES_HOME: "/home/me/.hermes/sandbox" }, "default"),
+        "/home/me/.hermes/sandbox",
+      );
+      // Unless it names a profile: then the root is two levels up.
+      assert.equal(
         yield* hermesProfileHome({ ...home, HERMES_HOME: "/opt/data/profiles/a" }, "b"),
         "/opt/data/profiles/b",
       );
+      assert.equal(
+        yield* hermesProfileHome(
+          { ...home, HERMES_HOME: "/home/me/.hermes/profiles/a" },
+          "default",
+        ),
+        "/home/me/.hermes",
+      );
       assert.isUndefined(yield* hermesProfileHome(home, "../escape"));
+      assert.isUndefined(yield* hermesProfileHome({ HERMES_HOME: "relative/home" }, "default"));
       assert.isUndefined(yield* hermesProfileHome({}, "default"));
     }).pipe(Effect.provide(NodeServices.layer)),
   );

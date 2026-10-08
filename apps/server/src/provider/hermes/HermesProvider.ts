@@ -152,11 +152,11 @@ export interface HermesT3ToolsStatus {
   /** Whether the running gateway loaded the plugin. */
   readonly loaded: Effect.Effect<boolean>;
   /**
-   * Stop an idle gateway whose profile config changed after it started, so
-   * the next request starts one that sees a newly enabled plugin. `true` when
-   * it stopped one.
+   * Stop an idle gateway whose profile config changed since it read it, so
+   * the next request starts one that sees the plugin turned on or off. `true`
+   * when it stopped one.
    */
-  readonly restartIfEnabledSince: Effect.Effect<boolean>;
+  readonly restartIfConfigChanged: Effect.Effect<boolean>;
 }
 
 function hermesContractMessage(info: HermesGatewayInfo | null): string | undefined {
@@ -278,12 +278,11 @@ export const checkHermesProviderStatus = Effect.fn("checkHermesProviderStatus")(
       ? buildHermesSlashCommandsFromGateway(commands.success.value)
       : [];
   // Hermes only loads a plugin its profile lists as enabled, and that file is the user's.
-  let t3ToolsOff = t3Tools !== undefined && !(yield* t3Tools.loaded);
-  if (t3Tools !== undefined && t3ToolsOff && (yield* t3Tools.restartIfEnabledSince)) {
+  if (t3Tools !== undefined && (yield* t3Tools.restartIfConfigChanged)) {
     // Plugins load when the gateway process starts, before it answers anything.
     yield* utility.getSetupStatus.pipe(Effect.timeoutOption(DISCOVERY_TIMEOUT_MS), Effect.ignore);
-    t3ToolsOff = !(yield* t3Tools.loaded);
   }
+  const t3ToolsOff = t3Tools !== undefined && !(yield* t3Tools.loaded);
   return snapshot(
     {
       installed: true,

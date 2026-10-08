@@ -24,7 +24,6 @@
  * @module provider/hermes/HermesT3Tools
  */
 import type { ThreadId } from "@t3tools/contracts";
-import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -124,12 +123,14 @@ export interface HermesT3Bridge {
   readonly directory: string;
   /** Forget what the previous gateway process reported. Run before each start. */
   readonly gatewayStarting: Effect.Effect<void>;
+  /** Note the profile config the new gateway process read. Run once it is up. */
+  readonly gatewayReady: Effect.Effect<void>;
   /** Whether the gateway started last loaded the plugin, which means the profile enables it. */
   readonly pluginLoaded: Effect.Effect<boolean>;
   /**
-   * Whether the profile's config changed after the gateway started. Hermes
-   * reads `plugins.enabled` once per process, so enabling the plugin only
-   * takes effect in a new one.
+   * Whether the profile's config changed since the running gateway read it.
+   * Hermes reads `plugins.enabled` once per process, so turning the plugin on
+   * or off only takes effect in a new one.
    */
   readonly profileConfigChanged: Effect.Effect<boolean>;
   /**
@@ -152,7 +153,15 @@ export const makeHermesT3Bridge = Effect.fn("makeHermesT3Bridge")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  let gatewayStartedAt = 0;
+  // `null` until a gateway is up: only a change it did not see counts.
+  let configReadAt: number | null = null;
+  const configModifiedAt =
+    profileConfigPath === undefined
+      ? Effect.succeed(null)
+      : fs.stat(profileConfigPath).pipe(
+          Effect.map((info) => Option.getOrNull(info.mtime)?.getTime() ?? null),
+          Effect.orElseSucceed(() => null),
+        );
   const sessionsDirectory = path.join(directory, HERMES_T3_SESSIONS_DIR);
   // A previous server's credentials are dead; never leave them readable.
   yield* fs.remove(sessionsDirectory, { recursive: true, force: true });
@@ -176,27 +185,21 @@ export const makeHermesT3Bridge = Effect.fn("makeHermesT3Bridge")(function* (
 
   return {
     directory,
-    gatewayStarting: DateTime.now.pipe(
-      Effect.tap((now) =>
-        Effect.sync(() => {
-          gatewayStartedAt = DateTime.toEpochMillis(now);
-        }),
-      ),
-      Effect.andThen(quietly("gatewayStarting", fs.remove(loadedFile, { force: true }))),
+    gatewayStarting: Effect.sync(() => {
+      configReadAt = null;
+    }).pipe(Effect.andThen(quietly("gatewayStarting", fs.remove(loadedFile, { force: true })))),
+    // Taken after startup, so anything Hermes writes to its own config while starting is not a change.
+    gatewayReady: configModifiedAt.pipe(
+      Effect.map((modifiedAt) => {
+        configReadAt = modifiedAt;
+      }),
     ),
     pluginLoaded: fs.exists(loadedFile).pipe(Effect.orElseSucceed(() => false)),
-    profileConfigChanged:
-      profileConfigPath === undefined
-        ? Effect.succeed(false)
-        : fs.stat(profileConfigPath).pipe(
-            Effect.map((info) =>
-              Option.match(info.mtime, {
-                onNone: () => false,
-                onSome: (modified) => modified.getTime() > gatewayStartedAt,
-              }),
-            ),
-            Effect.orElseSucceed(() => false),
-          ),
+    profileConfigChanged: configModifiedAt.pipe(
+      Effect.map(
+        (modifiedAt) => configReadAt !== null && modifiedAt !== null && modifiedAt !== configReadAt,
+      ),
+    ),
     attach: (sessionKey, threadId) => {
       const session = McpProviderSession.readMcpProviderSession(threadId);
       if (session === undefined || !SESSION_KEY.test(sessionKey)) return Effect.void;
@@ -225,28 +228,27 @@ export const makeHermesT3Bridge = Effect.fn("makeHermesT3Bridge")(function* (
 });
 
 /**
- * The directory Hermes uses as `HERMES_HOME` for a profile, by Hermes's own
- * rule: `~/.hermes`, or a `HERMES_HOME` outside it in custom deployments, with
- * named profiles under `profiles/`. `undefined` when it cannot be worked out.
+ * The directory `hermes --profile <profile>` uses as `HERMES_HOME`, by
+ * Hermes's own rule (`resolve_profile_env`): the root is an exported
+ * `HERMES_HOME` (or its grandparent when that names a profile), else
+ * `~/.hermes`, and named profiles live under `profiles/`. `undefined` when it
+ * cannot be worked out.
  */
 export const hermesProfileHome = Effect.fn("hermesProfileHome")(function* (
   environment: NodeJS.ProcessEnv,
   profile: string,
 ) {
   const path = yield* Path.Path;
+  const configured = environment.HERMES_HOME?.trim();
   const home = environment.HOME?.trim();
-  if (!home) return undefined;
-  const native = path.join(home, ".hermes");
-  const configured = environment.HERMES_HOME?.trim().replace(/^~(?=$|\/)/u, home);
-  const outsideNative =
-    configured !== undefined &&
-    configured.length > 0 &&
-    path.relative(path.resolve(native), path.resolve(configured)).startsWith("..");
-  const root = !outsideNative
-    ? native
-    : path.basename(path.dirname(configured)) === "profiles"
+  const root = configured
+    ? path.basename(path.dirname(configured)) === "profiles"
       ? path.dirname(path.dirname(configured))
-      : configured;
+      : configured
+    : home
+      ? path.join(home, ".hermes")
+      : undefined;
+  if (root === undefined || !path.isAbsolute(root)) return undefined;
   const name = profile.trim().toLowerCase();
   if (name === "" || name === "default") return root;
   return PROFILE_ID.test(name) ? path.join(root, "profiles", name) : undefined;

@@ -38,13 +38,14 @@ Outside Tangent the variable is unset and this plugin registers nothing.
 """
 
 import base64
+import http.client
 import json
 import os
 import re
+import socket
 import tempfile
 import threading
-import urllib.error
-import urllib.request
+import urllib.parse
 
 BRIDGE_ENV = ${JSON.stringify(HERMES_T3_BRIDGE_ENV)}
 PREFIX = ${JSON.stringify(HERMES_T3_TOOL_PREFIX)}
@@ -55,14 +56,13 @@ INSTRUCTIONS_TAG = ${JSON.stringify(`<${HERMES_T3_INSTRUCTIONS_TAG}>`)}
 PROTOCOL = "2025-06-18"
 SESSION_KEY = re.compile(r"^[A-Za-z0-9_.-]+$")
 HANDSHAKE_TIMEOUT_SECONDS = 30
+CLOSE_TIMEOUT_SECONDS = 5
 # Some tools wait on other threads or on the user.
 CALL_TIMEOUT_SECONDS = 1800
 INTERRUPT_POLL_SECONDS = 0.2
 UNATTACHED = "This Hermes session is not attached to a Tangent thread, so Tangent tools are unavailable here."
 INTERRUPTED = "The turn was stopped before Tangent answered."
 
-# Loopback only: never route the credential through a configured proxy.
-_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 _lock = threading.Lock()
 # A Hermes subagent has its own session; its calls belong to the thread that spawned it.
 _parents = {}
@@ -70,7 +70,28 @@ _parents = {}
 _briefed = set()
 
 
-def _send(method, endpoint, authorization, payload=None, mcp_session=None, timeout=HANDSHAKE_TIMEOUT_SECONDS):
+class _Refused(Exception):
+    """Tangent answered with a status that is not a result."""
+
+    def __init__(self, status):
+        super().__init__("HTTP %d" % status)
+        self.status = status
+
+
+class _Stopped(Exception):
+    """The Hermes turn was stopped while the call was in flight."""
+
+
+def _send(call, method, endpoint, authorization, payload=None, mcp_session=None, timeout=HANDSHAKE_TIMEOUT_SECONDS):
+    """One request, straight to the endpoint Tangent wrote.
+
+    http.client connects directly: it follows no redirect and uses no proxy, so
+    the credential never goes anywhere else. The connection is shared through
+    call so a stopped turn can close it under a blocked read.
+    """
+    target = urllib.parse.urlsplit(endpoint)
+    connect = http.client.HTTPSConnection if target.scheme == "https" else http.client.HTTPConnection
+    connection = connect(target.hostname, target.port, timeout=timeout)
     headers = {
         "Accept": "application/json, text/event-stream",
         "Authorization": authorization,
@@ -78,14 +99,25 @@ def _send(method, endpoint, authorization, payload=None, mcp_session=None, timeo
     }
     if mcp_session:
         headers["Mcp-Session-Id"] = mcp_session
-    data = None
+    body = None
     if payload is not None:
         headers["Content-Type"] = "application/json"
-        data = json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(endpoint, data=data, headers=headers, method=method)
-    with _opener.open(request, timeout=timeout) as response:
-        body = response.read().decode("utf-8")
-        return response.headers.get("Mcp-Session-Id"), response.headers.get_content_type(), body
+        body = json.dumps(payload).encode("utf-8")
+    with _lock:
+        if call["stopped"].is_set():
+            raise _Stopped()
+        call["connection"] = connection
+    try:
+        connection.request(method, (target.path or "/") + ("?" + target.query if target.query else ""), body=body, headers=headers)
+        response = connection.getresponse()
+        text = response.read().decode("utf-8")
+        if not 200 <= response.status < 300:
+            raise _Refused(response.status)
+        return response.getheader("Mcp-Session-Id"), (response.getheader("Content-Type") or "").split(";")[0].strip().lower(), text
+    finally:
+        with _lock:
+            call["connection"] = None
+        connection.close()
 
 
 def _response(content_type, body, request_id):
@@ -104,18 +136,9 @@ def _response(content_type, body, request_id):
     return None
 
 
-def _close(endpoint, authorization, mcp_session):
-    if not mcp_session:
-        return
-    try:
-        _send("DELETE", endpoint, authorization, None, mcp_session)
-    except Exception:
-        pass
-
-
-def _call_tool(endpoint, authorization, name, arguments, call):
-    """One MCP session per call. The session id is shared so a stopped turn can end it."""
-    mcp_session, _, _ = _send("POST", endpoint, authorization, {
+def _call_tool(call, endpoint, authorization, name, arguments):
+    """One MCP session per call, ended afterwards even when the turn was stopped."""
+    mcp_session, _, _ = _send(call, "POST", endpoint, authorization, {
         "jsonrpc": "2.0",
         "id": 1,
         "method": "initialize",
@@ -125,10 +148,10 @@ def _call_tool(endpoint, authorization, name, arguments, call):
             "clientInfo": {"name": "hermes-t3-code", "version": "1"},
         },
     })
-    call["mcp_session"] = mcp_session
     try:
-        _send("POST", endpoint, authorization, {"jsonrpc": "2.0", "method": "notifications/initialized"}, mcp_session)
-        _, content_type, body = _send("POST", endpoint, authorization, {
+        _send(call, "POST", endpoint, authorization, {"jsonrpc": "2.0", "method": "notifications/initialized"}, mcp_session)
+        # _send refuses once the turn is stopped, so a stop during the handshake never reaches the tool.
+        _, content_type, body = _send(call, "POST", endpoint, authorization, {
             "jsonrpc": "2.0",
             "id": 2,
             "method": "tools/call",
@@ -136,7 +159,11 @@ def _call_tool(endpoint, authorization, name, arguments, call):
         }, mcp_session, CALL_TIMEOUT_SECONDS)
         return _response(content_type, body, 2)
     finally:
-        _close(endpoint, authorization, mcp_session)
+        if mcp_session:
+            try:
+                _send({"stopped": threading.Event(), "connection": None}, "DELETE", endpoint, authorization, None, mcp_session, CLOSE_TIMEOUT_SECONDS)
+            except Exception:
+                pass
 
 
 def _turn_stopped():
@@ -148,17 +175,30 @@ def _turn_stopped():
         return False
 
 
+def _stop(call):
+    """Refuse further requests and break the one in flight, which ends the worker."""
+    with _lock:
+        call["stopped"].set()
+        connection = call["connection"]
+    try:
+        if connection is not None and connection.sock is not None:
+            # close() alone does not wake a thread blocked in recv().
+            connection.sock.shutdown(socket.SHUT_RDWR)
+    except OSError:
+        pass
+
+
 def _call_until_stopped(endpoint, authorization, name, arguments):
     """Run the call on a worker so stopping the Hermes turn does not wait for Tangent.
 
     Hermes marks the handler's own thread as interrupted, so that thread polls.
     Returns (frame, stopped).
     """
-    call = {}
+    call = {"stopped": threading.Event(), "connection": None}
 
     def run():
         try:
-            call["frame"] = _call_tool(endpoint, authorization, name, arguments, call)
+            call["frame"] = _call_tool(call, endpoint, authorization, name, arguments)
         except BaseException as error:  # reported on the handler thread
             call["error"] = error
 
@@ -167,7 +207,7 @@ def _call_until_stopped(endpoint, authorization, name, arguments):
     while worker.is_alive():
         worker.join(INTERRUPT_POLL_SECONDS)
         if worker.is_alive() and _turn_stopped():
-            _close(endpoint, authorization, call.get("mcp_session"))
+            _stop(call)
             return None, True
     if "error" in call:
         raise call["error"]
@@ -251,8 +291,8 @@ def _handler(bridge, name):
             return json.dumps({"error": UNATTACHED})
         try:
             frame, stopped = _call_until_stopped(binding["endpoint"], binding["authorization"], name, params or {})
-        except urllib.error.HTTPError as error:
-            return json.dumps({"error": "Tangent refused the tool call (HTTP %d)." % error.code})
+        except _Refused as error:
+            return json.dumps({"error": "Tangent refused the tool call (HTTP %d)." % error.status})
         except Exception as error:
             return json.dumps({"error": "Could not reach Tangent (%s)." % type(error).__name__})
         return json.dumps({"error": INTERRUPTED}) if stopped else _render(frame)

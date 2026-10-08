@@ -122,8 +122,10 @@ Mapping to v2 (`apps/server/src/orchestration-v2/ProviderAdapter.ts`):
   and instructions. The file is rewritten at every turn start, because the credential can rotate.
   One gateway still serves every thread.
 - The plugin calls T3's MCP endpoint itself with the standard library (a source install of Hermes
-  has no MCP SDK), returns an image as a `MEDIA:` path the way Hermes's own MCP client does, and
-  stops waiting as soon as the turn is interrupted. A Hermes subagent's calls act as the thread
+  has no MCP SDK). It connects straight to the endpoint the adapter wrote, follows no redirect and
+  uses no proxy, and opens and ends one MCP session per call. It returns an image as a `MEDIA:`
+  path the way Hermes's own MCP client does. When the turn is interrupted it stops waiting, breaks
+  the request in flight, and sends nothing further. A Hermes subagent's calls act as the thread
   that spawned it. The adapter reports these calls as `mcp__t3-code__<name>`, the name clients
   already know.
 - The session file also carries T3's orchestration instructions, with a preface on Hermes's tool
@@ -134,9 +136,9 @@ Mapping to v2 (`apps/server/src/orchestration-v2/ProviderAdapter.ts`):
   edits that file. The plugin writes a marker when it loads; while the marker is missing, the
   provider status gives the command that turns it on
   (`hermes --profile <profile> plugins enable t3-code`). Hermes reads `plugins.enabled` once per
-  process, so a status check that finds the plugin off stops an idle gateway whose profile config
-  changed since it started; the next request starts one that loads it. Outside Tangent the plugin
-  registers nothing.
+  process, so a status check stops a gateway whose profile config changed since it read it, and
+  the next request starts one that sees the plugin turned on or off. It only does so while no
+  turn or subagent is running there. Outside Tangent the plugin registers nothing.
 - The session files are readable by anything Hermes runs for that instance, since every thread
   shares one gateway and one OS user. That user is the boundary, as it is for the credentials
   other providers hold in their own process. Shared MCP servers (`FORK-MCP-001`) are still not
@@ -157,7 +159,7 @@ Updates:
   (`apps/server/src/provider/providerMaintenance.ts`) and runs the gateway-reported
   `update_command` under the lock key `hermes-native`, because install methods differ (a source
   install reports `hermes update`, Docker a `docker pull`, Nix only guidance, which gets no one-click
-  action). Before running it, it refuses while any Hermes turn is running and stops the gateway
+  action). Before running it, it refuses while any Hermes turn or subagent is running and stops the gateway
   processes of every Hermes instance, because the update replaces the install they all run from.
   Afterwards it re-reads the version and contract. Gateways restart on their next request.
 - `hermes update` only follows a branch, and Hermes publishes releases only as git tags (PyPI

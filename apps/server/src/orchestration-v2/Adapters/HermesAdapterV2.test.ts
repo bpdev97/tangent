@@ -371,6 +371,8 @@ describe("HermesAdapterV2", () => {
       ]);
       yield* takeEvent(is("turn.terminal"));
       assert.isTrue(yield* runtime.hasPendingBackgroundWork!);
+      // The turn is over, but stopping the gateway now would end the subagent.
+      assert.equal(fake.activeTurns(), 1);
 
       yield* fake.events([tool, complete]);
       const seen: Array<ProviderAdapterV2Event> = [];
@@ -395,6 +397,7 @@ describe("HermesAdapterV2", () => {
         ),
       );
       assert.isFalse(yield* runtime.hasPendingBackgroundWork!);
+      assert.equal(fake.activeTurns(), 0);
     }).pipe(Effect.scoped, Effect.provide(testLayer)),
   );
 
