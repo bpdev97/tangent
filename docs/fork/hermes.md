@@ -120,13 +120,15 @@ Mapping to v2 (`apps/server/src/orchestration-v2/ProviderAdapter.ts`):
   (`<state>/hermes-t3-code/<instance>/`) that the adapter fills: the tool list before the gateway
   starts, and one owner-only file per attached session with that thread's endpoint, credential,
   and instructions. The file is rewritten at every turn start, because the credential can rotate.
-  One gateway still serves every thread.
+  Compression gives a conversation a new key in the middle of a turn, so the plugin looks a call
+  up by its session id and by its task id (the key the turn started under), and the adapter keeps
+  every key a session has had attached until it closes. One gateway still serves every thread.
 - The plugin calls T3's MCP endpoint itself with the standard library (a source install of Hermes
   has no MCP SDK). It connects straight to the endpoint the adapter wrote, follows no redirect and
   uses no proxy, and opens and ends one MCP session per call. It returns an image as a `MEDIA:`
   path the way Hermes's own MCP client does. When the turn is interrupted it stops waiting, breaks
   the request in flight, and sends nothing further. A Hermes subagent's calls act as the thread
-  that spawned it. The adapter reports these calls as `mcp__t3-code__<name>`, the name clients
+  that spawned it, found through its session id or its subagent id. The adapter reports these calls as `mcp__t3-code__<name>`, the name clients
   already know.
 - The session file also carries T3's orchestration instructions, with a preface on Hermes's tool
   names. The plugin adds them to a session's first turn through Hermes's `pre_llm_call` hook.
@@ -136,7 +138,8 @@ Mapping to v2 (`apps/server/src/orchestration-v2/ProviderAdapter.ts`):
   edits that file. The plugin writes a marker when it loads; while the marker is missing, the
   provider status gives the command that turns it on
   (`hermes --profile <profile> plugins enable t3-code`). Hermes reads `plugins.enabled` once per
-  process, so a status check stops a gateway whose profile config changed since it read it, and
+  process, so a status check stops a gateway whose profile config was created, edited, or deleted
+  since it read it, and
   the next request starts one that sees the plugin turned on or off. It only does so while no
   turn or subagent is running there. Outside Tangent the plugin registers nothing.
 - The session files are readable by anything Hermes runs for that instance, since every thread

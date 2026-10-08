@@ -604,6 +604,8 @@ interface ThreadState {
   activeTurn: ActiveTurn | null;
   /** Keyed by Hermes `subagent_id`. */
   readonly subagents: Map<string, HermesSubagent>;
+  /** Durable session keys whose `t3-code` binding this session wrote. */
+  readonly t3ToolKeys: Set<string>;
 }
 
 type InboxItem =
@@ -1808,6 +1810,8 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
             const stored = text(payload.stored_session_id);
             if (stored && stored !== state.providerThread.nativeThreadRef?.nativeId) {
               yield* updateProviderThread(state, { nativeThreadRef: providerRef(stored) });
+              // Calls now arrive under the new key; a running subagent still knows the old one.
+              yield* attachT3Tools(state, state.providerThread.appThreadId ?? input.threadId);
             }
             const usage = record(payload.usage);
             const max = nonNegativeInteger(usage.context_max);
@@ -2057,18 +2061,23 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
         Effect.forEach([...state.subagents.values()], (subagent) => subagent.release, {
           discard: true,
         });
+      // Hermes gives a compressed conversation a new durable key. Every key a session has had
+      // stays attached until the session closes.
       const attachT3Tools = (state: ThreadState, threadId: ThreadId) => {
         const sessionKey = state.providerThread.nativeThreadRef?.nativeId;
-        return sessionKey == null
-          ? Effect.void
-          : (options.t3Bridge?.attach(sessionKey, threadId) ?? Effect.void);
+        if (sessionKey != null) state.t3ToolKeys.add(sessionKey);
+        return Effect.forEach(
+          [...state.t3ToolKeys],
+          (key) => options.t3Bridge?.attach(key, threadId) ?? Effect.void,
+          { discard: true },
+        );
       };
-      const detachT3Tools = (state: ThreadState) => {
-        const sessionKey = state.providerThread.nativeThreadRef?.nativeId;
-        return sessionKey == null
-          ? Effect.void
-          : (options.t3Bridge?.detach(sessionKey) ?? Effect.void);
-      };
+      const detachT3Tools = (state: ThreadState) =>
+        Effect.forEach(
+          [...state.t3ToolKeys],
+          (key) => options.t3Bridge?.detach(key) ?? Effect.void,
+          { discard: true },
+        ).pipe(Effect.andThen(Effect.sync(() => state.t3ToolKeys.clear())));
 
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
@@ -2196,7 +2205,13 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
                 createdAt,
                 updatedAt: createdAt,
               };
-        threadState = { providerThread, liveSessionId, activeTurn: null, subagents: new Map() };
+        threadState = {
+          providerThread,
+          liveSessionId,
+          activeTurn: null,
+          subagents: new Map(),
+          t3ToolKeys: new Set(),
+        };
         // Before any prompt: the plugin resolves a tool call by this session key.
         yield* attachT3Tools(threadState, threadInput.threadId);
         if (publish) {

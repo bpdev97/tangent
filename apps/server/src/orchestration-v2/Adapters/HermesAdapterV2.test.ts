@@ -35,6 +35,7 @@ import {
   bufferHermesBackgroundItem,
   type HermesBackgroundBuffer,
 } from "../../provider/hermes/HermesBackgroundTurns.ts";
+import type { HermesT3Bridge } from "../../provider/hermes/HermesT3Tools.ts";
 import {
   HERMES_FIXTURE_CWD,
   HERMES_FIXTURE_STORED_ID,
@@ -78,6 +79,7 @@ const selection = (model = "default"): ModelSelection => ({ instanceId: INSTANCE
 const openRuntime = Effect.fnUntraced(function* (
   fake: FakeHermesGateway,
   runtimeMode: RuntimeMode = "approval-required",
+  t3Bridge?: HermesT3Bridge,
 ) {
   const continuations = yield* Queue.unbounded<ProviderContinuationRequest>();
   const adapter = makeHermesAdapterV2({
@@ -89,6 +91,7 @@ const openRuntime = Effect.fnUntraced(function* (
     continuationRequests: {
       offer: (request) => Queue.offer(continuations, request).pipe(Effect.asVoid),
     },
+    ...(t3Bridge ? { t3Bridge } : {}),
   });
   const runtime = yield* adapter.openSession({
     threadId: THREAD_ID,
@@ -399,6 +402,44 @@ describe("HermesAdapterV2", () => {
       assert.isFalse(yield* runtime.hasPendingBackgroundWork!);
       assert.equal(fake.activeTurns(), 0);
     }).pipe(Effect.scoped, Effect.provide(testLayer)),
+  );
+
+  it.effect("keeps a compressed session's t3-code tools attached under its new key", () =>
+    Effect.gen(function* () {
+      const fake = yield* makeFakeHermesGateway;
+      const attached = new Set<string>();
+      const bridge: HermesT3Bridge = {
+        directory: "",
+        gatewayStarting: Effect.void,
+        gatewayReady: Effect.void,
+        pluginLoaded: Effect.succeed(true),
+        profileConfigChanged: Effect.succeed(false),
+        attach: (key) => Effect.sync(() => void attached.add(key)),
+        detach: (key) => Effect.sync(() => void attached.delete(key)),
+      };
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const { runtime, takeEvent } = yield* openRuntime(fake, undefined, bridge);
+          const providerThread = yield* ensureThread(runtime);
+          const original = providerThread.nativeThreadRef!.nativeId;
+          assert.deepStrictEqual([...attached], [original]);
+
+          // Compression gives the conversation a new durable key in the middle of a turn.
+          const rotated = "20260101_000000_rotated";
+          yield* fake.events([{ type: "session.info", payload: { stored_session_id: rotated } }]);
+          yield* takeEvent(
+            (
+              event,
+            ): event is Extract<ProviderAdapterV2Event, { type: "provider_thread.updated" }> =>
+              event.type === "provider_thread.updated" &&
+              event.providerThread.nativeThreadRef?.nativeId === rotated,
+          );
+          // Calls arrive under the new key; a subagent started earlier still uses the old one.
+          assert.sameMembers([...attached], [original, rotated]);
+        }),
+      );
+      assert.deepStrictEqual([...attached], []);
+    }).pipe(Effect.provide(testLayer)),
   );
 
   it.effect("surfaces an async subagent's approval in the run that spawned it", () =>

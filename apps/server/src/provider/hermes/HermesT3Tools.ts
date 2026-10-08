@@ -153,8 +153,9 @@ export const makeHermesT3Bridge = Effect.fn("makeHermesT3Bridge")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  // `null` until a gateway is up: only a change it did not see counts.
-  let configReadAt: number | null = null;
+  // What the running gateway read: the config's modification time, or `null` when there was no
+  // file. `undefined` until a gateway is up, because only a change it did not see counts.
+  let configRead: number | null | undefined;
   const configModifiedAt =
     profileConfigPath === undefined
       ? Effect.succeed(null)
@@ -186,20 +187,22 @@ export const makeHermesT3Bridge = Effect.fn("makeHermesT3Bridge")(function* (
   return {
     directory,
     gatewayStarting: Effect.sync(() => {
-      configReadAt = null;
+      configRead = undefined;
     }).pipe(Effect.andThen(quietly("gatewayStarting", fs.remove(loadedFile, { force: true })))),
     // Taken after startup, so anything Hermes writes to its own config while starting is not a change.
     gatewayReady: configModifiedAt.pipe(
       Effect.map((modifiedAt) => {
-        configReadAt = modifiedAt;
+        configRead = modifiedAt;
       }),
     ),
     pluginLoaded: fs.exists(loadedFile).pipe(Effect.orElseSucceed(() => false)),
-    profileConfigChanged: configModifiedAt.pipe(
-      Effect.map(
-        (modifiedAt) => configReadAt !== null && modifiedAt !== null && modifiedAt !== configReadAt,
-      ),
-    ),
+    // Created, edited, and deleted all count.
+    profileConfigChanged:
+      profileConfigPath === undefined
+        ? Effect.succeed(false)
+        : configModifiedAt.pipe(
+            Effect.map((modifiedAt) => configRead !== undefined && modifiedAt !== configRead),
+          ),
     attach: (sessionKey, threadId) => {
       const session = McpProviderSession.readMcpProviderSession(threadId);
       if (session === undefined || !SESSION_KEY.test(sessionKey)) return Effect.void;

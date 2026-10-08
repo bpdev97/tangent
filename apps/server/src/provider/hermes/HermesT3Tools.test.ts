@@ -153,6 +153,15 @@ describe("Hermes t3-code tools", () => {
       yield* bridge.gatewayStarting;
       yield* bridge.gatewayReady;
       assert.isFalse(yield* bridge.profileConfigChanged);
+
+      // A profile set up through its environment has no config until the plugin is enabled.
+      yield* fs.remove(config);
+      assert.isTrue(yield* bridge.profileConfigChanged);
+      yield* bridge.gatewayStarting;
+      yield* bridge.gatewayReady;
+      assert.isFalse(yield* bridge.profileConfigChanged);
+      yield* fs.writeFileString(config, "plugins:\n  enabled:\n    - t3-code\n");
+      assert.isTrue(yield* bridge.profileConfigChanged);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
