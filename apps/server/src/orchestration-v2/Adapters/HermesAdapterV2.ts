@@ -594,6 +594,8 @@ interface HermesSubagent {
     readonly ordinal: number;
     readonly startedAt: DateTime.Utc;
   } | null;
+  /** Ends the hold that keeps the gateway from being stopped under a running subagent. */
+  readonly release: Effect.Effect<void>;
 }
 
 interface ThreadState {
@@ -1072,6 +1074,8 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
           progress: undefined,
           nextChildOrdinal: 100,
           openTool: null,
+          // It outlives the turn that spawned it, and dies with the gateway.
+          release: yield* runtime.trackTurn,
         };
         state.subagents.set(subagentId, subagent);
         yield* emit({
@@ -1193,6 +1197,7 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
 
         const finished = type === "subagent.complete";
         subagent.status = subagentStatus(type, text(payload.status));
+        if (!isOrchestrationV2WorkActive(subagent.status)) yield* subagent.release;
         if (type === "subagent.tool" || finished) {
           if (subagent.openTool !== null) {
             yield* emitChildTool(
@@ -2048,6 +2053,10 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
         );
       }).pipe(Effect.forkIn(scope));
 
+      const releaseSubagents = (state: ThreadState) =>
+        Effect.forEach([...state.subagents.values()], (subagent) => subagent.release, {
+          discard: true,
+        });
       const attachT3Tools = (state: ThreadState, threadId: ThreadId) => {
         const sessionKey = state.providerThread.nativeThreadRef?.nativeId;
         return sessionKey == null
@@ -2067,6 +2076,7 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
           const state = threadState;
           if (state !== null) {
             yield* detachT3Tools(state);
+            yield* releaseSubagents(state);
             yield* rpc(
               "session.close",
               { session_id: state.liveSessionId },
@@ -2107,6 +2117,7 @@ export function makeHermesAdapterV2(options: HermesAdapterV2Options): ProviderAd
           threadState = null;
           yield* dropAllBackgrounds;
           yield* detachT3Tools(previous);
+          yield* releaseSubagents(previous);
           yield* rpc("session.close", { session_id: previous.liveSessionId }).pipe(Effect.ignore);
         }
 

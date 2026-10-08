@@ -69,7 +69,10 @@ export interface HermesGatewayRuntime {
   /** Latest self-description from any connection since the backend started. */
   readonly info: Effect.Effect<HermesGatewayInfo | null>;
   readonly noteInfo: (payload: unknown) => Effect.Effect<void>;
-  /** Count of Hermes turns running on this backend; updates refuse while non-zero. */
+  /**
+   * Count of Hermes turns and subagents running on this backend. Nothing
+   * stops the backend on purpose while it is non-zero.
+   */
   readonly activeTurns: Effect.Effect<number>;
   readonly trackTurn: Effect.Effect<Effect.Effect<void>>;
   /** While blocked, `connect` fails with `reason` (used during updates). */
@@ -91,7 +94,7 @@ export interface HermesGatewayRuntimeOptions {
   readonly profile: string;
   readonly environment: NodeJS.ProcessEnv;
   /** Where the `t3-code` plugin finds its tool list and per-session credentials. */
-  readonly t3Bridge?: Pick<HermesT3Bridge, "directory" | "gatewayStarting">;
+  readonly t3Bridge?: Pick<HermesT3Bridge, "directory" | "gatewayStarting" | "gatewayReady">;
   readonly clientOptions?: HermesGatewayClientOptions;
 }
 
@@ -220,6 +223,7 @@ export const makeHermesGatewayRuntime = Effect.fn("makeHermesGatewayRuntime")(fu
         ),
         Effect.onError(() => Scope.close(scope, Exit.void)),
       );
+      yield* options.t3Bridge?.gatewayReady ?? Effect.void;
       current = { port, token, scope };
       return current;
     }),

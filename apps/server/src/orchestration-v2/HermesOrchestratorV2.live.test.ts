@@ -424,6 +424,7 @@ describe.runIf(process.env.T3_HERMES_LIVE_T3_TOOLS === "1")("Hermes t3-code tool
         // A stand-in for the `t3-code` MCP server: same transport and protocol,
         // two of its tool names, and a record of who called.
         const calls: Array<{ readonly authorization: string; readonly tool: string }> = [];
+        const sessionEnds: Array<number> = [];
         const recordCaller = HttpRouter.middleware()(
           Effect.succeed((httpEffect) =>
             Effect.gen(function* () {
@@ -432,7 +433,11 @@ describe.runIf(process.env.T3_HERMES_LIVE_T3_TOOLS === "1")("Hermes t3-code tool
               if (!authorization.startsWith("Bearer mcp-test:")) {
                 return HttpServerResponse.empty({ status: 401 });
               }
-              return yield* httpEffect.pipe(Effect.provideService(T3ToolsCaller, authorization));
+              const response = yield* httpEffect.pipe(
+                Effect.provideService(T3ToolsCaller, authorization),
+              );
+              if (request.method === "DELETE") sessionEnds.push(response.status);
+              return response;
             }),
           ),
         ).layer;
@@ -543,6 +548,8 @@ describe.runIf(process.env.T3_HERMES_LIVE_T3_TOOLS === "1")("Hermes t3-code tool
             { authorization: `Bearer mcp-test:${second}`, tool: "list_thread_pull_requests" },
             { authorization: `Bearer mcp-test:${second}`, tool: "html_preview" },
           ]);
+          // The plugin opens an MCP session per call; the server must let it end each one.
+          assert.deepEqual(sessionEnds, [204, 204, 204, 204]);
 
           // Stopping a run must not wait for a tool Tangent has not answered.
           yield* orchestrator.dispatch({
