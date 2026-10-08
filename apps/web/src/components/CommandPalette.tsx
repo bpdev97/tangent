@@ -80,6 +80,7 @@ import {
   PinIcon,
   PinOffIcon,
   PlugIcon,
+  TagIcon,
   SquarePenIcon,
   TextSearchIcon,
   UserPlusIcon,
@@ -169,6 +170,7 @@ import {
   resolveProjectPathForDispatch,
 } from "@t3tools/client-runtime/state/projects";
 import { resolvePastedPath } from "@t3tools/shared/path";
+import { openReleaseNotes } from "../lib/releaseNotes";
 import {
   dispatchCommandPalette,
   getCommandPaletteReturnFocus,
@@ -1777,6 +1779,19 @@ function OpenCommandPaletteDialog(props: {
       },
     });
   }
+
+  // Tangent(FORK-NOTES-001)
+  actionItems.push({
+    kind: "action",
+    value: "action:release-notes",
+    searchTerms: ["release notes", "whats new", "changelog", "changes", "update", "version"],
+    // oxlint-disable-next-line t3code/no-untranslated-copy -- Tangent fork copy stays English
+    title: "Show release notes",
+    icon: <TagIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      openReleaseNotes();
+    },
+  });
 
   actionItems.push({
     kind: "action",
