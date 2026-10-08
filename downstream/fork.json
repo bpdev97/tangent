@@ -30,6 +30,7 @@
     "FORK-LAN-001": "docs/fork/lan-fallback.md",
     "FORK-HOST-001": "docs/fork/project-default-host.md",
     "FORK-STATUS-001": "docs/fork/quiet-connection-status.md",
-    "FORK-NOTES-001": "docs/fork/release-notes.md"
+    "FORK-NOTES-001": "docs/fork/release-notes.md",
+    "FORK-CONNECT-001": "docs/fork/t3-connect.md"
   }
 }

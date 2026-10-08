@@ -37,6 +37,7 @@ import { Command, Flag, GlobalFlag } from "effect/cli";
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
+import { layerConnectPairing, resolveConnectPairingBase } from "../cloud/connectPairing.ts";
 import * as ServerConfig from "../config.ts";
 import { resolveBaseDir } from "../os-jank.ts";
 import {
@@ -476,6 +477,14 @@ const tailscaleServePortFlag = Flag.Int("tailscale-serve-port").pipe(
   Flag.withDefault(DEFAULT_TAILSCALE_SERVE_PORT),
 );
 
+// Tangent(FORK-CONNECT-001)
+const connectFlag = Flag.Boolean("connect").pipe(
+  Flag.withDescription(
+    "Pair through this machine's T3 Connect address, for a device that cannot reach it directly. Ignored with --tailscale.",
+  ),
+  Flag.withDefault(false),
+);
+
 export const pairCommand = Command.make("pair", {
   baseDir: baseDirFlag,
   scopes: authScopesFlag(AuthStandardClientScopes),
@@ -483,6 +492,7 @@ export const pairCommand = Command.make("pair", {
   label: labelFlag,
   tailscale: tailscaleFlag,
   tailscaleServePort: tailscaleServePortFlag,
+  connect: connectFlag,
 }).pipe(
   Command.withDescription(
     "Mint a pairing token for a running T3 Code server and print it as a QR code.",
@@ -503,6 +513,16 @@ export const pairCommand = Command.make("pair", {
           target,
           servePort: flags.tailscaleServePort,
         });
+        pairingBaseUrl = resolved.baseUrl;
+        notes.push(...resolved.notes);
+      } else if (flags.connect) {
+        // Tangent(FORK-CONNECT-001)
+        const resolved = yield* resolveConnectPairingBase({
+          environmentId: target.descriptor.environmentId,
+          probe: awaitEnvironmentDescriptor,
+        }).pipe(
+          Effect.provide(layerConnectPairing(yield* makePairServerConfig({ target, logLevel }))),
+        );
         pairingBaseUrl = resolved.baseUrl;
         notes.push(...resolved.notes);
       } else {

@@ -25,6 +25,13 @@ environment. Over SSH, the CLI prints a browser link and a short code. Open the
 link on any device, confirm the code matches, and approve. The CLI continues on
 its own, so you do not need to forward an OAuth callback port.
 
+In Tangent, the apps do not sign in to T3 Connect. Link the host with
+`t3 connect`, then run `t3 pair --connect` on it and scan the code on your
+phone: **Add route** for a machine you already paired, **Add environment** for a
+new one. The phone then reaches the host through its T3 Connect address without
+Tailscale. Webhook URLs work once the host is linked; holding webhooks while the
+host is offline is not available.
+
 T3 Connect renews access credentials when needed without disconnecting a healthy
 connection. Pull request diffs and provider settings keep working after the
 previous credential expires. A failed renewal affects that request; it does not
