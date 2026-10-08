@@ -20,6 +20,8 @@ export type SettingsSheetTarget =
   | "SettingsClientStorage"
   | "SettingsDiagnostics"
   | "SettingsOpenSourceLicenses"
+  // Tangent(FORK-NOTES-001)
+  | "SettingsReleaseNotes"
   | "SettingsUsage";
 
 export type SettingsLegalDocumentTarget = "SettingsLegal";

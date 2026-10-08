@@ -724,8 +724,14 @@ function publish() {
     git("push", lease, "origin", `HEAD:refs/heads/${branch}`);
     console.log(`Pushed ${head.slice(0, 10)} to origin/${branch}.`);
   }
+  // The iOS app cannot tell which release it is, so its build is stamped with this version. A
+  // commit released earlier has it in its tag; while that release is still building there is no
+  // tag yet, and the iOS build goes out unstamped rather than guessing.
+  let version: string | undefined;
   if (released(head, MACOS_WORKFLOW)) {
     console.log("macOS and server release already started or done for this commit.");
+    const [tag] = git("tag", "--points-at", head, "--list", "personal-v*").split("\n");
+    version = tag ? tag.replace(/^personal-v/, "") : undefined;
   } else {
     const releases = attempt("gh", [
       "api",
@@ -738,7 +744,7 @@ function publish() {
       ...git("tag", "--list", "personal-v*").split("\n"),
       ...(releases.ok ? releases.stdout.split("\n") : []),
     ];
-    const version = process.argv[3] ?? nextPatchVersion(tags);
+    version = process.argv[3] ?? nextPatchVersion(tags);
     if (!/^\d+\.\d+\.\d+$/.test(version)) throw new SyncStop(`Invalid version: ${version}`);
     gh(
       "workflow",
@@ -770,8 +776,9 @@ function publish() {
       "mode=auto",
       "-f",
       `message=Tangent ${git("log", "-1", "--format=%h")}: see the macOS release notes`,
+      ...(version ? ["-f", `version=${version}`] : []),
     );
-    console.log(`Started ${IOS_WORKFLOW} in auto mode.`);
+    console.log(`Started ${IOS_WORKFLOW} in auto mode${version ? ` for ${version}` : ""}.`);
   }
   // GitHub enables newly added workflow files, including ones a sync brings in from upstream.
   const workflows = JSON.parse(
