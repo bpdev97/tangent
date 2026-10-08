@@ -101,6 +101,8 @@ export interface Preferences {
   readonly pullRequestListFilters?: PullRequestListPreferences;
   /** Tangent(FORK-HOST-001): logical project key to the environment new threads start on. */
   readonly projectDefaultHosts?: ProjectDefaultHosts;
+  /** Tangent(FORK-NOTES-001): the release this device last ran, to notice an update. */
+  readonly releaseNotesLastSeenVersion?: string;
 }
 
 export class MobilePreferencesLoadError extends Schema.TaggedError<MobilePreferencesLoadError>()(
@@ -170,6 +172,7 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     threadListFilters?: ThreadListFilters;
     pullRequestListFilters?: PullRequestListPreferences;
     projectDefaultHosts?: ProjectDefaultHosts;
+    releaseNotesLastSeenVersion?: string;
   } = {};
 
   if (typeof parsed.pullRequestHideTestFiles === "boolean") {
@@ -293,6 +296,10 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   // Tangent(FORK-HOST-001)
   const projectDefaultHosts = sanitizeProjectDefaultHosts(parsed.projectDefaultHosts);
   if (projectDefaultHosts) preferences.projectDefaultHosts = projectDefaultHosts;
+  // Tangent(FORK-NOTES-001)
+  if (typeof parsed.releaseNotesLastSeenVersion === "string") {
+    preferences.releaseNotesLastSeenVersion = parsed.releaseNotesLastSeenVersion;
+  }
   return preferences;
 }
 
