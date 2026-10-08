@@ -1001,13 +1001,23 @@ export const SETTINGS_SEARCH_ITEMS = [
   // Tangent(FORK-PUSH-001)
   {
     id: "personal-push-relay",
+    // oxlint-disable-next-line t3code/no-untranslated-copy -- Tangent fork copy stays English
     title: "Personal push relay",
     to: "/settings/general",
     scope: "environment",
     searchTerms: ["notifications live activities apns ios tailnet password"],
   },
+  // Tangent(FORK-NOTES-001)
+  {
+    id: "release-notes",
+    // oxlint-disable-next-line t3code/no-untranslated-copy -- Tangent fork copy stays English
+    title: "Release notes",
+    to: "/settings/about",
+    searchTerms: ["whats new changelog changes update version"],
+  },
   {
     id: "personal-push-quiet",
+    // oxlint-disable-next-line t3code/no-untranslated-copy -- Tangent fork copy stays English
     title: "Quiet phone after desktop activity",
     to: "/settings/general",
     scope: "environment",
@@ -1088,6 +1098,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   // Tangent(FORK-MCP-001)
   {
     id: "mcp-servers",
+    // oxlint-disable-next-line t3code/no-untranslated-copy -- Tangent fork copy stays English
     title: "MCP servers",
     to: "/settings/providers",
     searchTerms: ["model context protocol tools executor http url headers add remove agents"],

@@ -141,6 +141,9 @@ function AppSettingsSection() {
         target="SettingsOpenSourceLicenses"
       />
       <SettingsRow icon="doc.text" label={gt("Legal")} fullScreenTarget="SettingsLegal" />
+      {/* Tangent(FORK-NOTES-001) */}
+      {/* oxlint-disable-next-line t3code/no-untranslated-copy -- Tangent fork copy stays English */}
+      <SettingsRow icon="tag" label="Release notes" target="SettingsReleaseNotes" />
       {updateCheckAvailable ? (
         <Pressable
           accessibilityLabel={gt("Version {version}", { version: versionLabel })}

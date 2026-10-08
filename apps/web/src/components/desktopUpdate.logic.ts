@@ -1,6 +1,7 @@
 import { desktopTrackMismatchText } from "@t3tools/client-runtime/state/server";
 import type { DesktopUpdateActionResult, DesktopUpdateState } from "@t3tools/contracts";
 import { desktopUpdateChannelOf } from "@t3tools/shared/cliRelease";
+import { RELEASE_NOTES_REPOSITORY, RELEASE_NOTES_TAG_PREFIX } from "@t3tools/shared/releaseNotes";
 import { msg } from "gt-react";
 
 import { m, type MessageResolver } from "../i18n/messages";
@@ -8,7 +9,8 @@ import { channelSwitchLabel } from "./sidebar/updateEverything.logic";
 
 export type DesktopUpdateButtonAction = "download" | "install" | "none";
 
-const DEFAULT_DESKTOP_RELEASE_REPOSITORY = "pingdotgg/t3code";
+// Tangent(FORK-NOTES-001): Tangent's releases and tags, not upstream's.
+const DEFAULT_DESKTOP_RELEASE_REPOSITORY = RELEASE_NOTES_REPOSITORY;
 const GITHUB_REPOSITORY_SEGMENT = /^[A-Za-z0-9._-]+$/u;
 
 function isValidRepositorySegment(value: string | undefined): value is string {
@@ -38,7 +40,7 @@ export function getDesktopUpdateReleaseUrl(
 ): string | null {
   const normalizedVersion = version?.trim();
   if (!normalizedVersion) return null;
-  return `${desktopReleaseRepositoryUrl(repository)}/tag/v${encodeURIComponent(normalizedVersion)}`;
+  return `${desktopReleaseRepositoryUrl(repository)}/tag/${RELEASE_NOTES_TAG_PREFIX}${encodeURIComponent(normalizedVersion)}`;
 }
 
 export function getDesktopUpdateReleaseHistoryUrl(
