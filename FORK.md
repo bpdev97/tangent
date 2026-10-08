@@ -49,6 +49,7 @@ rebased onto upstream rather than merging it, so each feature stays one commit.
 | `FORK-LAN-001`     | Upstream's background service listens on loopback only; `t3 service install --host` keeps headless hosts reachable on the local network       | [local network address](docs/fork/lan-fallback.md)              | Active |
 | `FORK-HOST-001`    | Each client can choose which server new threads start on for a project that lives on several                                                  | [default host](docs/fork/project-default-host.md)               | Active |
 | `FORK-STATUS-001`  | An asleep or unreachable laptop is normal; the header shows a small mark beside the brand instead of "Reconnecting" text                      | [quiet connection status](docs/fork/quiet-connection-status.md) | Active |
+| `FORK-NOTES-001`   | Tangent's release notes live on GitHub; each client offers them once after an update and keeps them in Settings                               | [release notes](docs/fork/release-notes.md)                     | Active |
 
 ## Removed, do not reintroduce
 
