@@ -1,4 +1,4 @@
-import type { ThreadId } from "@t3tools/contracts";
+import type { ClientActivityLease, OrchestrationV2ThreadShell, ThreadId } from "@t3tools/contracts";
 import type { RelayAgentActivityState } from "@t3tools/contracts/relay";
 import { projectThreadAwarenessV2 } from "@t3tools/shared/agentAwareness";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
@@ -9,7 +9,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
+import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
@@ -24,7 +26,8 @@ import * as PersonalPushRelay from "./PersonalPushRelayClient.ts";
 
 const DETAIL_MAX_LENGTH = 160;
 const REDACTED_FAILURE_DETAIL = "The agent run failed.";
-const CONFIRMATION_DELAY = "5 seconds";
+const TOMBSTONE_CONFIRMATION_MS = 5_000;
+const COMPLETION_HOLD_MS = 10_000;
 
 export class PersonalAgentActivitySink extends Context.Service<
   PersonalAgentActivitySink,
@@ -64,16 +67,76 @@ export function publishIdentity(state: RelayAgentActivityState | null): string {
 }
 
 /**
- * Tombstones replacing live state and a first-ever "completed" can both be
- * transient while projections settle, so they are published only if they
- * still hold after a short delay.
+ * How long a state must keep holding before it is published; 0 publishes at
+ * once. A tombstone replacing live state can be transient while projections
+ * settle. "Done" is held longer because an agent that wakes itself, or takes
+ * a queued message, is working again within seconds and the alert would be
+ * untrue by the time it arrived. Approvals, input requests, and failures are
+ * never held.
  */
-export function requiresConfirmation(
+export function confirmationDelayMs(
   state: RelayAgentActivityState | null,
   previousIdentity: string | undefined,
-): boolean {
-  if (state === null) return previousIdentity !== publishIdentity(null);
-  return state.phase === "completed" && previousIdentity === undefined;
+): number {
+  if (state === null) {
+    return previousIdentity === publishIdentity(null) ? 0 : TOMBSTONE_CONFIRMATION_MS;
+  }
+  return state.phase === "completed" ? COMPLETION_HOLD_MS : 0;
+}
+
+const TOMBSTONE_HOLD_KEY = "tombstone";
+
+/**
+ * Names what a held publish is waiting on. A completion is named by its run,
+ * not just its phase: this worker handles one thread at a time, so a thread
+ * can resume and finish a second run before its first hold is looked at
+ * again, and the second "Done" must wait its own ten seconds. A rename keeps
+ * the same key and so keeps its deadline.
+ */
+function holdKey(
+  phase: RelayAgentActivityState["phase"],
+  thread: Pick<OrchestrationV2ThreadShell, "latestRunId" | "latestRunCompletedAt">,
+): string {
+  const completedAt =
+    thread.latestRunCompletedAt == null ? "" : DateTime.toEpochMillis(thread.latestRunCompletedAt);
+  return `${phase}:${thread.latestRunId ?? ""}:${completedAt}`;
+}
+
+/**
+ * When a desktop or web client last reported the user interacting, from the
+ * leases the background policy currently holds. Clients report a boolean
+ * covering their last 45 seconds, so the result trails the real interaction
+ * by up to about a minute.
+ */
+export function latestDesktopInteractionMs(
+  leases: ReadonlyArray<
+    Pick<ClientActivityLease, "clientKind" | "recentlyInteracted" | "updatedAt">
+  >,
+): number | null {
+  let latest: number | null = null;
+  for (const lease of leases) {
+    if (lease.clientKind !== "web" && lease.clientKind !== "desktop-renderer") continue;
+    if (!lease.recentlyInteracted) continue;
+    const updatedAtMs = DateTime.toEpochMillis(lease.updatedAt);
+    if (latest === null || updatedAtMs > latest) latest = updatedAtMs;
+  }
+  return latest;
+}
+
+/**
+ * Whether a publication should update the Live Activity without alerting the
+ * phone: the user was at the desktop within the configured window and the
+ * thread only finished or failed. Requests that block the agent always alert.
+ */
+function isQuietedByDesktopActivity(input: {
+  readonly phase: RelayAgentActivityState["phase"] | undefined;
+  readonly quietMinutes: number;
+  readonly lastDesktopInteractionMs: number | null;
+  readonly nowMs: number;
+}): boolean {
+  if (input.phase !== "completed" && input.phase !== "failed") return false;
+  if (input.quietMinutes <= 0 || input.lastDesktopInteractionMs === null) return false;
+  return input.nowMs - input.lastDesktopInteractionMs <= input.quietMinutes * 60_000;
 }
 
 export const make = Effect.gen(function* () {
@@ -82,25 +145,57 @@ export const make = Effect.gen(function* () {
   const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
   const threads = yield* ThreadManagement.ThreadManagementService;
   const projects = yield* ProjectService.ProjectService;
+  const backgroundPolicy = yield* BackgroundPolicy.BackgroundPolicy;
   const scope = yield* Effect.scope;
 
   const published = new Map<ThreadId, string>();
-  const confirmDeadlines = new Map<ThreadId, number>();
+  // What a pending publish is waiting on (see `holdKey`) and when it may go
+  // out. A different key restarts the wait; the same one keeps its deadline.
+  const confirmDeadlines = new Map<
+    ThreadId,
+    { readonly key: string; readonly deadlineMs: number }
+  >();
+  // Leases only say whether a client is interacting now, so the last time one
+  // did is remembered here for the quiet window. This is best effort: the
+  // policy keeps only its newest snapshot for a slow reader, so a report is
+  // missed if its client disconnects in the same instant. Clients report
+  // every 25 seconds while in use, so that usually costs one interval of the
+  // window; a first report after a long idle can lose the window entirely.
+  // Either way the result is an extra "Done", never a silenced approval,
+  // which does not justify a hook in upstream's report path.
+  let lastDesktopInteractionMs: number | null = null;
+  yield* Stream.runForEach(backgroundPolicy.streamChanges, (snapshot) =>
+    Effect.sync(() => {
+      const latest = latestDesktopInteractionMs(snapshot.leases);
+      if (
+        latest !== null &&
+        (lastDesktopInteractionMs === null || lastDesktopInteractionMs < latest)
+      ) {
+        lastDesktopInteractionMs = latest;
+      }
+    }),
+  ).pipe(Effect.forkIn(scope));
   let publishedRelayUrl: string | null = null;
   const queued = new Set<ThreadId>();
 
   const readState = Effect.fnUntraced(function* (threadId: ThreadId) {
     const environmentId = yield* serverEnvironment.getEnvironmentId;
     const shell = yield* threads.getThreadShell(threadId);
-    if (shell === null || shell.archivedAt !== null) return { environmentId, state: null };
+    if (shell === null || shell.archivedAt !== null) {
+      return { environmentId, state: null, holdKey: TOMBSTONE_HOLD_KEY };
+    }
     const project = yield* projects.getById(shell.projectId);
-    if (Option.isNone(project)) return { environmentId, state: null };
+    if (Option.isNone(project)) return { environmentId, state: null, holdKey: TOMBSTONE_HOLD_KEY };
     const state = projectThreadAwarenessV2({
       environmentId,
       project: project.value,
       thread: shell,
     });
-    return { environmentId, state: sanitizeState(state) };
+    return {
+      environmentId,
+      state: sanitizeState(state),
+      holdKey: state === null ? TOMBSTONE_HOLD_KEY : holdKey(state.phase, shell),
+    };
   });
 
   let enqueue: (threadId: ThreadId) => Effect.Effect<void> = () => Effect.void;
@@ -119,35 +214,47 @@ export const make = Effect.gen(function* () {
       publishedRelayUrl = client.relayUrl;
     }
 
-    const { environmentId, state } = yield* readState(threadId);
+    const { environmentId, state, holdKey: key } = yield* readState(threadId);
     const identity = publishIdentity(state);
     const previous = published.get(threadId);
     if (previous === identity) {
       confirmDeadlines.delete(threadId);
       return;
     }
-    if (requiresConfirmation(state, previous)) {
-      const nowMs = (yield* DateTime.now).epochMilliseconds;
-      const deadline = confirmDeadlines.get(threadId);
-      if (deadline === undefined) {
-        confirmDeadlines.set(threadId, nowMs + 5_000);
-        yield* Effect.sleep(CONFIRMATION_DELAY).pipe(
+    const nowMs = (yield* DateTime.now).epochMilliseconds;
+    const delayMs = confirmationDelayMs(state, previous);
+    if (delayMs > 0) {
+      const pending = confirmDeadlines.get(threadId);
+      if (pending === undefined || pending.key !== key) {
+        confirmDeadlines.set(threadId, { key, deadlineMs: nowMs + delayMs });
+        yield* Effect.sleep(delayMs).pipe(
           Effect.andThen(Effect.suspend(() => enqueue(threadId))),
           Effect.forkIn(scope),
         );
         return;
       }
-      if (nowMs < deadline) return;
+      if (nowMs < pending.deadlineMs) return;
     }
     confirmDeadlines.delete(threadId);
 
+    const quietMinutes = yield* settings.getSettings.pipe(
+      Effect.map((current) => current.personalPushRelay.quietAfterDesktopActivityMinutes),
+      Effect.orElseSucceed(() => 0),
+    );
+    const silent = isQuietedByDesktopActivity({
+      phase: state?.phase,
+      quietMinutes,
+      lastDesktopInteractionMs,
+      nowMs,
+    });
     yield* client
-      .publish({ environmentId, threadId, state })
+      .publish({ environmentId, threadId, state, ...(silent ? { silent } : {}) })
       .pipe(Effect.retry({ times: 4, schedule: Schedule.exponential("1 second") }));
     published.set(threadId, identity);
     yield* Effect.logDebug("personal agent activity published", {
       threadId,
       statePhase: state?.phase ?? null,
+      silent,
     });
   });
 

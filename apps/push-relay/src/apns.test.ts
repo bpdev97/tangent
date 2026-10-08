@@ -36,7 +36,7 @@ const aggregate: RelayAgentActivityAggregateState = {
 };
 
 describe("APNs request construction", () => {
-  it("constructs a standard alert with stable thread collapsing", () => {
+  it("groups a thread's alerts without reusing one notification identifier", () => {
     const request = makeNotificationRequest(apnsConfig, {
       token: "notification-token",
       state,
@@ -48,7 +48,6 @@ describe("APNs request construction", () => {
       pushType: "alert",
       priority: "10",
       environment: "production",
-      collapseId: expect.stringMatching(/^[a-f0-9]{64}$/),
       payload: {
         aps: {
           alert: {
@@ -56,6 +55,7 @@ describe("APNs request construction", () => {
             body: "Approval needed: Push relay",
           },
           sound: "default",
+          "thread-id": "environment-1/thread-1",
         },
         environmentId: "environment-1",
         threadId: "thread-1",

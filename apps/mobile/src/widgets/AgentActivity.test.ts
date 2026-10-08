@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 vi.mock("@expo/ui/swift-ui", () => ({
   HStack: "HStack",
   Image: "Image",
+  Link: "Link",
   Spacer: "Spacer",
   Text: "Text",
   VStack: "VStack",
@@ -208,6 +209,31 @@ describe("AgentActivity widget layout", () => {
     );
   });
 
+  it("opens the tapped row's own thread from the banner and the expanded island", () => {
+    const layout = AgentActivity(
+      {
+        ...props,
+        activeCount: 1,
+        activities: [
+          makeRow({ threadTitle: "Still working" }),
+          makeRow({
+            threadId: "thread-2",
+            threadTitle: "Just finished",
+            phase: "completed",
+            status: "Done",
+            deepLink: "/threads/env-1/thread-2",
+          }),
+        ],
+      },
+      environment as never,
+    );
+    for (const presentation of [layout.banner, layout.expandedBottom]) {
+      const rendered = JSON.stringify(presentation);
+      expect(rendered).toContain('"destination":"bpdev-code://threads/env-1/thread-1"');
+      expect(rendered).toContain('"destination":"bpdev-code://threads/env-1/thread-2"');
+    }
+  });
+
   it("omits the deep link for unsafe paths and empty aggregates", () => {
     expect(JSON.stringify(AgentActivity(props, environment as never))).not.toContain("widgetURL");
     expect(
@@ -217,7 +243,7 @@ describe("AgentActivity widget layout", () => {
           environment as never,
         ),
       ),
-    ).not.toContain("widgetURL");
+    ).not.toMatch(/widgetURL|destination/);
   });
 
   it("leads with the outcome instead of a zero count when nothing is active", () => {

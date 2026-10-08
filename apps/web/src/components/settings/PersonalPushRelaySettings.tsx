@@ -1,6 +1,7 @@
 import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId } from "@t3tools/contracts";
 import {
+  PERSONAL_PUSH_QUIET_MINUTES_OPTIONS,
   PERSONAL_PUSH_RELAY_PASSWORD_REDACTED,
   type PersonalPushRelaySettings,
   type PersonalPushRelayTestResult,
@@ -11,6 +12,7 @@ import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { toastManager } from "../ui/toast";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
@@ -22,6 +24,11 @@ import { useScopedSettings } from "./useScopedSettings";
 // and only reports whether one is saved.
 
 const MIN_PASSWORD_LENGTH = 32;
+
+function describeQuietMinutes(minutes: number): string {
+  if (minutes === 0) return "Off";
+  return minutes === 1 ? "1 minute" : `${minutes} minutes`;
+}
 
 function describeTestFailure(result: PersonalPushRelayTestResult): string {
   switch (result.failure) {
@@ -43,10 +50,77 @@ export function PersonalPushRelaySettingsSection() {
   if (scope.environmentIds.length !== 1 || environmentId === null) return null;
   // Keyed so the draft resets when the environment or the saved URL changes.
   return (
-    <PersonalPushRelayForm
-      key={`${environmentId}:${saved.url}`}
-      environmentId={environmentId}
-      saved={saved}
+    <SettingsSection title="Notifications">
+      <PersonalPushRelayForm
+        key={`${environmentId}:${saved.url}`}
+        environmentId={environmentId}
+        saved={saved}
+      />
+      <PersonalPushQuietRow
+        environmentId={environmentId}
+        minutes={saved.quietAfterDesktopActivityMinutes}
+      />
+    </SettingsSection>
+  );
+}
+
+function PersonalPushQuietRow({
+  environmentId,
+  minutes,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly minutes: number;
+}) {
+  const persistServerSettings = useAtomCommand(serverEnvironment.updateSettings, {
+    reportFailure: false,
+  });
+  const save = useCallback(
+    async (next: number) => {
+      const result = await persistServerSettings({
+        environmentId,
+        input: { patch: { personalPushRelay: { quietAfterDesktopActivityMinutes: next } } },
+      });
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        toastManager.add({
+          type: "error",
+          title: "Could not save quiet window",
+          description: "The notification settings were not changed.",
+        });
+      }
+    },
+    [environmentId, persistServerSettings],
+  );
+  // A hand-edited value outside the presets still shows as itself.
+  const options = PERSONAL_PUSH_QUIET_MINUTES_OPTIONS.includes(
+    minutes as (typeof PERSONAL_PUSH_QUIET_MINUTES_OPTIONS)[number],
+  )
+    ? PERSONAL_PUSH_QUIET_MINUTES_OPTIONS
+    : [...PERSONAL_PUSH_QUIET_MINUTES_OPTIONS, minutes].toSorted((a, b) => a - b);
+
+  return (
+    <SettingsRow
+      {...searchableSetting("personal-push-quiet")}
+      description="After you use the desktop or web app, finished and failed threads stay off your phone for this long. Approvals and input requests always come through."
+      control={
+        <Select
+          value={String(minutes)}
+          onValueChange={(value) => {
+            const next = Number(value);
+            if (Number.isInteger(next) && next !== minutes) void save(next);
+          }}
+        >
+          <SelectTrigger size="sm" aria-label="Quiet phone after desktop activity">
+            <SelectValue>{(value: string) => describeQuietMinutes(Number(value))}</SelectValue>
+          </SelectTrigger>
+          <SelectPopup align="end" alignItemWithTrigger={false}>
+            {options.map((option) => (
+              <SelectItem key={option} value={String(option)}>
+                {describeQuietMinutes(option)}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      }
     />
   );
 }
@@ -155,63 +229,61 @@ function PersonalPushRelayForm({
   }, [busy, dirty, environmentId, testRelay]);
 
   return (
-    <SettingsSection title="Notifications">
-      <SettingsRow
-        {...searchableSetting("personal-push-relay")}
-        description={`Route iOS notifications and Live Activity updates through your self-hosted relay. The password must be at least ${MIN_PASSWORD_LENGTH} characters.`}
-        control={
-          <div className="flex w-full max-w-md flex-col gap-2">
-            <Input
-              value={url}
-              onChange={(event) => setUrl(event.target.value)}
-              placeholder="http://100.x.y.z:8788"
-              inputMode="url"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              aria-label="Personal push relay URL"
-            />
-            <Input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder={
-                passwordSaved ? "Password saved. Enter a new one to replace it." : "Relay password"
-              }
-              autoComplete="new-password"
-              spellCheck={false}
-              aria-label="Personal push relay password"
-            />
-            <div className="flex justify-end gap-2">
-              {saved.url || passwordSaved ? (
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  disabled={busy !== null}
-                  onClick={() => void clear()}
-                >
-                  Remove
-                </Button>
-              ) : null}
+    <SettingsRow
+      {...searchableSetting("personal-push-relay")}
+      description={`Route iOS notifications and Live Activity updates through your self-hosted relay. The password must be at least ${MIN_PASSWORD_LENGTH} characters.`}
+      control={
+        <div className="flex w-full max-w-md flex-col gap-2">
+          <Input
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            placeholder="http://100.x.y.z:8788"
+            inputMode="url"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-label="Personal push relay URL"
+          />
+          <Input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder={
+              passwordSaved ? "Password saved. Enter a new one to replace it." : "Relay password"
+            }
+            autoComplete="new-password"
+            spellCheck={false}
+            aria-label="Personal push relay password"
+          />
+          <div className="flex justify-end gap-2">
+            {saved.url || passwordSaved ? (
               <Button
                 size="xs"
-                variant="outline"
-                disabled={!passwordSaved || dirty || busy !== null}
-                onClick={() => void test()}
+                variant="ghost"
+                disabled={busy !== null}
+                onClick={() => void clear()}
               >
-                {busy === "testing" ? "Testing…" : "Test connection"}
+                Remove
               </Button>
-              <Button
-                size="xs"
-                disabled={!draftValid || !dirty || busy !== null}
-                onClick={() => void save()}
-              >
-                {busy === "saving" ? "Saving…" : "Save"}
-              </Button>
-            </div>
+            ) : null}
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={!passwordSaved || dirty || busy !== null}
+              onClick={() => void test()}
+            >
+              {busy === "testing" ? "Testing…" : "Test connection"}
+            </Button>
+            <Button
+              size="xs"
+              disabled={!draftValid || !dirty || busy !== null}
+              onClick={() => void save()}
+            >
+              {busy === "saving" ? "Saving…" : "Save"}
+            </Button>
           </div>
-        }
-      />
-    </SettingsSection>
+        </div>
+      }
+    />
   );
 }

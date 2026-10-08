@@ -49,6 +49,8 @@ export interface PendingDelivery {
   readonly environmentId: string;
   readonly threadId: string;
   readonly state: RelayAgentActivityState | null;
+  /** Deliver the Live Activity update but no alert. */
+  readonly silent: boolean;
   readonly attempts: number;
 }
 
@@ -98,12 +100,24 @@ export class RelayStore {
         attempts INTEGER NOT NULL DEFAULT 0,
         next_attempt_at INTEGER NOT NULL,
         expires_at INTEGER NOT NULL,
+        silent INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (device_id, environment_id, thread_id)
       );
     `);
+    this.#migratePendingDeliverySilence();
     this.#migrateDeliveryWatermarks();
     this.#migrateActivityExpiry();
     this.pruneExpiredActivities();
+  }
+
+  #migratePendingDeliverySilence(): void {
+    const columns = this.#database
+      .prepare("PRAGMA table_info(pending_deliveries)")
+      .all() as unknown as TableColumnRow[];
+    if (columns.some((column) => column.name === "silent")) return;
+    this.#database.exec(
+      "ALTER TABLE pending_deliveries ADD COLUMN silent INTEGER NOT NULL DEFAULT 0",
+    );
   }
 
   #migrateActivityExpiry(): void {
@@ -241,6 +255,7 @@ export class RelayStore {
     readonly environmentId: string;
     readonly threadId: string;
     readonly state: RelayAgentActivityState | null;
+    readonly silent?: boolean | undefined;
   }): void {
     const now = Date.now();
     this.#database.exec("BEGIN IMMEDIATE");
@@ -253,11 +268,12 @@ export class RelayStore {
       }
       this.#database
         .prepare(`
-        INSERT INTO pending_deliveries (device_id, environment_id, thread_id, state_json, next_attempt_at, expires_at)
-        SELECT device_id, ?, ?, ?, ?, ? FROM devices WHERE true
+        INSERT INTO pending_deliveries (device_id, environment_id, thread_id, state_json, next_attempt_at, expires_at, silent)
+        SELECT device_id, ?, ?, ?, ?, ?, ? FROM devices WHERE true
         ON CONFLICT(device_id, environment_id, thread_id) DO UPDATE SET
           state_json = excluded.state_json, attempts = 0,
-          next_attempt_at = excluded.next_attempt_at, expires_at = excluded.expires_at
+          next_attempt_at = excluded.next_attempt_at, expires_at = excluded.expires_at,
+          silent = excluded.silent
       `)
         .run(
           input.environmentId,
@@ -265,6 +281,7 @@ export class RelayStore {
           input.state ? JSON.stringify(input.state) : null,
           now,
           input.state ? activityExpiresAtMs(input.state) : now + 15 * 60_000,
+          input.silent === true ? 1 : 0,
         );
       this.#database.exec("COMMIT");
     } catch (error) {
@@ -278,7 +295,7 @@ export class RelayStore {
     this.#database.prepare("DELETE FROM notification_phases WHERE expires_at < ?").run(now);
     const rows = this.#database
       .prepare(`
-      SELECT device_id, environment_id, thread_id, state_json, attempts
+      SELECT device_id, environment_id, thread_id, state_json, attempts, silent
       FROM pending_deliveries WHERE next_attempt_at <= ? ORDER BY next_attempt_at LIMIT 256
     `)
       .all(now) as unknown as Array<{
@@ -287,12 +304,14 @@ export class RelayStore {
       thread_id: string;
       state_json: string | null;
       attempts: number;
+      silent: number;
     }>;
     return rows.map((row) => ({
       deviceId: row.device_id,
       environmentId: row.environment_id,
       threadId: row.thread_id,
       state: row.state_json ? (JSON.parse(row.state_json) as RelayAgentActivityState) : null,
+      silent: row.silent === 1,
       attempts: row.attempts,
     }));
   }

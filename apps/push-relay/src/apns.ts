@@ -28,7 +28,6 @@ export interface ApnsPreparedRequest {
   readonly priority: "5" | "10";
   readonly payload: unknown;
   readonly environment: ApnsEnvironment;
-  readonly collapseId?: string;
 }
 
 interface ApnsRequest extends ApnsPreparedRequest {
@@ -148,7 +147,6 @@ export class ApnsClient implements ApnsDeliveryClient {
           "apns-priority": request.priority,
           "apns-id": request.apnsId,
           "content-type": "application/json",
-          ...(request.collapseId ? { "apns-collapse-id": request.collapseId } : {}),
         });
       } catch (error) {
         fail(error instanceof Error ? error : new Error(String(error)));
@@ -235,9 +233,6 @@ export function makeNotificationRequest(
     pushType: "alert",
     priority: "10",
     environment: input.environment ?? config.environment,
-    collapseId: NodeCrypto.createHash("sha256")
-      .update(`${input.state.environmentId}:${input.state.threadId}`)
-      .digest("hex"),
     payload: {
       aps: {
         alert: {
@@ -245,6 +240,10 @@ export function makeNotificationRequest(
           body: `${statusForPhase(input.state.phase)}: ${input.state.projectTitle}`,
         },
         sound: "default",
+        // Stacks a thread's alerts in Notification Center. Never an
+        // apns-collapse-id: iOS reuses that as the notification identifier,
+        // and the app drops a tap whose identifier it has already handled.
+        "thread-id": `${input.state.environmentId}/${input.state.threadId}`,
       },
       environmentId: input.state.environmentId,
       threadId: input.state.threadId,

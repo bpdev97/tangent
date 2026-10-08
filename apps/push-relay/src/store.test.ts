@@ -83,6 +83,58 @@ describe("RelayStore migrations", () => {
     store.close();
   });
 
+  it("adds the silent flag to a pending-delivery table created before it existed", () => {
+    const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "push-relay-store-"));
+    temporaryDirectories.push(directory);
+    const databasePath = NodePath.join(directory, "relay.sqlite");
+    const database = new NodeSqlite.DatabaseSync(databasePath);
+    database.exec(`
+      CREATE TABLE pending_deliveries (
+        device_id TEXT NOT NULL,
+        environment_id TEXT NOT NULL,
+        thread_id TEXT NOT NULL,
+        state_json TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        PRIMARY KEY (device_id, environment_id, thread_id)
+      );
+    `);
+    database
+      .prepare(
+        "INSERT INTO pending_deliveries (device_id, environment_id, thread_id, next_attempt_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+      )
+      .run("device-1", "environment-1", "thread-1", 0, Date.now() + 60_000);
+    database.close();
+
+    const store = new RelayStore(databasePath);
+    expect(store.pendingDeliveries()).toMatchObject([{ threadId: "thread-1", silent: false }]);
+    store.registerDevice({
+      deviceId: "device-2",
+      label: "Test iPhone",
+      platform: "ios",
+      preferences,
+    });
+    store.publishForDelivery({
+      environmentId: "environment-1",
+      threadId: "thread-2",
+      state: null,
+      silent: true,
+    });
+    expect(store.pendingDeliveries()).toMatchObject([
+      { threadId: "thread-1", silent: false },
+      { deviceId: "device-2", threadId: "thread-2", silent: true },
+    ]);
+
+    // A later publication for the same thread decides for itself whether to alert.
+    store.publishForDelivery({ environmentId: "environment-1", threadId: "thread-2", state: null });
+    expect(store.pendingDeliveries()).toMatchObject([
+      { threadId: "thread-1", silent: false },
+      { deviceId: "device-2", threadId: "thread-2", silent: false },
+    ]);
+    store.close();
+  });
+
   it("removes expired activity rows from persistent storage", () => {
     const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "push-relay-store-"));
     temporaryDirectories.push(directory);
