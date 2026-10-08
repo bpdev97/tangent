@@ -7,12 +7,21 @@ import * as NodeSqlite from "node:sqlite";
 
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { ProviderDriverKind, ProviderInstanceId, UsageDay } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { HttpClient, HttpClientResponse } from "effect/http";
+
+import * as ServerConfig from "../config.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import * as UsageService from "./UsageService.ts";
 
 import { hermesUsageRoots, readHermesUsage, scanHermesUsage } from "./hermesUsageReader.ts";
 
 const SINCE = Date.parse("2026-09-01T00:00:00Z");
-const IN_WINDOW = Date.parse("2026-09-10T12:00:00Z") / 1_000;
+const IN_WINDOW_ISO = "2026-09-10T12:00:00Z";
+const IN_WINDOW = Date.parse(IN_WINDOW_ISO) / 1_000;
 const BEFORE_WINDOW = Date.parse("2026-08-01T12:00:00Z") / 1_000;
 
 interface UsageRow {
@@ -166,12 +175,14 @@ describe("readHermesUsage", () => {
     assert.strictEqual(billed?.reportedCostUsd, 0.4);
   });
 
-  it("leaves turns that ran on Hermes's Codex runtime to the Codex history that holds them", async () => {
+  it("leaves turns that ran on Hermes's Codex runtime to Codex's own history", async () => {
     const root = await makeRoot();
     await writeDatabase(
       NodePath.join(root, "state.db"),
       [
         { session: "codex", model: "gpt-5.6-sol", billing: "openai-codex", input: 100, output: 10 },
+        // Hermes records `provider: openai` on that runtime as `custom`.
+        { session: "codex", model: "gpt-5.6-sol", billing: "custom", input: 200, output: 10 },
         // Hermes made this call itself, so Codex never saw it.
         {
           session: "codex",
@@ -181,24 +192,21 @@ describe("readHermesUsage", () => {
           input: 7,
           output: 1,
         },
-        // The session switched to a model Hermes calls itself and kept its thread.
+        // The session switched to a provider Hermes calls itself and kept its thread.
         { session: "codex", model: "claude-fable-5", billing: "anthropic", input: 9, output: 1 },
-        // Its thread is in a Codex home this server does not read.
-        { session: "elsewhere", model: "gpt-5.6-sol", billing: "openai", input: 5, output: 1 },
         { session: "plain", model: "gpt-5.6-sol", billing: "openai-codex", input: 3, output: 1 },
         { session: "cleared", model: "gpt-5.6-sol", billing: "openai-codex", input: 4, output: 1 },
       ],
       {
         codex: '{"codex_thread_id":"thr_1"}',
-        elsewhere: '{"codex_thread_id":"thr_2"}',
         plain: '{"reasoning_config":null}',
         cleared: '{"codex_thread_id":null}',
       },
     );
-    const [profile] = await readHermesUsage([root], SINCE, new Set(["thr_1"]));
+    const [profile] = await readHermesUsage([root], SINCE);
     assert.sameMembers(
       profile!.records.map((record) => record.totals.uncachedInputTokens),
-      [7, 9, 5, 3, 4],
+      [7, 9, 3, 4],
     );
   });
 
@@ -275,63 +283,130 @@ describe("readHermesUsage", () => {
       const root = NodePath.join(home, ".hermes");
       const broken = NodePath.join(root, "profiles", "broken");
       yield* Effect.promise(async () => {
-        await writeDatabase(
-          NodePath.join(root, "state.db"),
-          [
-            {
-              session: "s1",
-              model: "gpt-5.6-sol",
-              billing: "openai-codex",
-              input: 100,
-              output: 10,
-            },
-            { session: "s2", model: "gpt-5.6-sol", billing: "openai-codex", input: 50, output: 5 },
-          ],
-          { s2: '{"codex_thread_id":"thr_1"}' },
-        );
+        await writeDatabase(NodePath.join(root, "state.db"), [
+          { session: "s1", model: "gpt-5.6-sol", input: 100, output: 10 },
+        ]);
         await NodeFSP.mkdir(broken, { recursive: true });
         await NodeFSP.writeFile(NodePath.join(broken, "state.db"), "not a database");
       });
-      // The Codex scan read thread `thr_1`, so its turns are already counted.
-      const codex = {
-        provider: "codex",
-        files: [
-          {
-            records: [
-              {
-                provider: "codex" as const,
-                timestampMs: IN_WINDOW * 1_000,
-                model: "gpt-5.6-sol",
-                sessionId: "thr_1",
-                totals: {
-                  uncachedInputTokens: 50,
-                  cachedInputTokens: 0,
-                  cacheCreationTokens: 0,
-                  outputTokens: 5,
-                  reasoningTokens: 0,
-                },
-                reportedCostUsd: null,
-                speed: "standard" as const,
-                dedupeKey: null,
-              },
-            ],
-          },
-        ],
-      };
-      const sources = yield* scanHermesUsage([{ HOME: home }], SINCE, [codex]);
+      const sources = yield* scanHermesUsage([{ HOME: home }], SINCE);
       assert.deepStrictEqual(
-        sources.map((source) => [source.dir, source.status, source.files?.[0]?.records.length]),
+        sources.map((source) => [source.dir, source.status, source.files?.length]),
         [
           [root, "ok", 1],
-          [broken, "failed", undefined],
+          [broken, "failed", 0],
         ],
       );
       // No Hermes on the machine is one missing source, like any other provider.
-      const none = yield* scanHermesUsage([{ HOME: yield* Effect.promise(makeRoot) }], SINCE, []);
+      const none = yield* scanHermesUsage([{ HOME: yield* Effect.promise(makeRoot) }], SINCE);
       assert.deepStrictEqual(
         none.map((source) => [source.status, source.files]),
         [["ok", null]],
       );
     }).pipe(Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("Hermes usage in the usage service", () => {
+  // Two servers that read one profile must report the same usage for it, so
+  // a Codex-runtime turn is always Codex's. Reading the Codex home Hermes runs
+  // with is what keeps that turn counted.
+  it.live("counts a Codex-runtime turn once, from the Codex home Hermes ran it in", () =>
+    Effect.gen(function* () {
+      const home = yield* Effect.promise(makeRoot);
+      const hermesHome = NodePath.join(home, "hermes");
+      const codexHome = NodePath.join(home, "hermes-codex");
+      yield* Effect.promise(async () => {
+        await writeDatabase(
+          NodePath.join(hermesHome, "state.db"),
+          [
+            { session: "s1", model: "gpt-5.6-sol", billing: "openai-codex", input: 10, output: 11 },
+            {
+              session: "s1",
+              model: "gpt-5.6-sol",
+              billing: "openai-codex",
+              task: "title_generation",
+              input: 2,
+              output: 5,
+            },
+          ],
+          { s1: '{"codex_thread_id":"thr_1"}' },
+        );
+        await NodeFSP.mkdir(NodePath.join(codexHome, "sessions"), { recursive: true });
+        await NodeFSP.writeFile(
+          NodePath.join(codexHome, "sessions", "rollout.jsonl"),
+          [
+            { type: "session_meta", payload: { id: "thr_1" } },
+            { type: "turn_context", payload: { model: "gpt-5.6-sol" } },
+            {
+              type: "event_msg",
+              timestamp: IN_WINDOW_ISO,
+              payload: {
+                type: "token_count",
+                info: { last_token_usage: { input_tokens: 10, output_tokens: 11 } },
+              },
+            },
+          ]
+            .map((line) => JSON.stringify(line))
+            .join("\n") + "\n",
+        );
+      });
+      const service = yield* UsageService.make.pipe(
+        Effect.provide(
+          ServerConfig.layerTest(process.cwd(), { prefix: "usage-service-hermes-test" }).pipe(
+            Layer.provideMerge(NodeServices.layer),
+            Layer.provideMerge(Layer.succeed(HostProcessPlatform, "linux")),
+            Layer.provideMerge(
+              ServerSettings.layerTest({
+                // Keep the scan inside the temporary home.
+                providers: {
+                  claudeAgent: { homePath: NodePath.join(home, "claude") },
+                  codex: { homePath: NodePath.join(home, "codex") },
+                },
+                providerInstances: {
+                  // The only place this Codex home is named is the Hermes instance.
+                  [ProviderInstanceId.make("hermes")]: {
+                    driver: ProviderDriverKind.make("hermes"),
+                    environment: [
+                      { name: "HERMES_HOME", value: hermesHome, sensitive: false },
+                      { name: "CODEX_HOME", value: codexHome, sensitive: false },
+                    ],
+                  },
+                },
+              }),
+            ),
+            Layer.provideMerge(
+              Layer.succeed(
+                HttpClient.HttpClient,
+                HttpClient.make((request) =>
+                  Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({}))),
+                ),
+              ),
+            ),
+            Layer.provideMerge(
+              Layer.succeed(HostProcessEnvironment, {
+                HOME: home,
+                GROK_HOME: NodePath.join(home, "grok"),
+                OPENCODE_DATA_DIR: NodePath.join(home, "opencode"),
+                ANTIGRAVITY_DATA_DIR: NodePath.join(home, "antigravity"),
+                XDG_CONFIG_HOME: NodePath.join(home, "config"),
+              }),
+            ),
+          ),
+        ),
+      );
+      const summary = yield* service.readSummary({
+        timeZone: "UTC",
+        sinceDay: UsageDay.make("2026-09-09"),
+        untilDay: UsageDay.make("2026-09-11"),
+      });
+      assert.deepStrictEqual(
+        summary.buckets.map((bucket) => [bucket.provider, bucket.totals.outputTokens]).toSorted(),
+        [
+          ["codex", 11],
+          ["hermes", 5],
+        ],
+      );
+    }).pipe(Effect.scoped),
   );
 });

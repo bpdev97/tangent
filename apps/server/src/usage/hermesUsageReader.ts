@@ -6,6 +6,7 @@ import * as NodePath from "node:path";
 import * as NodeSqlite from "node:sqlite";
 import * as NodeTimersPromises from "node:timers/promises";
 
+import { ProviderInstanceId, type ServerSettings } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 
@@ -17,8 +18,8 @@ const DATABASE_NAME = "state.db";
 /** `sessions.model_config` key Hermes sets on a session bound to a Codex app-server thread. */
 const CODEX_THREAD_KEY = "codex_thread_id";
 /**
- * The providers Hermes can hand to that runtime (`openai_runtime: codex_app_server`),
- * `custom` being a named provider Codex also knows.
+ * The providers Hermes can hand to that runtime (`openai_runtime: codex_app_server`).
+ * Hermes records both `provider: openai` and a named provider Codex also knows as `custom`.
  */
 const CODEX_RUNTIME_PROVIDERS: ReadonlySet<string> = new Set(["openai", "openai-codex", "custom"]);
 
@@ -90,15 +91,15 @@ function parseHermesUsageRow(row: Record<string, unknown>): UsageRecord | null {
 }
 
 /**
- * Sessions bound to a Codex app-server thread whose history the Codex scan
- * read. Codex wrote those turns there, and that scan already counts them.
+ * Sessions bound to a Codex app-server thread. Codex wrote their turns to its
+ * own history, and those turns are Codex usage wherever that history is read.
+ *
+ * This must not depend on what else this server scanned: two servers that
+ * read one profile have to report the same usage for it, or merging them
+ * counts a turn under both providers.
  */
-function codexRuntimeSessions(
-  database: NodeSqlite.DatabaseSync,
-  codexThreads: ReadonlySet<string>,
-): ReadonlySet<string> {
+function codexRuntimeSessions(database: NodeSqlite.DatabaseSync): ReadonlySet<string> {
   const sessions = new Set<string>();
-  if (codexThreads.size === 0) return sessions;
   const columns = new Set(
     database
       .prepare("PRAGMA table_info(sessions)")
@@ -115,7 +116,7 @@ function codexRuntimeSessions(
       if (
         typeof config === "object" &&
         config !== null &&
-        codexThreads.has(text((config as Record<string, unknown>)[CODEX_THREAD_KEY]))
+        text((config as Record<string, unknown>)[CODEX_THREAD_KEY]) !== ""
       ) {
         sessions.add(text(row.id));
       }
@@ -136,11 +137,7 @@ export interface HermesProfileUsage {
   readonly status: "ok" | "failed" | "missing";
 }
 
-async function readDatabase(
-  path: string,
-  sinceMs: number,
-  codexThreads: ReadonlySet<string>,
-): Promise<UsageRecord[]> {
+async function readDatabase(path: string, sinceMs: number): Promise<UsageRecord[]> {
   const records: UsageRecord[] = [];
   const database = new NodeSqlite.DatabaseSync(path, { readOnly: true });
   try {
@@ -152,7 +149,7 @@ async function readDatabase(
       .get(USAGE_TABLE);
     // A database from before Hermes recorded per-model usage has nothing to report.
     if (hasUsage === undefined) return records;
-    const onCodex = codexRuntimeSessions(database, codexThreads);
+    const onCodex = codexRuntimeSessions(database);
     const statement = database.prepare(
       `SELECT session_id, model, billing_provider, task, input_tokens, output_tokens,
               cache_read_tokens, cache_write_tokens, reasoning_tokens, estimated_cost_usd,
@@ -162,7 +159,7 @@ async function readDatabase(
     );
     let count = 0;
     for (const row of statement.iterate(sinceMs / 1_000)) {
-      // A session keeps its thread when it switches to a model Hermes calls
+      // A session keeps its thread when it switches to a provider Hermes calls
       // itself, and Hermes's own background calls carry a task: neither went
       // through Codex. One provider used both ways in a session has a single
       // total, which is left to Codex.
@@ -189,14 +186,10 @@ async function readDatabase(
  * Each profile is its own source, read in full or not at all. Hermes rewrites a
  * row as its session goes on, so half a history mixed with an older complete
  * copy from another server on this machine would count the same usage twice.
- *
- * `codexThreads` are the Codex sessions the Codex scan read (see
- * `codexRuntimeSessions`).
  */
 export async function readHermesUsage(
   roots: ReadonlyArray<string>,
   sinceMs: number,
-  codexThreads: ReadonlySet<string> = new Set(),
 ): Promise<ReadonlyArray<HermesProfileUsage>> {
   const usage: HermesProfileUsage[] = [];
   const unreadable = (home: string) =>
@@ -236,7 +229,7 @@ export async function readHermesUsage(
       // Where the database really is names the source, so every server that reaches it agrees.
       const source = NodePath.dirname(path);
       try {
-        const records = await readDatabase(path, sinceMs, codexThreads);
+        const records = await readDatabase(path, sinceMs);
         usage.push({ home: source, path, records, status: "ok" });
       } catch {
         usage.push({ home: source, path, records: [], status: "failed" });
@@ -268,29 +261,13 @@ export const hermesUsageRoots = Effect.fn("hermesUsageRoots")(function* (
  * Every Hermes profile those environments can reach, as the usage service's
  * scanned sources. A profile is "ok" or "failed", never partial (see
  * `readHermesUsage`), and a root with no database is one missing source.
- *
- * `scanned` is what the service has read so far. Its Codex sessions decide
- * which turns of Hermes's Codex runtime are already counted.
  */
 export const scanHermesUsage = Effect.fn("scanHermesUsage")(function* (
   environments: ReadonlyArray<NodeJS.ProcessEnv>,
   sinceMs: number,
-  scanned: ReadonlyArray<{
-    readonly provider: string;
-    readonly files: ReadonlyArray<{ readonly records: readonly UsageRecord[] }> | null;
-  }>,
 ) {
-  const codexThreads = new Set<string>();
-  for (const source of scanned) {
-    if (source.provider !== "codex") continue;
-    for (const file of source.files ?? []) {
-      for (const record of file.records) {
-        if (record.sessionId.length > 0) codexThreads.add(record.sessionId);
-      }
-    }
-  }
   const roots = yield* hermesUsageRoots(environments);
-  const profiles = yield* Effect.promise(() => readHermesUsage(roots, sinceMs, codexThreads));
+  const profiles = yield* Effect.promise(() => readHermesUsage(roots, sinceMs));
   return profiles.map((profile) => ({
     provider: "hermes" as const,
     dir: profile.home,
@@ -306,3 +283,19 @@ export const scanHermesUsage = Effect.fn("scanHermesUsage")(function* (
       : {}),
   }));
 });
+
+/**
+ * Hermes instances as the Codex accounts their Codex runtime writes to: the
+ * `CODEX_HOME` of the instance's environment, else the default Codex home.
+ * Reading those homes as Codex history is what counts the turns
+ * `codexRuntimeSessions` leaves out.
+ */
+export function hermesCodexInstances(instances: ServerSettings["providerInstances"]) {
+  return Object.entries(instances)
+    .filter(([, instance]) => instance.driver === "hermes")
+    .map(([id, instance]) => ({
+      config: {},
+      ...(instance.environment === undefined ? {} : { environment: instance.environment }),
+      instanceId: ProviderInstanceId.make(id),
+    }));
+}

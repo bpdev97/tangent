@@ -196,13 +196,21 @@ Usage:
   to. A source is named by the directory its database really is in, and a database is read once
   however many roots or links reach it.
 - Turns that ran on Hermes's Codex app-server runtime are also in Codex's own history, so they
-  are left to the Codex scan, but only when that scan read them. Hermes binds such a session to
-  its Codex thread with `codex_thread_id` in `sessions.model_config`; a row is dropped when the
-  Codex scan read that thread, the row is the session's own (no task), and its provider is one
-  that runtime serves. A session that switched to another provider keeps those rows, and a thread
-  in a Codex home T3 does not read stays under Hermes. Hermes does not tell Codex which model to
-  use, so the rows cannot be matched by model; one provider used through both runtimes in one
-  session has a single total, which is left to Codex.
+  are always Codex usage and never Hermes usage. Hermes binds such a session to its Codex thread
+  with `codex_thread_id` in `sessions.model_config`; a row of such a session is dropped when it
+  is the session's own (no task) and its provider is one that runtime serves (`openai-codex`,
+  `openai`, and `custom`, which is how Hermes records `provider: openai` and a named provider
+  there). A session that switched to another provider keeps those rows.
+- That rule must not depend on which Codex homes this server read. Two servers on one machine
+  report the same Hermes profile as one source, and the merge keeps one server's copy of it; if
+  one of them dropped a turn and the other did not, the turn would count under both providers
+  or neither, depending on which refreshed last. So that the dropped turns are still counted,
+  the Codex scan also reads the Codex home each Hermes instance runs with (`CODEX_HOME` in the
+  instance's environment, else the default home).
+- Known limits, because Hermes stores nothing finer: a Codex home set only in Hermes's own
+  `.env` is not read, so its Codex-runtime turns are not shown; one provider used both through
+  the Codex runtime and directly in the same session has a single total, which is left to
+  Codex, as is a `custom` endpoint a Codex-bound session later switched to.
 - Cost is what Hermes recorded (the billed amount when it knows it, else its own estimate). A
   subscription call records none, and T3's price table estimates it as it does for Codex and
   Claude. A vendor-prefixed model name is priced under `openrouter/` only when OpenRouter billed
@@ -237,7 +245,7 @@ Registration follows Pi's (`PiDriver`, `PiAdapterV2`). Each hook carries a
 - `packages/contracts/src/usage.ts`: `hermes` in `UsageProviderKind`. Adding a provider is additive
   in that contract, so it needs no version bump.
 - `apps/server/src/usage/UsageService.ts`: adds each Hermes profile as a source beside
-  OpenCode's.
+  OpenCode's, and reads the Codex home of each Hermes instance as Codex history.
 - `apps/web/src/components/usage/usageProviders.ts` and
   `apps/mobile/src/features/usage/usageProviders.ts`: the Usage label and color.
   `apps/web/src/components/usage/UsageProviderChart.test.ts` lists every provider, so it lists
@@ -312,7 +320,8 @@ against the Behavior section, then delete this adapter and move to upstream's.
   follows the prompt will do.
 - `hermesUsageReader.test.ts` reads usage from databases built with Hermes's table layout: token
   mapping, which cost and which rate apply, the window, Codex-runtime sessions, every profile
-  under a root read once and as a whole, and a database from before Hermes recorded usage.
+  read once and as a whole, and a database from before Hermes recorded usage. Its last test runs
+  the usage service: a Codex-runtime turn counts once, from a Codex home only Hermes names.
 - `HermesT3Tools.test.ts` fails when a toolkit directory or tool under `apps/server/src/mcp/toolkits`
   is missing from the list Hermes is given. Add it to `HERMES_T3_TOOLKITS`.
 - Approval prompts need a profile with `approvals.mode: manual`; the default `smart` mode lets
