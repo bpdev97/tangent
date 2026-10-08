@@ -58,6 +58,11 @@ import {
 import { compactDynamicToolOutput } from "@t3tools/shared/toolOutput";
 import { htmlRenderReferencesEqual, type HtmlRenderReference } from "@t3tools/shared/htmlRender";
 import { mcpAppReferencesEqual, type McpAppReference } from "@t3tools/shared/mcpApp";
+import {
+  supersededWalkthroughIds,
+  walkthroughReferencesEqual,
+  type WalkthroughReference,
+} from "@t3tools/shared/walkthrough"; // Tangent(FORK-WALK-001)
 import { dynamicToolTitle } from "@t3tools/shared/toolActivity";
 import { formatWorkspaceRelativePath } from "../../filePathDisplay";
 import {
@@ -74,7 +79,9 @@ function timelineEntryRunId(entry: TimelineEntry): RunId | null {
   if (entry.kind === "proposed-plan") {
     return entry.proposedPlan.runId;
   }
-  if (entry.kind === "html-render" || entry.kind === "mcp-app") return entry.runId;
+  if (entry.kind === "html-render" || entry.kind === "mcp-app" || entry.kind === "walkthrough") {
+    return entry.runId; // Tangent(FORK-WALK-001): walkthrough added
+  }
   return entry.kind === "work" ? (entry.entry.runId ?? null) : null;
 }
 
@@ -638,6 +645,16 @@ type MessagesTimelineRowContent =
       htmlRender: HtmlRenderReference;
     }
   | {
+      // Tangent(FORK-WALK-001)
+      kind: "walkthrough";
+      id: string;
+      createdAt: string;
+      runId: RunId | null;
+      walkthrough: WalkthroughReference;
+      /** A later walkthrough in the thread replaces this one, so its card collapses. */
+      superseded: boolean;
+    }
+  | {
       kind: "mcp-app";
       id: string;
       createdAt: string;
@@ -769,6 +786,7 @@ function deriveSupersededAttemptFolds(
       (entry.kind === "message" && entry.message.role === "user") ||
       // A published page stays visible, as it does when its turn folds.
       entry.kind === "html-render" ||
+      entry.kind === "walkthrough" || // Tangent(FORK-WALK-001)
       entry.kind === "mcp-app" ||
       timelineEntryIsPersistentResourceCard(entry) ||
       // A steer supersedes the attempt but leaves its children running.
@@ -1331,6 +1349,10 @@ export function deriveMessagesTimelineRows(input: {
       })
     : new Map<MessageId, number>();
   const nextRows: MessagesTimelineRow[] = [];
+  // Tangent(FORK-WALK-001)
+  const supersededWalkthroughs = supersededWalkthroughIds(
+    timelineEntries.flatMap((entry) => (entry.kind === "walkthrough" ? [entry.walkthrough] : [])),
+  );
   const durationStartByMessageId = computeMessageDurationStart(
     timelineEntries.flatMap((entry) => (entry.kind === "message" ? [entry.message] : [])),
   );
@@ -1724,6 +1746,19 @@ export function deriveMessagesTimelineRows(input: {
         id: timelineEntry.id,
         createdAt: timelineEntry.createdAt,
         htmlRender: timelineEntry.htmlRender,
+      });
+      continue;
+    }
+
+    // Tangent(FORK-WALK-001)
+    if (timelineEntry.kind === "walkthrough") {
+      nextRows.push({
+        kind: "walkthrough",
+        id: timelineEntry.id,
+        createdAt: timelineEntry.createdAt,
+        runId: timelineEntry.runId,
+        walkthrough: timelineEntry.walkthrough,
+        superseded: supersededWalkthroughs.has(timelineEntry.walkthrough.id),
       });
       continue;
     }
@@ -2155,6 +2190,16 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
       // Entries rebuild on any tool update; an equal page must keep its mounted frame.
       const bh = b as typeof a;
       return a.createdAt === bh.createdAt && htmlRenderReferencesEqual(a.htmlRender, bh.htmlRender);
+    }
+
+    // Tangent(FORK-WALK-001)
+    case "walkthrough": {
+      const bw = b as typeof a;
+      return (
+        a.createdAt === bw.createdAt &&
+        a.superseded === bw.superseded &&
+        walkthroughReferencesEqual(a.walkthrough, bw.walkthrough)
+      );
     }
 
     case "mcp-app": {

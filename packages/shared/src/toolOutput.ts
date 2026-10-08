@@ -9,10 +9,20 @@ import {
   readHtmlRenderReference,
   type HtmlRenderReference,
 } from "./htmlRender.ts";
+import {
+  readWalkthroughReference,
+  WALKTHROUGH_PUBLISH_TOOL_NAME,
+  WALKTHROUGH_VISUAL_TOOL_NAME,
+  type WalkthroughReference,
+} from "./walkthrough.ts"; // Tangent(FORK-WALK-001)
 import { MCP_APP_OUTPUT_KEY, readMcpAppReference, type McpAppReference } from "./mcpApp.ts";
 import { resolveT3McpToolId } from "./t3McpToolPresentation.ts";
 
-const MAX_PARSED_BYTES = 16_384;
+// Tangent(FORK-WALK-001): raised from 16 KiB so a walkthrough reference (its own cap is 32 KB)
+// survives its result envelopes. Each serialized level is charged again, with escaping growth,
+// so this covers the reference inside three nested serializations; every other key is still
+// trimmed to 8 KiB below.
+const MAX_PARSED_BYTES = 200_000;
 const MAX_METADATA_BYTES = 8_192;
 const MAX_ID_LENGTH = 256;
 const MAX_THREADS = 100;
@@ -40,6 +50,7 @@ interface CompactToolOutput {
   scheduledTaskId?: string;
   status?: "rolled_back";
   htmlRender?: HtmlRenderReference;
+  walkthrough?: WalkthroughReference; // Tangent(FORK-WALK-001)
   [MCP_APP_OUTPUT_KEY]?: McpAppReference;
   thread?: { threadId: string };
   threads?: Array<{ threadId?: string; status?: "rolled_back" }>;
@@ -126,6 +137,10 @@ export function compactDynamicToolOutput(value: unknown): CompactToolOutput | un
     if (data.status === "rolled_back") output.status = "rolled_back";
     const htmlRender = readHtmlRenderReference(data.htmlRender);
     if (htmlRender !== undefined) output.htmlRender = htmlRender;
+    // Tangent(FORK-WALK-001): the reference carries its own byte cap, so it is
+    // added after the generic size check below rather than subject to it.
+    const walkthrough = readWalkthroughReference(data.walkthrough);
+    if (walkthrough !== undefined) output.walkthrough = walkthrough;
     const mcpApp = readMcpAppReference(data[MCP_APP_OUTPUT_KEY]);
     // Kept under its stored key, so the compact wire output reads back the same way.
     if (mcpApp !== undefined) output[MCP_APP_OUTPUT_KEY] = mcpApp;
@@ -164,7 +179,10 @@ export function compactDynamicToolOutput(value: unknown): CompactToolOutput | un
       }
     }
   }
-  const oversized = () => encoder.encode(JSON.stringify(output)).byteLength > MAX_METADATA_BYTES;
+  const oversized = () => {
+    const { walkthrough: _walkthrough, ...rest } = output; // Tangent(FORK-WALK-001)
+    return encoder.encode(JSON.stringify(rest)).byteLength > MAX_METADATA_BYTES;
+  };
   if (oversized()) {
     delete output.threads;
     delete output.threadId;
@@ -180,6 +198,28 @@ export function compactDynamicToolOutput(value: unknown): CompactToolOutput | un
   }
   if (oversized()) delete output[MCP_APP_OUTPUT_KEY];
   return Object.keys(output).length === 0 ? undefined : output;
+}
+
+// Tangent(FORK-WALK-001)
+/** The walkthrough a completed `walkthrough_publish` call published, if this item is one. */
+export function walkthroughFromToolItem(item: {
+  readonly toolName: string | null | undefined;
+  readonly output?: unknown;
+}): WalkthroughReference | undefined {
+  if (resolveT3McpToolId(item.toolName) !== WALKTHROUGH_PUBLISH_TOOL_NAME) return undefined;
+  const output = compactDynamicToolOutput(item.output);
+  return output?.isError ? undefined : output?.walkthrough;
+}
+
+// Tangent(FORK-WALK-001)
+/** The diagram a completed `walkthrough_visual` call stored, if this item is one. Never shown inline. */
+export function walkthroughVisualFromToolItem(item: {
+  readonly toolName: string | null | undefined;
+  readonly output?: unknown;
+}): HtmlRenderReference | undefined {
+  if (resolveT3McpToolId(item.toolName) !== WALKTHROUGH_VISUAL_TOOL_NAME) return undefined;
+  const output = compactDynamicToolOutput(item.output);
+  return output?.isError ? undefined : output?.htmlRender;
 }
 
 /** The page a completed `html_render` tool call published, if this item is one. */

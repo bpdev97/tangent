@@ -81,6 +81,16 @@ export interface HermesT3ToolDefinition {
   readonly inputSchema: unknown;
 }
 
+/** What the tool list depends on beyond the code: settings read once per server start. */
+export interface HermesT3ToolOptions {
+  /**
+   * Tangent(FORK-WALK-001): this environment's review policy, which
+   * `walkthrough_publish` carries in its description. Absent means the
+   * shipped default.
+   */
+  readonly walkthroughPolicy?: string | undefined;
+}
+
 /**
  * One entry per directory under `mcp/toolkits`, each the toolkit holding every
  * tool that directory defines. Imported lazily: the toolkit modules reach the
@@ -102,21 +112,34 @@ export const HERMES_T3_TOOLKITS = {
   pullRequests: async () =>
     (await import("../../mcp/toolkits/pullRequests/tools.ts")).PullRequestsToolkit,
   thread: async () => (await import("../../mcp/toolkits/thread/tools.ts")).ThreadToolkit,
+  // Tangent(FORK-WALK-001): built from the environment's policy, as `McpHttpServer` builds it.
+  walkthrough: async (options?: HermesT3ToolOptions) => {
+    const tools = await import("../../mcp/toolkits/walkthrough/tools.ts");
+    return options?.walkthroughPolicy === undefined
+      ? tools.WalkthroughToolkit
+      : tools.makeWalkthroughToolkit(options.walkthroughPolicy);
+  },
   worktree: async () => (await import("../../mcp/toolkits/worktree/tools.ts")).WorktreeToolkit,
 };
 
 /** Every tool the `t3-code` MCP server registers (`McpHttpServer.layer`). */
-export const hermesT3ToolManifest = Effect.promise(async () => {
-  const toolkits = await Promise.all(Object.values(HERMES_T3_TOOLKITS).map((load) => load()));
-  return toolkits
-    .flatMap((toolkit) => Object.values(toolkit.tools) as ReadonlyArray<Tool.Any>)
-    .map((tool): HermesT3ToolDefinition => ({
-      name: tool.name,
-      description: Tool.getDescription(tool) ?? "",
-      inputSchema: Tool.getJsonSchema(tool),
-    }))
-    .toSorted((left, right) => left.name.localeCompare(right.name));
-});
+export const makeHermesT3ToolManifest = (options?: HermesT3ToolOptions) =>
+  Effect.promise(async () => {
+    const toolkits = await Promise.all(
+      Object.values(HERMES_T3_TOOLKITS).map((load) => load(options)),
+    );
+    return toolkits
+      .flatMap((toolkit) => Object.values(toolkit.tools) as ReadonlyArray<Tool.Any>)
+      .map((tool): HermesT3ToolDefinition => ({
+        name: tool.name,
+        description: Tool.getDescription(tool) ?? "",
+        inputSchema: Tool.getJsonSchema(tool),
+      }))
+      .toSorted((left, right) => left.name.localeCompare(right.name));
+  });
+
+/** The tool list with every setting at its default. */
+export const hermesT3ToolManifest = makeHermesT3ToolManifest();
 
 export interface HermesT3Bridge {
   /** Handed to the gateway process; the plugin reads it and nothing else does. */
@@ -150,6 +173,7 @@ export const makeHermesT3Bridge = Effect.fn("makeHermesT3Bridge")(function* (
   directory: string,
   /** The profile's `config.yaml`, when its home is known. Only ever read for its timestamp. */
   profileConfigPath?: string,
+  toolOptions?: HermesT3ToolOptions,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -171,7 +195,7 @@ export const makeHermesT3Bridge = Effect.fn("makeHermesT3Bridge")(function* (
   yield* fs.chmod(sessionsDirectory, 0o700);
   yield* fs.writeFileString(
     path.join(directory, HERMES_T3_TOOLS_FILE),
-    encodeJson(yield* hermesT3ToolManifest),
+    encodeJson(yield* makeHermesT3ToolManifest(toolOptions)),
   );
 
   const loadedFile = path.join(directory, HERMES_T3_LOADED_FILE);

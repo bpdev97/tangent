@@ -20,11 +20,15 @@ import {
 
 import { nextFileCommentId } from "../files/fileCommentAnnotations";
 import { DiffCommentAnnotation } from "./DiffCommentAnnotation";
+import { WalkthroughNoteAnnotation } from "../walkthrough/WalkthroughNoteAnnotation"; // Tangent(FORK-WALK-001)
+import { walkthroughFlagAnnotations } from "../walkthrough/walkthroughFlagAnnotations"; // Tangent(FORK-WALK-001)
+import type { WalkthroughFlag, WalkthroughFlagSeverity } from "@t3tools/shared/walkthrough"; // Tangent(FORK-WALK-001)
 import { StyledDiffCodeView, type StyledDiffCodeViewOptions } from "./StyledDiffCodeView";
 
 interface DiffCommentAnnotationEntry {
   id: string;
-  kind: "draft" | "comment";
+  kind: "draft" | "comment" | "note"; // Tangent(FORK-WALK-001): "note" is an agent remark
+  severity?: WalkthroughFlagSeverity; // Tangent(FORK-WALK-001)
   range: SelectedLineRange;
   rangeLabel: string;
   text: string;
@@ -83,6 +87,23 @@ interface AnnotatableCodeViewProps {
   sectionId: string;
   sectionTitle: string;
   composerDraftTarget: ScopedThreadRef | DraftId;
+  /** Tangent(FORK-WALK-001): agent flags by file path, shown under a line of the new side. */
+  notes?: ReadonlyMap<string, ReadonlyArray<WalkthroughFlag>>;
+  /**
+   * Tangent(FORK-WALK-001): a second way to finish a draft, such as adding it
+   * to a PR review. Returns whether it took the comment; a refused draft stays open.
+   */
+  draftSecondaryAction?:
+    | {
+        readonly label: string;
+        readonly onAction: (input: {
+          readonly filePath: string;
+          readonly fileDiff: FileDiffMetadata;
+          readonly range: SelectedLineRange;
+          readonly text: string;
+        }) => boolean;
+      }
+    | undefined;
   options: StyledDiffCodeViewOptions<DiffCommentAnnotationGroup>;
   viewerRef?: Ref<AnnotatableCodeViewHandle>;
   className?: string;
@@ -107,6 +128,8 @@ export function AnnotatableCodeView({
   sectionId,
   sectionTitle,
   composerDraftTarget,
+  notes, // Tangent(FORK-WALK-001)
+  draftSecondaryAction, // Tangent(FORK-WALK-001)
   options,
   viewerRef,
   className,
@@ -153,8 +176,16 @@ export function AnnotatableCodeView({
               text: comment.text,
             });
           }, []);
-        const annotations =
-          draft?.fileKey === fileKey ? [...persisted, draft.annotation] : persisted;
+        // Tangent(FORK-WALK-001): agent flags sit under their lines like comments.
+        const withNote = walkthroughFlagAnnotations(
+          filePath,
+          fileDiff,
+          notes?.get(filePath),
+        ).reduce(
+          (annotations, flag) => appendAnnotationEntry(annotations, flag.range, flag.entry),
+          persisted,
+        );
+        const annotations = draft?.fileKey === fileKey ? [...withNote, draft.annotation] : withNote;
         return {
           id: fileKey,
           type: "diff",
@@ -172,7 +203,7 @@ export function AnnotatableCodeView({
           ),
         };
       }),
-    [draft, files, reviewComments, sectionId],
+    [draft, files, notes, reviewComments, sectionId],
   );
 
   const removeEntry = useCallback(
@@ -282,18 +313,46 @@ export function AnnotatableCodeView({
           <div
             className={hasDraft ? "py-1" : "divide-y divide-border/30 border-y border-border/30"}
           >
-            {annotation.metadata.entries.map((entry) => (
-              <DiffCommentAnnotation
-                key={entry.id}
-                kind={entry.kind}
-                rangeLabel={entry.rangeLabel}
-                text={entry.kind === "draft" ? draftText : entry.text}
-                onTextChange={setDraftText}
-                onCancel={() => removeEntry(entry.id)}
-                onComment={(text) => submitEntry(entry.id, text)}
-                onDelete={() => removeEntry(entry.id)}
-              />
-            ))}
+            {annotation.metadata.entries.map((entry) =>
+              entry.kind === "note" ? (
+                // Tangent(FORK-WALK-001)
+                <WalkthroughNoteAnnotation
+                  key={entry.id}
+                  severity={entry.severity ?? "note"}
+                  text={entry.text}
+                />
+              ) : (
+                <DiffCommentAnnotation
+                  key={entry.id}
+                  kind={entry.kind}
+                  rangeLabel={entry.rangeLabel}
+                  text={entry.kind === "draft" ? draftText : entry.text}
+                  onTextChange={setDraftText}
+                  onCancel={() => removeEntry(entry.id)}
+                  onComment={(text) => submitEntry(entry.id, text)}
+                  onDelete={() => removeEntry(entry.id)}
+                  // Tangent(FORK-WALK-001): the draft can also leave through the caller's action.
+                  {...(entry.kind === "draft" && draftSecondaryAction
+                    ? {
+                        secondaryAction: {
+                          label: draftSecondaryAction.label,
+                          onAction: (text: string) => {
+                            const file = draft ? filesByKey.get(draft.fileKey) : undefined;
+                            if (!file) return;
+                            const taken = draftSecondaryAction.onAction({
+                              filePath: file.filePath,
+                              fileDiff: file.fileDiff,
+                              range: entry.range,
+                              text,
+                            });
+                            if (taken) removeEntry(entry.id);
+                          },
+                        },
+                      }
+                    : {})}
+                />
+              ),
+            )}
           </div>
         );
       }}

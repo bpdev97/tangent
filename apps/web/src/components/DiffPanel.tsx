@@ -31,6 +31,8 @@ import { openDiffFilePrimaryAction } from "../diffFileActions";
 import { useCheckpointDiff } from "~/lib/checkpointDiffState";
 import { cn } from "~/lib/utils";
 import { selectThreadDiffPanelSelection, useDiffPanelStore } from "../diffPanelStore";
+import { useWalkthroughMode, useWalkthroughReveal } from "./walkthrough/useWalkthroughMode"; // Tangent(FORK-WALK-001)
+import { useWalkthroughSectionKey } from "~/walkthroughStore"; // Tangent(FORK-WALK-001)
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { useTheme } from "../hooks/useTheme";
 import {
@@ -312,6 +314,7 @@ export default function DiffPanel({
   const collapseScopeKey = routeThreadRef
     ? `${routeThreadRef.environmentId}:${routeThreadRef.threadId}:${reviewSectionId}`
     : null;
+  const walkthroughSectionKey = useWalkthroughSectionKey(routeThreadRef); // Tangent(FORK-WALK-001)
   const codeViewMountKey = `${collapseScopeKey ?? reviewSectionId}:${codeViewRevision}`;
   const reviewSectionTitle = selectedTurn
     ? `Turn ${selectedCheckpointTurnCount ?? "?"}`
@@ -527,9 +530,21 @@ export default function DiffPanel({
   });
 
   const isRefreshingDiff = branchDiffPreview.isPending || areFilePatchesPending;
+  // Tangent(FORK-WALK-001): a walkthrough section narrows every list below to its files.
+  const walkthrough = useWalkthroughMode({
+    routeThreadRef,
+    thread: activeThread,
+    diffSelection,
+    renderableFiles,
+    lazy: lazySource !== null,
+    settledFileCount,
+    requestFile,
+    turns: orderedTurnDiffSummaries,
+  });
+  const visibleRenderableFiles = walkthrough.visibleFiles;
   const renderableFileEntries = useMemo(
-    () => renderableFiles.map(getCachedFileEntry),
-    [renderableFiles],
+    () => visibleRenderableFiles.map(getCachedFileEntry),
+    [visibleRenderableFiles],
   );
   const defaultCollapsedDiffFileKeys = useMemo(
     () =>
@@ -544,13 +559,14 @@ export default function DiffPanel({
       : defaultCollapsedDiffFileKeys;
   const renderLoadingBoundary = useCallback(
     () =>
-      settledFileCount < renderableFiles.length ? (
+      // Tangent(FORK-WALK-001): a section requests its own files, so no "load more" footer.
+      !walkthrough.section && settledFileCount < renderableFiles.length ? (
         <DiffFileLoadingBoundary
           load={loadNextFiles}
           count={renderableFiles.length - settledFileCount}
         />
       ) : null,
-    [settledFileCount, renderableFiles.length, loadNextFiles],
+    [settledFileCount, renderableFiles.length, loadNextFiles, walkthrough.section],
   );
   const codeViewFiles = useMemo(
     () =>
@@ -577,7 +593,12 @@ export default function DiffPanel({
   const allDiffFilesCollapsed = areAllDiffFilesCollapsed(diffFileKeys, collapsedDiffFileKeys);
   const diffLineStat = useMemo(() => {
     if (!selectedTurn && selectedGitSource?.files) {
-      return selectedGitSource.files.reduce(
+      // Tangent(FORK-WALK-001): a section counts only its own files.
+      const sectionPaths = walkthrough.visiblePaths;
+      const files = sectionPaths
+        ? selectedGitSource.files.filter((file) => sectionPaths.has(file.path))
+        : selectedGitSource.files;
+      return files.reduce(
         (total, file) => ({
           additions: total.additions + file.additions,
           deletions: total.deletions + file.deletions,
@@ -585,9 +606,12 @@ export default function DiffPanel({
         { additions: 0, deletions: 0 },
       );
     }
-    return getDiffLineStat(renderableFiles);
-  }, [renderableFiles, selectedGitSource, selectedTurn]);
-  const fileTreeEntries = useMemo(() => diffFileTreeEntries(renderableFiles), [renderableFiles]);
+    return getDiffLineStat(visibleRenderableFiles);
+  }, [visibleRenderableFiles, selectedGitSource, selectedTurn, walkthrough.visiblePaths]);
+  const fileTreeEntries = useMemo(
+    () => diffFileTreeEntries(visibleRenderableFiles),
+    [visibleRenderableFiles],
+  );
   const selectedDiffFileKey = selectedFilePath
     ? (codeViewFiles.find((candidate) => candidate.filePath === selectedFilePath)?.fileKey ?? null)
     : null;
@@ -620,13 +644,18 @@ export default function DiffPanel({
         next.delete(file.fileKey);
         return { scopeKey: collapseScopeKey, fileKeys: next };
       });
-      if (lazySource && index >= settledFileCount) {
-        requestFile(index);
+      // Tangent(FORK-WALK-001): lazy indexes count the unfiltered source files.
+      const sourceIndex = renderableFiles.findIndex(
+        (candidate) => resolveFileDiffPath(candidate) === filePath,
+      );
+      if (lazySource && sourceIndex >= settledFileCount) {
+        requestFile(sourceIndex);
       }
       requestTreeReveal(file.fileKey);
     },
     [
       renderableFileEntries,
+      renderableFiles,
       collapseScopeKey,
       defaultCollapsedDiffFileKeys,
       requestTreeReveal,
@@ -635,6 +664,15 @@ export default function DiffPanel({
       requestFile,
     ],
   );
+
+  // Tangent(FORK-WALK-001): a card's flag asks for a line once its file is in the viewer.
+  useWalkthroughReveal({
+    routeThreadRef,
+    reveal: walkthrough.reveal,
+    codeView,
+    codeViewFiles,
+    revealFile: revealDiffFile,
+  });
 
   const externalRevealRef = useRef<{ cache: string; key: string } | null>(null);
   useEffect(() => {
@@ -1059,8 +1097,11 @@ export default function DiffPanel({
           Turn diffs are unavailable because this project is not a git repository.
         </div>
       ) : selectedRunId !== null && orderedTurnDiffSummaries.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center px-5 text-center text-xs text-muted-foreground/70">
-          No completed turns yet.
+        <div className="flex min-h-0 flex-1 flex-col">
+          {walkthrough.renderHeader(revealDiffFile) /* Tangent(FORK-WALK-001) */}
+          <div className="flex flex-1 items-center justify-center px-5 text-center text-xs text-muted-foreground/70">
+            No completed turns yet.
+          </div>
         </div>
       ) : selectedRunId === null && !canReadFiles ? (
         fileAccess.isPending ? (
@@ -1073,6 +1114,7 @@ export default function DiffPanel({
       ) : (
         <>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+            {walkthrough.renderHeader(revealDiffFile) /* Tangent(FORK-WALK-001) */}
             {isSelectedPatchTruncated && !lazySource && (
               <p className="shrink-0 border-b border-border/70 bg-muted/40 px-3 py-1.5 text-2xs text-muted-foreground">
                 This preview exceeds the size limit. Changes shown are incomplete.
@@ -1160,14 +1202,17 @@ export default function DiffPanel({
                   }}
                 >
                   <AnnotatableCodeView
-                    key={collapseScopeKey ?? reviewSectionId}
+                    key={`${collapseScopeKey ?? reviewSectionId}:${walkthroughSectionKey}`} // Tangent(FORK-WALK-001): a section change drops the draft
+
                     viewerRef={setCodeView}
                     codeViewKey={`${codeViewMountKey}:${lazySource ? filePatchScope : "preview"}`}
                     className="h-full min-h-0 overflow-auto"
                     files={codeViewFiles}
                     renderCodeViewFooter={renderLoadingBoundary}
                     sectionId={reviewSectionId}
-                    sectionTitle={reviewSectionTitle}
+                    sectionTitle={walkthrough.commentSectionTitle(reviewSectionTitle)} // Tangent(FORK-WALK-001)
+                    notes={walkthrough.notes} // Tangent(FORK-WALK-001)
+                    draftSecondaryAction={walkthrough.draftSecondaryAction} // Tangent(FORK-WALK-001)
                     composerDraftTarget={composerDraftTarget}
                     renderHeaderFilenameSuffix={(fileDiff) => {
                       const path = resolveFileDiffPath(fileDiff);

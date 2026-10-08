@@ -404,6 +404,12 @@ export function summarizeT3ToolCalls(
     case "html-render":
       label = phrase("Rendered", "render", quantity(selected.length, "HTML page"));
       break;
+    case "walkthrough": // Tangent(FORK-WALK-001)
+      label = phrase("Published", "publish", quantity(selected.length, "walkthrough"));
+      break;
+    case "walkthrough-visual": // Tangent(FORK-WALK-001)
+      label = phrase("Drew", "draw", quantity(selected.length, "walkthrough diagram"));
+      break;
     case "capabilities":
       label = phrase("Checked", "check", `orchestration capabilities ${times}`);
       break;

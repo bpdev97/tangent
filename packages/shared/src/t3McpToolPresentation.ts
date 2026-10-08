@@ -61,7 +61,9 @@ export type T3McpToolSummaryAction =
   | "browser"
   | "device"
   | "html-preview"
-  | "html-render";
+  | "html-render"
+  | "walkthrough"
+  | "walkthrough-visual"; // Tangent(FORK-WALK-001)
 
 export interface T3McpToolDefinition {
   readonly displayName: string;
@@ -315,6 +317,14 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   t3_thread_send_attachments: tool(["Send", "Sending", "Sent", "attachments"], "attachment-send"),
   html_preview: tool(["Preview", "Previewing", "Previewed", "an HTML page"], "html-preview"),
   html_render: tool(["Render", "Rendering", "Rendered", "an HTML page"], "html-render"),
+  walkthrough_publish: tool(
+    ["Publish", "Publishing", "Published", "a code walkthrough"],
+    "walkthrough",
+  ), // Tangent(FORK-WALK-001)
+  walkthrough_visual: tool(
+    ["Draw", "Drawing", "Drew", "a walkthrough diagram"],
+    "walkthrough-visual",
+  ), // Tangent(FORK-WALK-001)
 };
 
 /**

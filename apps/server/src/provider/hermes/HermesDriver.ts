@@ -20,6 +20,7 @@ import { ChildProcessSpawner } from "effect/process";
 
 import * as BackgroundPolicy from "../../background/BackgroundPolicy.ts";
 import { ServerConfig } from "../../config.ts";
+import { readWalkthroughPolicy } from "../../mcp/toolkits/walkthrough/policy.ts"; // Tangent(FORK-WALK-001)
 import { makeHermesAdapterV2 } from "../../orchestration-v2/Adapters/HermesAdapterV2.ts";
 import { IdAllocatorV2 } from "../../orchestration-v2/IdAllocator.ts";
 import { ProviderContinuationRequests } from "../../orchestration-v2/ProviderContinuationRequests.ts";
@@ -118,9 +119,12 @@ export const HermesDriver: ProviderDriver<HermesSettings, HermesDriverEnv> = {
       if (effectiveConfig.enabled) {
         yield* installHermesT3Plugin(processEnv, effectiveConfig.profile);
       }
+      // Tangent(FORK-WALK-001): Hermes lists the tools itself, so it needs the policy too.
+      const walkthroughPolicy = (yield* readWalkthroughPolicy).policy;
       const t3Bridge = yield* makeHermesT3Bridge(
         path.join(serverConfig.stateDir, "hermes-t3-code", instanceId),
         profileHome === undefined ? undefined : path.join(profileHome, "config.yaml"),
+        { walkthroughPolicy },
       ).pipe(
         Effect.mapError(
           (cause) =>

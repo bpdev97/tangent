@@ -172,6 +172,17 @@ import { ProposedPlanCard } from "./ProposedPlanCard";
 import { HtmlRenderFrame } from "./HtmlRenderFrame";
 import { McpAppFrame } from "./McpAppFrame";
 import { ChangedFilesCard } from "./ChangedFilesTree";
+import { WalkthroughCard } from "../walkthrough/WalkthroughCard"; // Tangent(FORK-WALK-001)
+import { useWalkthroughStore } from "~/walkthroughStore"; // Tangent(FORK-WALK-001)
+import { useWalkthroughFollow } from "../walkthrough/useWalkthroughFollow"; // Tangent(FORK-WALK-001)
+
+// Tangent(FORK-WALK-001): tests and paint-only timelines render without an opener.
+const noopOpenWalkthrough = (
+  _s: { readonly id: string; readonly runId: string | null },
+  _w: WalkthroughReference,
+  _i: number,
+) => {};
+import type { WalkthroughReference } from "@t3tools/shared/walkthrough"; // Tangent(FORK-WALK-001)
 import { useFileContextMenuHandler } from "../../fileContextMenu";
 import { useProject, useThreadShell } from "../../state/entities";
 import {
@@ -329,6 +340,12 @@ interface TimelineRowSharedState {
   onImageExpand: (preview: ExpandedImagePreview) => void;
   displayThreadKey?: string;
   onOpenTurnDiff: (runId: RunId, filePath?: string) => void;
+  onOpenWalkthrough: (
+    source: { readonly id: string; readonly runId: string | null },
+    walkthrough: WalkthroughReference,
+    sectionIndex: number,
+    reveal?: { readonly path: string; readonly line?: number },
+  ) => void; // Tangent(FORK-WALK-001)
   onOpenThread: (threadId: OrchestrationV2TurnItem["threadId"]) => void;
   onForkFromRun: (input: {
     readonly sourceThreadId: ThreadId;
@@ -469,6 +486,12 @@ interface MessagesTimelineProps {
   routeThreadKey: string;
   displayThreadKey?: string;
   onOpenTurnDiff: (runId: RunId, filePath?: string) => void;
+  onOpenWalkthrough?: (
+    source: { readonly id: string; readonly runId: string | null },
+    walkthrough: WalkthroughReference,
+    sectionIndex: number,
+    reveal?: { readonly path: string; readonly line?: number },
+  ) => void; // Tangent(FORK-WALK-001)
   onOpenThread: (threadId: OrchestrationV2TurnItem["threadId"]) => void;
   parentThreadLink?: {
     readonly threadId: ThreadId;
@@ -556,6 +579,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   routeThreadKey,
   displayThreadKey,
   onOpenTurnDiff,
+  onOpenWalkthrough = noopOpenWalkthrough, // Tangent(FORK-WALK-001)
   onOpenThread,
   parentThreadLink = null,
   onForkFromRun,
@@ -829,6 +853,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     worktreeSetup,
   ]);
   const rows = useStableRows(rawRows, listIdentityKey);
+  useWalkthroughFollow(citationThreadRef, rows); // Tangent(FORK-WALK-001)
   // Run status/timestamps churn on every stream event; the shared row context
   // must not change with them or every timeline row re-renders per event.
   const runs = useStableHandoffRuns(runsProp);
@@ -1227,6 +1252,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       onFileDownload,
       openPullRequest,
       onOpenTurnDiff,
+      onOpenWalkthrough, // Tangent(FORK-WALK-001)
       onOpenThread,
       onForkFromRun,
       onRollbackCheckpoint,
@@ -1264,6 +1290,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       onFileDownload,
       openPullRequest,
       onOpenTurnDiff,
+      onOpenWalkthrough, // Tangent(FORK-WALK-001)
       onOpenThread,
       onForkFromRun,
       onRollbackCheckpoint,
@@ -1845,6 +1872,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
                 row.kind === "event" ||
                 row.kind === "attempt-fold" ||
                 row.kind === "html-render" ||
+                row.kind === "walkthrough" || // Tangent(FORK-WALK-001)
                 row.kind === "mcp-app"
               ? "pb-2"
               : "pb-4",
@@ -1894,6 +1922,8 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       {row.kind === "assistant-meta" ? <AssistantMetaTimelineRow row={row} /> : null}
       {row.kind === "proposed-plan" ? <ProposedPlanTimelineRow row={row} /> : null}
       {row.kind === "html-render" ? <HtmlRenderTimelineRow row={row} /> : null}
+      {/* Tangent(FORK-WALK-001) */}
+      {row.kind === "walkthrough" ? <WalkthroughTimelineRow row={row} /> : null}
       {row.kind === "mcp-app" ? <McpAppTimelineRow row={row} /> : null}
       {row.kind === "working" ? <WorkingTimelineRow row={row} /> : null}
       {row.kind === "worktree-setup" ? <WorktreeSetupTimelineRow row={row} /> : null}
@@ -2763,6 +2793,28 @@ function ProposedPlanTimelineRow({
         threadRef={ctx.threadRef ?? undefined}
         cwd={ctx.markdownCwd}
         workspaceRoot={ctx.workspaceRoot}
+      />
+    </div>
+  );
+}
+
+// Tangent(FORK-WALK-001)
+function WalkthroughTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "walkthrough" }> }) {
+  const ctx = use(TimelineRowCtx);
+  // The store is keyed by the same scoped thread key the timeline routes on.
+  const active = useWalkthroughStore((state) => state.byThreadKey[ctx.routeThreadKey]);
+  const openSectionIndex = active?.sourceId === row.id ? active.sectionIndex : null;
+  return (
+    <div className="min-w-0 px-1">
+      <WalkthroughCard
+        walkthrough={row.walkthrough}
+        openSectionIndex={openSectionIndex}
+        superseded={row.superseded}
+        environmentId={ctx.activeThreadEnvironmentId}
+        onOpenFile={ctx.onFileOpen}
+        onOpenSection={(index, reveal) =>
+          ctx.onOpenWalkthrough({ id: row.id, runId: row.runId }, row.walkthrough, index, reveal)
+        }
       />
     </div>
   );

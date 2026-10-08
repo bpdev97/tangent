@@ -56,6 +56,11 @@ import {
   DeviceStandardToolkit,
 } from "./toolkits/device/tools.ts";
 import * as HtmlHandlers from "./toolkits/html/handlers.ts";
+import * as WalkthroughHandlers from "./toolkits/walkthrough/handlers.ts"; // Tangent(FORK-WALK-001)
+import { readWalkthroughPolicy } from "./toolkits/walkthrough/policy.ts"; // Tangent(FORK-WALK-001)
+import * as WalkthroughService from "./toolkits/walkthrough/WalkthroughService.ts"; // Tangent(FORK-WALK-001)
+import * as VcsProcess from "../vcs/VcsProcess.ts"; // Tangent(FORK-WALK-001)
+import { makeWalkthroughToolkit } from "./toolkits/walkthrough/tools.ts"; // Tangent(FORK-WALK-001)
 import { HtmlPreviewTool, HtmlPreviewToolkit, HtmlRenderToolkit } from "./toolkits/html/tools.ts";
 
 /** Where an MCP client discovers how to sign in (RFC 9728), at this request's own origin. */
@@ -776,6 +781,17 @@ export const layerHtmlToolkit = Layer.mergeAll(
   imageToolRegistration(registerHtmlPreview(), HtmlHandlers.layerPreview),
 ).pipe(Layer.provide(HtmlRender.layer));
 
+// Tangent(FORK-WALK-001): the publish tool's description carries the
+// environment's review policy, read once at startup.
+const layerWalkthroughToolkit = Layer.unwrap(
+  Effect.map(readWalkthroughPolicy, ({ policy }) =>
+    toolkitRegistration(makeWalkthroughToolkit(policy), WalkthroughHandlers.layer),
+  ),
+).pipe(
+  Layer.provide(WalkthroughService.layer.pipe(Layer.provide(VcsProcess.layer))),
+  Layer.provide(HtmlRender.layer),
+);
+
 const layerPreviewStandardToolkitRegistration = toolkitRegistration(
   PreviewStandardToolkit,
   PreviewHandlers.layerStandard,
@@ -859,4 +875,5 @@ export const layer = Layer.mergeAll(
   layerPullRequestsToolkit,
   layerDeviceToolkit,
   layerHtmlToolkit,
+  layerWalkthroughToolkit, // Tangent(FORK-WALK-001)
 ).pipe(Layer.provideMerge(layerMcpTransport));
