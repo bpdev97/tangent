@@ -3,9 +3,10 @@
 ## Why
 
 Upstream delivers iOS notifications and Live Activities through T3 Connect's managed relay, which
-needs a Clerk account. The personal build ships without Clerk or the managed relay, so without this
-feature Tangent on iOS gets no notifications. A small self-hosted container on the tailnet holds the
-APNs key and delivers notifications for every Tangent server the user runs.
+needs the app to sign in and can only send to upstream's own bundle IDs. Tangent's apps do neither
+([FORK-CONNECT-001](t3-connect.md)), so without this feature Tangent on iOS gets no notifications.
+A small self-hosted container on the tailnet holds the APNs key and delivers notifications for
+every Tangent server the user runs.
 
 ## Behavior
 

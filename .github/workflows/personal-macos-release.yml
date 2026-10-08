@@ -130,8 +130,23 @@ jobs:
           targets: ${{ matrix.target }}
       - name: Align package versions
         run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
+      # Tangent(FORK-CONNECT-001): the server links to T3 Connect; see docs/fork/t3-connect.md.
+      - name: Enable T3 Connect for the server
+        shell: bash
+        run: node scripts/personal-connect-env.ts >> "$GITHUB_ENV"
       - name: Build server and client
         run: vp run --filter t3 build
+      # Tangent(FORK-CONNECT-001): the CLI lists `connect` only when the values are available, so
+      # listing it without them in the environment proves they were built in.
+      - name: Check T3 Connect is built into the server
+        shell: bash
+        run: |
+          help="$(env -u T3CODE_RELAY_URL -u T3CODE_CLERK_PUBLISHABLE_KEY -u T3CODE_CLERK_CLI_OAUTH_CLIENT_ID \
+            node apps/server/dist/bin.mjs --help)"
+          if ! grep -Eq '^[[:space:]]+connect[[:space:]]' <<<"$help"; then
+            echo "The built server does not offer \`t3 connect\`; see docs/fork/t3-connect.md." >&2
+            exit 1
+          fi
       - name: Build server executable
         env:
           VP_NODE_VERSION: "26.8.2"
@@ -258,6 +273,11 @@ jobs:
 
       - name: Align package versions
         run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
+
+      # Tangent(FORK-CONNECT-001): the desktop app's bundled server links the same way. Set after
+      # the tests so they run as they do in CI.
+      - name: Enable T3 Connect for the bundled server
+        run: node scripts/personal-connect-env.ts >> "$GITHUB_ENV"
 
       - name: Prepare Apple signing
         shell: bash

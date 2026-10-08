@@ -29,8 +29,9 @@ that slice, so desktop-only changes never alter the iOS runtime fingerprint.
   Upstream picks a command from how `t3` was installed (`npx`, `pnpm dlx`, `bunx`, or a global npm
   install), and every one of them would install upstream's package. The button label and toast
   around the command stay upstream's.
-- The personal build has no Clerk, managed relay, or passkey entitlements. Desktop passkey signing
-  runs only when a provisioning profile is configured. Mobile connects directly over LAN or tailnet.
+- Tangent's apps have no T3 Connect sign-in and no passkey entitlements. Desktop passkey signing
+  runs only when a provisioning profile is configured. Mobile connects by direct pairing over LAN,
+  tailnet, or a server's T3 Connect address ([FORK-CONNECT-001](t3-connect.md)).
 - The `app-builder-lib@26.15.6` patch keeps certificate import passwords separate from the
   temporary keychain password in CI signing. Remove it only when an unpatched version passes
   `apps/desktop/scripts/mac-signing.test.mjs`.
