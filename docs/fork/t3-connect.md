@@ -35,10 +35,10 @@ links only the server, and the phone pairs with the tunnel address like any othe
   LAN and tailnet routes, and fails over between them. The connection is an ordinary paired one, so
   [FORK-PUSH-001](push-relay.md) keeps registering through it.
 - A linked server refuses the credentials the relay requests for a signed-in client
-  (`RelayCredentialMinting`, off). Upstream's clients connect that way, which makes the T3 Connect
-  account and the relay's signing key a way into the server. No Tangent client signs in, so
-  pairing stays the only way in. Health checks, webhook deliveries, and tunnel recovery use other
-  requests and keep working.
+  (`RelayCredentialMinting`, off). Upstream's clients connect that way, so signing in to the T3
+  Connect account is enough to get a session. No Tangent client signs in, so that direct path is
+  closed. Health checks, webhook deliveries, and tunnel recovery use other requests and keep
+  working. The account still controls the tunnel; see below.
 - A development build has no values, so a fresh worktree server cannot make a link. State copied
   from a linked server would still carry its link; `vp run migrate-dev-db` copies only the
   database, not secrets.
@@ -49,6 +49,16 @@ What a linked server trusts that a tailnet route does not:
 - Traffic through the tunnel is decrypted at Cloudflare, in upstream's account. Whoever can read
   it there can copy the phone's session token, which is a bearer token valid for 30 days unless
   revoked. Upstream's signed-in clients use tokens bound to a key on the device instead.
+- The T3 Connect account controls the tunnel. The relay does not pin an environment's key, so
+  anyone who can act as the account can link the same environment again under a key of their own.
+  That returns the tunnel's connector token, which lets them attach their own connector to the
+  address and receive what clients send there, including the phone's session token. It also lets
+  them point the address at another loopback port on the host. Refusing relay credentials does not
+  prevent either.
+- The sign-in `t3 connect` saves on each linked host is a credential for that account. A
+  compromised host can therefore act on the account's other linked hosts.
+- The relay sees webhook URLs, their tokens, and their bodies, and can forge, drop, or replay
+  deliveries. A sender signature stops forged bodies, not replays.
 
 Not carried: T3 Connect sign-in in any Tangent app, reaching a Tangent server from upstream's
 signed-in clients, the **Hold webhooks while offline** setting (its only control is behind
@@ -98,7 +108,8 @@ three `Tangent(FORK-CONNECT-001)` steps in `.github/workflows/personal-macos-rel
   Tangent's bundle ID; the personal relay does.
 - Never make a pairing link for an address that answers as anything but this server.
 - Never give development builds the values.
-- Never describe a T3 Connect route as being as private as a tailnet route.
+- Never describe a T3 Connect route as being as private as a tailnet route, or the T3 Connect
+  account as unable to reach a linked server.
 
 ## Remove when
 

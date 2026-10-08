@@ -1,10 +1,12 @@
 import { EnvironmentId } from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import * as HttpClientError from "effect/http/HttpClientError";
+import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as CliTokenManager from "./CliTokenManager.ts";
@@ -95,9 +97,11 @@ const resolve = (options: {
           : Effect.succeed(
               HttpClientResponse.fromWeb(
                 request,
-                typeof reply.body === "string"
-                  ? new Response(reply.body, { status: reply.status })
-                  : Response.json(reply.body, { status: reply.status }),
+                reply.body instanceof Response
+                  ? reply.body
+                  : typeof reply.body === "string"
+                    ? new Response(reply.body, { status: reply.status })
+                    : Response.json(reply.body, { status: reply.status }),
               ),
             );
       }),
@@ -214,6 +218,26 @@ it.effect("makes no link for an address that answers as something else", () =>
       assert.strictEqual(error._tag, "ConnectPairingWrongServerError");
       assert.include(error.message, TUNNEL_URL);
     }
+  }),
+);
+
+it.effect("does not treat a redirect as this server answering", () =>
+  Effect.gen(function* () {
+    const { error } = yield* resolve({ tunnel: { status: 302, body: "" } }).pipe(Effect.flip);
+
+    assert.strictEqual(error._tag, "ConnectPairingWrongServerError");
+  }),
+);
+
+it.effect("gives up on an address that starts answering and then stalls", () =>
+  Effect.gen(function* () {
+    const stalled = new Response(new ReadableStream({ start: () => {} }), { status: 200 });
+    const fiber = yield* resolve({ tunnel: { status: 200, body: stalled } }).pipe(Effect.forkChild);
+    yield* TestClock.adjust("6 seconds");
+    const { result } = yield* Fiber.join(fiber);
+
+    assert.strictEqual(result.baseUrl, TUNNEL_URL);
+    assert.include(result.notes[0], "has not answered yet");
   }),
 );
 

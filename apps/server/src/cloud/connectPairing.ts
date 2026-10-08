@@ -18,7 +18,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
@@ -92,20 +92,26 @@ function connectPairingBaseUrl(
  * Who answers at the tunnel address: an environment, nobody yet, or something
  * else. Cloudflare answers 530 while a tunnel has no connected origin and
  * other 5xx codes while one comes up, so a server error means "not there
- * yet", never "someone else".
+ * yet", never "someone else". A redirect is not followed: it is an answer
+ * from somewhere the phone was not sent. The deadline covers the body too.
  */
 const probeTunnel = Effect.fn("pair.probeConnectTunnel")(function* (baseUrl: string) {
   const httpClient = yield* HttpClient.HttpClient;
-  const response = yield* HttpClientRequest.get(
-    new URL(WELL_KNOWN_ENVIRONMENT_PATH, baseUrl).toString(),
-  ).pipe(httpClient.execute, Effect.timeout(TUNNEL_PROBE_TIMEOUT), Effect.option);
-  if (Option.isNone(response) || response.value.status >= 500) {
-    return { _tag: "unreachable" } as const;
-  }
-  return yield* HttpClientResponse.filterStatusOk(response.value).pipe(
-    Effect.flatMap(HttpClientResponse.schemaBodyJson(ExecutionEnvironmentDescriptor)),
-    Effect.map(({ environmentId }) => ({ _tag: "environment", environmentId }) as const),
-    Effect.orElseSucceed(() => ({ _tag: "other" }) as const),
+  const answer = Effect.gen(function* () {
+    const response = yield* httpClient.execute(
+      HttpClientRequest.get(new URL(WELL_KNOWN_ENVIRONMENT_PATH, baseUrl).toString()),
+    );
+    if (response.status >= 500) return { _tag: "unreachable" } as const;
+    return yield* HttpClientResponse.filterStatusOk(response).pipe(
+      Effect.flatMap(HttpClientResponse.schemaBodyJson(ExecutionEnvironmentDescriptor)),
+      Effect.map(({ environmentId }) => ({ _tag: "environment", environmentId }) as const),
+      Effect.orElseSucceed(() => ({ _tag: "other" }) as const),
+    );
+  });
+  return yield* answer.pipe(
+    Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+    Effect.timeout(TUNNEL_PROBE_TIMEOUT),
+    Effect.orElseSucceed(() => ({ _tag: "unreachable" }) as const),
   );
 });
 
