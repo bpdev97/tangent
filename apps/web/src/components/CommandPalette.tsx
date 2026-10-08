@@ -66,6 +66,7 @@ import {
   PaletteIcon,
   RotateCcwIcon,
   SettingsIcon,
+  SparklesIcon,
   SquarePenIcon,
   TextSearchIcon,
   UserPlusIcon,
@@ -132,6 +133,7 @@ import {
 } from "../lib/projectPaths";
 import { onOpenCommandPalette } from "../commandPaletteBus";
 import { isPreviewFocused } from "../lib/previewFocus";
+import { openReleaseNotes } from "../lib/releaseNotes";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import {
   PULL_REQUESTS_PANEL_REF,
@@ -1594,6 +1596,18 @@ function OpenCommandPaletteDialog(props: {
     shortcutCommand: "usage.open",
     run: async () => {
       await navigate({ to: "/usage" });
+    },
+  });
+
+  // Tangent(FORK-NOTES-001)
+  actionItems.push({
+    kind: "action",
+    value: "action:release-notes",
+    searchTerms: ["release notes", "whats new", "changelog", "changes", "update", "version"],
+    title: "Show release notes",
+    icon: <SparklesIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      openReleaseNotes();
     },
   });
 
