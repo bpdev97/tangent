@@ -7,6 +7,7 @@ import {
   hermesApprovalChoice,
   hermesModelSwitchValue,
   parseHermesModelSelection,
+  parseHermesReleaseTag,
   parseHermesReleaseVersion,
   parseHermesUpdateCommand,
 } from "./HermesGatewaySupport.ts";
@@ -77,6 +78,13 @@ describe("Hermes gateway support", () => {
   it("reads the version from a release name", () => {
     expect(parseHermesReleaseVersion("Hermes Agent v0.21.4 (v2026.9.21)")).toBe("0.21.4");
     expect(parseHermesReleaseVersion(null)).toBeNull();
+  });
+
+  it("accepts only date-shaped release tags", () => {
+    expect(parseHermesReleaseTag("v2026.9.24")).toBe("v2026.9.24");
+    expect(parseHermesReleaseTag("--upload-pack=evil")).toBeNull();
+    expect(parseHermesReleaseTag("main")).toBeNull();
+    expect(parseHermesReleaseTag(undefined)).toBeNull();
   });
 });
 

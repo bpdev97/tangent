@@ -126,6 +126,11 @@ export function parseHermesReleaseVersion(name: string | null | undefined): stri
   return /\bv?(\d+\.\d+\.\d+)\b/u.exec(name ?? "")?.[1] ?? null;
 }
 
+/** Release tags are date-shaped (`v2026.9.24`); anything else is not passed to git. */
+export function parseHermesReleaseTag(tag: string | null | undefined): string | null {
+  return /^v\d+(?:\.\d+)+$/u.exec(tag?.trim() ?? "")?.[0] ?? null;
+}
+
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

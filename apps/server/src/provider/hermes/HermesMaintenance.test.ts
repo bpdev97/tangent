@@ -22,14 +22,18 @@ import { HERMES_UPDATE_LOCK_KEY, hermesMaintenanceCapabilities } from "./HermesM
 import { checkHermesProviderStatus } from "./HermesProvider.ts";
 
 /**
- * A fake `hermes`: logs each invocation, reports a version, "updates", and
- * serves by printing the ready sentinel and sleeping (nothing listens on the
- * port, so WebSocket connections are refused).
+ * A fake `hermes`: logs each invocation, reports a version (and an install
+ * directory when one is set), "updates", and serves by printing the ready
+ * sentinel and sleeping (nothing listens on the port, so WebSocket connections
+ * are refused).
  */
 const FAKE_HERMES = `#!/bin/sh
 echo "$*" >> "$HERMES_FAKE_LOG"
 case "$*" in
-  --version) echo "Hermes Agent v\${HERMES_FAKE_VERSION:-0.21.3} (2026.9.14)"; echo "Install method: git" ;;
+  --version)
+    echo "Hermes Agent v\${HERMES_FAKE_VERSION:-0.21.3} (2026.9.14)"
+    [ -z "\${HERMES_FAKE_INSTALL_DIR:-}" ] || echo "Install directory: $HERMES_FAKE_INSTALL_DIR"
+    echo "Install method: git" ;;
   update) exit 0 ;;
   *serve*)
     echo "env desktop=\${HERMES_DESKTOP:-unset} token=\${HERMES_DASHBOARD_SESSION_TOKEN:+set}" >> "$HERMES_FAKE_LOG"
@@ -68,6 +72,67 @@ const runCommand = (executable: string, args: ReadonlyArray<string>, env: NodeJS
     return Number(yield* child.exitCode);
   }).pipe(Effect.scoped);
 
+const GIT_IDENTITY = "-c user.name=test -c user.email=test@example.com -c commit.gpgsign=false";
+
+/**
+ * A Hermes checkout cloned the way a release-pinned install is: shallow, with
+ * only the tag `v2026.9.21`, from an origin that has since tagged `v2026.9.24`.
+ * `uv` is a fake that logs its arguments.
+ */
+const makePinnedCheckout = Effect.fnUntraced(function* (
+  fake: Effect.Success<ReturnType<typeof makeFakeHermes>>,
+  uvExitCode = 0,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-hermes-pinned-" });
+  const origin = path.join(root, "origin");
+  const checkout = path.join(root, "checkout");
+  const bin = path.join(root, "bin");
+  yield* fs.makeDirectory(bin);
+  yield* fs.writeFileString(
+    path.join(bin, "uv"),
+    `#!/bin/sh\necho "uv $*" >> "$HERMES_FAKE_LOG"\nexit ${uvExitCode}\n`,
+  );
+  yield* fs.chmod(path.join(bin, "uv"), 0o755);
+  const environment = {
+    ...fake.environment,
+    PATH: `${bin}:${fake.environment.PATH}`,
+    HERMES_FAKE_INSTALL_DIR: checkout,
+  };
+  const setup = yield* runCommand(
+    "/bin/sh",
+    [
+      "-ec",
+      `git init -q "$1"
+       for tag in v2026.9.21 v2026.9.24; do
+         git -C "$1" ${GIT_IDENTITY} commit -q --allow-empty -m "$tag"
+         git -C "$1" tag "$tag"
+       done
+       git clone -q -c advice.detachedHead=false --depth 1 --branch v2026.9.21 "file://$1" "$2"
+       mkdir -p "$2/venv/bin" && cp /bin/sh "$2/venv/bin/python"`,
+      "setup",
+      origin,
+      checkout,
+    ],
+    environment,
+  );
+  assert.equal(setup, 0);
+  const pinnedTo = (tag: string) =>
+    runCommand(
+      "/bin/sh",
+      [
+        "-c",
+        `test "$(git -C "$1" describe --tags --exact-match HEAD)" = "$2"`,
+        "tag",
+        checkout,
+        tag,
+      ],
+      environment,
+    ).pipe(Effect.map((exitCode) => exitCode === 0));
+  return { checkout, environment, pinnedTo };
+});
+
 const decodeHermesSettings = Schema.decodeEffect(HermesSettings);
 
 const INFO_PAYLOAD = {
@@ -102,14 +167,13 @@ describe("Hermes updates", () => {
         binaryPath: fake.binaryPath,
         environment: fake.environment,
         latestVersion: "0.21.4",
+        latestTag: "v2026.9.21",
         fleet,
       });
       const update = capabilities.update;
       assert.isNotNull(update);
       if (update === null) return;
       assert.equal(update.command, "hermes update");
-      assert.equal(update.executable, fake.binaryPath);
-      assert.deepStrictEqual(update.args, ["update"]);
       assert.equal(update.lockKey, HERMES_UPDATE_LOCK_KEY);
 
       const blockedDuringUpdate = yield* update.guard!(
@@ -125,12 +189,56 @@ describe("Hermes updates", () => {
       assert.deepStrictEqual(yield* fake.calls, [
         "--profile default serve --isolated --host 127.0.0.1 --port 0",
         "env desktop=unset token=set",
+        // The install is not pinned to a release tag, so Hermes updates itself.
+        "--version",
         "update",
       ]);
 
       yield* Effect.exit(runtime.connect({}));
       const calls = yield* fake.calls;
       assert.equal(calls.filter((call) => call.includes(" serve ")).length, 2);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("moves a checkout pinned to a release tag to the latest release", () =>
+    Effect.gen(function* () {
+      const fake = yield* makeFakeHermes();
+      const pinned = yield* makePinnedCheckout(fake);
+      const update = hermesMaintenanceCapabilities({
+        info: { version: "0.21.4", contract: 7, updateBehind: 1, updateCommand: "hermes update" },
+        binaryPath: fake.binaryPath,
+        environment: pinned.environment,
+        latestVersion: "0.21.5",
+        latestTag: "v2026.9.24",
+        fleet: new Set(),
+      }).update!;
+
+      assert.equal(yield* runCommand(update.executable, update.args, pinned.environment), 0);
+      assert.isTrue(yield* pinned.pinnedTo("v2026.9.24"));
+      // `hermes update` only follows a branch, so it is never run on a pinned checkout.
+      assert.deepStrictEqual(yield* fake.calls, [
+        "--version",
+        "backup --quick --label pre-update",
+        `uv pip install --python ${pinned.checkout}/venv/bin/python --editable ${pinned.checkout}`,
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("puts a pinned checkout back when the reinstall fails", () =>
+    Effect.gen(function* () {
+      const fake = yield* makeFakeHermes();
+      const pinned = yield* makePinnedCheckout(fake, 1);
+      const update = hermesMaintenanceCapabilities({
+        info: { version: "0.21.4", contract: 7, updateBehind: 1, updateCommand: "hermes update" },
+        binaryPath: fake.binaryPath,
+        environment: pinned.environment,
+        latestVersion: "0.21.5",
+        latestTag: "v2026.9.24",
+        fleet: new Set(),
+      }).update!;
+
+      assert.equal(yield* runCommand(update.executable, update.args, pinned.environment), 1);
+      assert.isTrue(yield* pinned.pinnedTo("v2026.9.21"));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
@@ -158,6 +266,7 @@ describe("Hermes updates", () => {
         binaryPath: fake.binaryPath,
         environment: fake.environment,
         latestVersion: "0.21.4",
+        latestTag: "v2026.9.21",
         fleet,
       });
       const guard = capabilities.update!.guard!;
@@ -211,6 +320,7 @@ describe("Hermes updates", () => {
             binaryPath: fake.binaryPath,
             environment: fake.environment,
             latestVersion: "0.21.4",
+            latestTag: "v2026.9.21",
             fleet: new Set(),
           }),
         );

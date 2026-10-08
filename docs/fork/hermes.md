@@ -134,6 +134,15 @@ Updates:
   action). Before running it, it refuses while any Hermes turn is running and stops the gateway
   processes of every Hermes instance, because the update replaces the install they all run from.
   Afterwards it re-reads the version and contract. Gateways restart on their next request.
+- `hermes update` only follows a branch, and Hermes publishes releases only as git tags (PyPI
+  stopped at 0.19.0). An install that stays on releases is therefore a checkout detached on a
+  release tag, where `hermes update` always fails. So the `hermes update` command runs through
+  `HERMES_RELEASE_UPDATE_SCRIPT` (`HermesMaintenance.ts`), which looks at the checkout when the
+  update is clicked. Detached exactly on a release tag: it takes Hermes's quick snapshot, checks out
+  the latest release tag (the `tag_name` of the GitHub release the advisory showed), and reinstalls
+  the package into the environment Hermes runs from, because a release can add packages and entry
+  points that an editable install does not pick up. A failed reinstall puts the checkout back.
+  Any other install is handed to `hermes update` unchanged.
 - Updates are one click from the version details on any client. Tangent never updates Hermes
   unprompted.
 - A gateway below the minimum contract is reported as incompatible, with the update action, instead
@@ -217,7 +226,8 @@ against the Behavior section, then delete this adapter and move to upstream's.
   links, resume after a server restart, and background turns (one continuation offer, live and
   replayed attachment, a queued user message, interrupts, and the buffer cap).
 - Updater tests with a fake `hermes` binary cover: refusing during an active turn, stopping and
-  re-probing gateways, and reporting an incompatible contract.
+  re-probing gateways, reporting an incompatible contract, moving a release-pinned checkout to the
+  latest tag, and putting it back when the reinstall fails.
 - An opt-in live test runs against the real binary on the Hermes host, including one async
   delegation that must settle into a child thread and the wake turn that reports it. The live
   layer adds the continuation worker, which only the production layer includes; without it
