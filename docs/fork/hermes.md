@@ -190,9 +190,17 @@ Usage:
 - Hermes keeps a running total per session and model, not one row per request. A row is dated by
   its last activity and counts in full on that day, so a conversation resumed over several days
   lands on its last one.
+- Because Hermes rewrites a row as its session goes on, each profile is a usage source of its own
+  that is read in full or reported as failed, never partial. The merge across servers adds a newer
+  partial scan on top of an older complete one, which is only safe for history that is appended
+  to.
+- Turns that ran on Hermes's Codex app-server runtime are left out: Codex wrote them to its own
+  history, which the Codex scan counts. Hermes marks such a session with `codex_thread_id` in
+  `sessions.model_config`. Hermes's own background calls for it still count.
 - Cost is what Hermes recorded (the billed amount when it knows it, else its own estimate). A
   subscription call records none, and T3's price table estimates it as it does for Codex and
-  Claude. Names with a vendor prefix are OpenRouter ids and are priced under `openrouter/`.
+  Claude. A vendor-prefixed model name is priced under `openrouter/` only when OpenRouter billed
+  it, and as the vendor's own model otherwise.
 
 Compatibility baseline: Hermes Agent 0.21.5 (`v2026.9.24`), gateway contract 8. The minimum is
 contract 7 (0.21.4); contract 8 only added the desktop Connectors API. Because Tangent can update Hermes itself, it does not keep workarounds for older gateways.
@@ -222,7 +230,8 @@ Registration follows Pi's (`PiDriver`, `PiAdapterV2`). Each hook carries a
   and provider label.
 - `packages/contracts/src/usage.ts`: `hermes` in `UsageProviderKind`. Adding a provider is additive
   in that contract, so it needs no version bump.
-- `apps/server/src/usage/UsageService.ts`: scans each Hermes root beside OpenCode's.
+- `apps/server/src/usage/UsageService.ts`: adds each Hermes profile as a source beside
+  OpenCode's.
 - `apps/web/src/components/usage/usageProviders.ts` and
   `apps/mobile/src/features/usage/usageProviders.ts`: the Usage label and color.
   `apps/web/src/components/usage/UsageProviderChart.test.ts` lists every provider, so it lists
@@ -296,8 +305,8 @@ against the Behavior section, then delete this adapter and move to upstream's.
   for a tool that has not answered. It needs no real model: any OpenAI-compatible endpoint that
   follows the prompt will do.
 - `hermesUsageReader.test.ts` reads usage from databases built with Hermes's table layout: token
-  mapping, which cost wins, the window, every profile under a root, and a database from before
-  Hermes recorded usage.
+  mapping, which cost and which rate apply, the window, Codex-runtime sessions, every profile
+  under a root read once and as a whole, and a database from before Hermes recorded usage.
 - `HermesT3Tools.test.ts` fails when a toolkit directory or tool under `apps/server/src/mcp/toolkits`
   is missing from the list Hermes is given. Add it to `HERMES_T3_TOOLKITS`.
 - Approval prompts need a profile with `approvals.mode: manual`; the default `smart` mode lets

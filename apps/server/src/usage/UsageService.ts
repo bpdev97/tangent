@@ -53,7 +53,7 @@ import { resolveAntigravityInstanceDirectories } from "../provider/antigravityAu
 import { mergeProviderInstanceEnvironment } from "../provider/ProviderInstanceEnvironment.ts";
 import { readOpenCodeUsage } from "./opencodeUsageReader.ts";
 // Tangent(FORK-HERMES-001)
-import { hermesUsageRoots, readHermesUsage } from "./hermesUsageReader.ts";
+import { scanHermesUsage } from "./hermesUsageReader.ts";
 import { readAntigravityUsage } from "./antigravityUsageReader.ts";
 import { readCursorAccountUsage } from "./cursorUsageReader.ts";
 import { resolveModelAliases, UsageAggregator } from "./usageAggregation.ts";
@@ -625,25 +625,25 @@ export const make = Effect.gen(function* () {
         ...(result.error ? { message: "Some OpenCode history could not be read." } : {}),
       });
     }
-    // Tangent(FORK-HERMES-001): each Hermes root holds every profile's own usage database.
-    const hermesRoots = yield* hermesUsageRoots([
-      hostEnvironment,
-      ...Object.values(settings.providerInstances)
-        .filter((instance) => instance.driver === "hermes")
-        .map((instance) => mergeProviderInstanceEnvironment(instance.environment, hostEnvironment)),
-    ]).pipe(
+    // Tangent(FORK-HERMES-001): each Hermes profile is a usage source of its own.
+    const hermesSources = yield* scanHermesUsage(
+      [
+        hostEnvironment,
+        ...Object.values(settings.providerInstances)
+          .filter((instance) => instance.driver === "hermes")
+          .map((instance) =>
+            mergeProviderInstanceEnvironment(instance.environment, hostEnvironment),
+          ),
+      ],
+      windowStartMs,
+    ).pipe(
       Effect.provideService(Path.Path, path),
       Effect.provideService(FileSystem.FileSystem, fileSystem),
     );
-    for (const dir of hermesRoots) {
-      const result = yield* Effect.promise(() => readHermesUsage(dir, windowStartMs));
+    for (const source of hermesSources) {
       scanned.push({
-        provider: "hermes",
-        dir,
-        volumeId: yield* Effect.promise(() => readDirectoryVolumeId(dir)),
-        files: result.missing ? null : result.files,
-        status: result.error ? "partial" : "ok",
-        ...(result.error ? { message: "Some Hermes history could not be read." } : {}),
+        ...source,
+        volumeId: yield* Effect.promise(() => readDirectoryVolumeId(source.dir)),
       });
     }
     const antigravityRoots = yield* envRoots("ANTIGRAVITY_DATA_DIR", [
