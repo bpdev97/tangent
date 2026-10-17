@@ -252,14 +252,16 @@ jobs:
         # Storage cleanup expects Git's pre-2.56 message for a broken worktree; Tangent CI's
         # older Git still runs it.
         # See the distribution record for when to remove these.
-        # One package at a time, as in Tangent CI: this runner times out tests and Chromium
-        # sessions when every package tests at once.
+        # One package at a time, as in Tangent CI: this runner times out tests when every
+        # package tests at once. Web's browser tests never reach Chromium here, so the web app
+        # runs only its unit project; Tangent CI runs both on Linux for the same commit.
         run: |
           rm -f apps/mobile/scripts/notification-center-manager.test.ts \
             apps/mobile/scripts/permissions-service.test.ts \
             apps/web/src/components/chat/MessagesTimeline.test.tsx \
             apps/server/src/storageCleanup.test.ts
-          vp run --concurrency-limit 1 test
+          vp run --concurrency-limit 1 --filter '!@t3tools/monorepo' --filter '!@t3tools/web' test
+          (cd apps/web && vp test run --passWithNoTests --project unit)
 
       - name: Align package versions
         run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"

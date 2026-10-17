@@ -52,8 +52,11 @@ that slice, so desktop-only changes never alter the iOS runtime fingerprint.
   the worktree as failed instead of kept (it is still not removed). `personal-ci.yml` runs the
   file on Linux, whose Git is older. Stop skipping it once upstream handles the new message.
 - The macOS release runs package tests one at a time, like `personal-ci.yml`. Run together, they
-  overload the runner: timing-sensitive tests time out and the web browser tests' Chromium misses
-  vitest's connect timeout, a different test each attempt (seen on 0.2.17).
+  overload the runner, and a different timing-sensitive test failed on each 0.2.17 attempt.
+- The macOS release runs only the web app's unit tests, not its `*.browser.test.tsx` files. On
+  GitHub's macOS runner the browser tab never connects back to vitest within its timeout, even
+  with packages run one at a time. `personal-ci.yml` runs them on Linux for the same commit. Stop
+  skipping them once they pass on the macOS runner.
 
 Deliberately not carried: renaming in-app text, permission prompts, CLI messages, or artwork;
 Linux and Windows desktop identity (Tangent ships only macOS desktop); and the old fork's
