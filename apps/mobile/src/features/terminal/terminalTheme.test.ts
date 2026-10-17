@@ -23,13 +23,15 @@ describe("getMobileTerminalTheme", () => {
       cursorBackground: "#0a0a0a",
     });
   });
-  it("applies the selected palette without replacing ANSI status colors", () => {
+  // Tangent(FORK-TERMCOLOR-001): each built-in theme brings its own ANSI colors.
+  it("applies the selected palette, including its ANSI colors", () => {
     const standard = getMobileTerminalTheme("t3-code", "dark");
     const ocean = getMobileTerminalTheme("ocean", "dark");
 
     expect(ocean.background).not.toBe(standard.background);
     expect(ocean.cursorForeground).not.toBe(standard.cursorForeground);
-    expect(ocean.palette).toEqual(standard.palette);
+    expect(ocean.palette).not.toEqual(standard.palette);
+    expect(ocean.palette[0]).toBe("#445466");
   });
 
   it("uses the canonical desktop terminal roles for built-in themes", () => {
@@ -50,8 +52,9 @@ describe("buildGhosttyThemeConfig", () => {
     expect(config).toContain("background = #0a0a0a");
     expect(config).toContain("foreground = #f5f5f5");
     expect(config).toContain("cursor-color = #b4cbff");
-    expect(config).toContain("palette = 0=#141415");
-    expect(config).toContain("palette = 15=#c6c6c8");
+    // Tangent(FORK-TERMCOLOR-001)
+    expect(config).toContain("palette = 0=#525252");
+    expect(config).toContain("palette = 15=#f5f5f5");
     expect(config.endsWith("\n")).toBe(true);
   });
 });
