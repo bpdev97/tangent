@@ -4,6 +4,7 @@ import {
   themeColorToNativeColor,
   type MobileThemeId,
 } from "../../lib/mobileTheme";
+import { withThemeTerminalPalette } from "./themeTerminalColors";
 
 export type TerminalAppearanceScheme = "light" | "dark";
 
@@ -111,6 +112,8 @@ export function getMobileTerminalTheme(
     border: colors["--color-border"],
     cursorForeground: themeColorToNativeColor(palette.terminalCursor),
     cursorBackground: background,
+    // Tangent(FORK-TERMCOLOR-001)
+    palette: withThemeTerminalPalette(base.palette, paletteId, scheme),
   };
 }
 
