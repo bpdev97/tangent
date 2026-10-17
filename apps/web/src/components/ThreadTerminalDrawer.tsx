@@ -29,7 +29,11 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
-import { mergeTerminalPalette, type TerminalPalette } from "@t3tools/shared/terminalPalette";
+import {
+  mergeTerminalPalette,
+  themeTerminalPalette,
+  type TerminalPalette,
+} from "@t3tools/shared/terminalPalette";
 import * as Schema from "effect/Schema";
 import {
   type PointerEvent as ReactPointerEvent,
@@ -277,7 +281,8 @@ function terminalFontOptions(family: string, size: number): { family?: string; s
   return trimmed.length > 0 ? { family: trimmed, size } : { size };
 }
 
-// Tangent(FORK-TERMCOLOR-001): `terminalPalette` is the host's hand-set palette.
+// Tangent(FORK-TERMCOLOR-001): the active built-in theme's ANSI colors, then
+// `terminalPalette`, the host's hand-set palette, over them.
 export function terminalThemeFromApp(
   mountElement?: HTMLElement | null,
   terminalPalette?: TerminalPalette,
@@ -341,7 +346,12 @@ export function terminalThemeFromApp(
       isDark ? { r: 180, g: 203, b: 255 } : { r: 38, g: 56, b: 78 },
     ),
     palette: mergeTerminalPalette(
-      TERMINAL_PALETTES[isDark ? "dark" : "light"],
+      themeTerminalPalette(
+        TERMINAL_PALETTES[isDark ? "dark" : "light"],
+        document.documentElement.dataset?.themeId,
+        isDark ? "dark" : "light",
+        hexToGhosttyColor,
+      ),
       terminalPalette,
       isDark ? "dark" : "light",
       hexToGhosttyColor,
@@ -504,9 +514,9 @@ function TerminalSessionViewport({
   // Tangent(FORK-TERMCOLOR-001): the config object changes on every config
   // event, so only a palette whose content changed repaints the terminal.
   const terminalPalette = serverConfig?.settings.terminalPalette;
-  const terminalPaletteRef = useRef(terminalPalette);
-  terminalPaletteRef.current = terminalPalette;
+  const readTerminalPalette = useEffectEvent(() => terminalPalette);
   const terminalPaletteKey = JSON.stringify(terminalPalette ?? null);
+  const terminalPaletteKeyRef = useRef(terminalPaletteKey);
   const openPreview = useAtomCommand(previewEnvironment.open, {
     reportFailure: false,
   });
@@ -637,8 +647,10 @@ function TerminalSessionViewport({
   }, [visible]);
 
   useEffect(() => {
+    if (terminalPaletteKeyRef.current === terminalPaletteKey) return;
+    terminalPaletteKeyRef.current = terminalPaletteKey;
     terminalRef.current?.setTheme(
-      terminalThemeFromApp(containerRef.current, terminalPaletteRef.current),
+      terminalThemeFromApp(containerRef.current, readTerminalPalette()),
     );
   }, [terminalPaletteKey]);
 
@@ -663,7 +675,7 @@ function TerminalSessionViewport({
     const setup = async (): Promise<(() => void) | null> => {
       const setupFont = terminalFontRef.current;
       const terminalOptions = withLiveVisibility(visibleRef, {
-        theme: terminalThemeFromApp(mount, terminalPaletteRef.current),
+        theme: terminalThemeFromApp(mount, readTerminalPalette()),
         font: terminalFontOptions(setupFont.family, setupFont.size),
         onData: (data) => handleData(data),
         onResize: (cols, rows) => void resizeTerminal(cols, rows),
@@ -686,7 +698,7 @@ function TerminalSessionViewport({
       terminal.setVisible(visibleRef.current);
       // The theme observer is not installed yet, so re-read the theme in case
       // the app toggled light/dark while the WASM surface was loading.
-      terminal.setTheme(terminalThemeFromApp(mount, terminalPaletteRef.current));
+      terminal.setTheme(terminalThemeFromApp(mount, readTerminalPalette()));
       setupTerminal = terminal;
       terminalRef.current = terminal;
       terminal.input.readOnly = !hasTerminalWriteAccess();
@@ -1044,13 +1056,12 @@ function TerminalSessionViewport({
       const themeObserver = new MutationObserver(() => {
         const activeTerminal = terminalRef.current;
         if (!activeTerminal) return;
-        activeTerminal.setTheme(
-          terminalThemeFromApp(containerRef.current, terminalPaletteRef.current),
-        );
+        activeTerminal.setTheme(terminalThemeFromApp(containerRef.current, readTerminalPalette()));
       });
       themeObserver.observe(document.documentElement, {
         attributes: true,
-        attributeFilter: ["class", "style"],
+        // Tangent(FORK-TERMCOLOR-001): a theme can change only its id.
+        attributeFilter: ["class", "style", "data-theme-id"],
       });
       setupCleanups.push(() => themeObserver.disconnect());
 
