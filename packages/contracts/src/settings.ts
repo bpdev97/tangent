@@ -47,6 +47,7 @@ import {
 import { PullRequestMergeMethod } from "./pullRequest.ts";
 import { PersonalPushRelaySettings, PersonalPushRelaySettingsPatch } from "./personalPush.ts";
 import { SharedMcpServers } from "./sharedMcpServers.ts";
+import { TerminalPaletteSettings } from "./terminalPalette.ts";
 
 export const TimestampFormat = Schema.Literals(["locale", "12-hour", "24-hour"]);
 export type TimestampFormat = typeof TimestampFormat.Type;
@@ -1279,6 +1280,8 @@ export const ServerSettings = Schema.Struct({
   personalPushRelay: PersonalPushRelaySettings,
   // Tangent(FORK-MCP-001): header values are stored in ServerSecretStore.
   mcpServers: SharedMcpServers.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  // Tangent(FORK-TERMCOLOR-001): set by editing settings.json; no patch field.
+  terminalPalette: Schema.optionalKey(TerminalPaletteSettings),
   sourceControlWritingStyle: SourceControlWritingStyleSetting.pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),

@@ -167,6 +167,10 @@
       "types": "./src/releaseNotes.ts",
       "import": "./src/releaseNotes.ts"
     },
+    "./terminalPalette": {
+      "types": "./src/terminalPalette.ts",
+      "import": "./src/terminalPalette.ts"
+    },
     "./t3ProjectFile": {
       "types": "./src/t3ProjectFile.ts",
       "import": "./src/t3ProjectFile.ts"
