@@ -51,6 +51,7 @@ rebased onto upstream rather than merging it, so each feature stays one commit.
 | `FORK-STATUS-001`    | An asleep or unreachable laptop is normal; the header shows a small mark beside the brand instead of "Reconnecting" text                      | [quiet connection status](docs/fork/quiet-connection-status.md) | Active |
 | `FORK-NOTES-001`     | Tangent's release notes live on GitHub; each client offers them once after an update and keeps them in Settings                               | [release notes](docs/fork/release-notes.md)                     | Active |
 | `FORK-TERMCOLOR-001` | Terminals use one fixed set of ANSI colors on every theme; the host's settings.json sets them for every client                                | [terminal colors](docs/fork/terminal-colors.md)                 | Active |
+| `FORK-TERMCTL-001`   | The terminal's split, new, and close buttons cover output; they stay hidden until hovered                                                     | [quiet terminal controls](docs/fork/quiet-terminal-controls.md) | Active |
 
 ## Removed, do not reintroduce
 
