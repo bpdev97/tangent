@@ -63,6 +63,7 @@ import { useSelectedThreadProjection } from "../../state/use-thread-detail";
 import { EnvironmentConnectionNotice } from "../connection/EnvironmentConnectionNotice";
 import { TerminalSurface } from "./NativeTerminalSurface";
 import { getMobileTerminalTheme } from "./terminalTheme";
+import { withTerminalPalette } from "./terminalPaletteSetting";
 import { terminalDebugLog } from "./terminalDebugLog";
 import {
   getTerminalBufferReplayKey,
@@ -552,7 +553,14 @@ export function ThreadTerminalRouteScreen(props: ThreadTerminalRouteScreenProps)
     [hostOs, selectedEnvironmentConnection?.environmentLabel],
   );
 
-  const terminalTheme = getMobileTerminalTheme(themeId, appearanceScheme);
+  // Tangent(FORK-TERMCOLOR-001)
+  const terminalTheme = withTerminalPalette(
+    getMobileTerminalTheme(themeId, appearanceScheme),
+    routeEnvironmentId === null
+      ? undefined
+      : serverConfigs.get(routeEnvironmentId)?.settings.terminalPalette,
+    appearanceScheme,
+  );
   const pendingModifier =
     pendingModifierState.terminalId === terminalId ? pendingModifierState.value : null;
   const headerSubtitle = selectedThreadProject?.title ?? "";
