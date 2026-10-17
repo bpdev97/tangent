@@ -66,6 +66,7 @@ import { EnvironmentConnectionNotice } from "../connection/EnvironmentConnection
 import { useRetryEnvironment } from "../connection/useRetryEnvironment";
 import { TerminalSurface, type TerminalSurfaceHandle } from "./NativeTerminalSurface";
 import { getMobileTerminalTheme } from "./terminalTheme";
+import { withTerminalPalette } from "./terminalPaletteSetting";
 import { useTerminalExitNavigation } from "./useTerminalExitNavigation";
 import {
   useInitialTerminalLaunchLocation,
@@ -537,7 +538,14 @@ function ThreadTerminal(props: {
     [hostOs, selectedEnvironmentConnection?.environmentLabel],
   );
 
-  const terminalTheme = getMobileTerminalTheme(themeId, appearanceScheme);
+  // Tangent(FORK-TERMCOLOR-001)
+  const terminalTheme = withTerminalPalette(
+    getMobileTerminalTheme(themeId, appearanceScheme),
+    routeEnvironmentId === null
+      ? undefined
+      : serverConfigs.get(routeEnvironmentId)?.settings.terminalPalette,
+    appearanceScheme,
+  );
   const headerSubtitle = selectedThreadProject?.title ?? "";
   const terminalToolbarActions = useMemo<ReadonlyArray<TerminalToolbarAction>>(() => {
     const modifierActions: ReadonlyArray<TerminalToolbarAction> =
