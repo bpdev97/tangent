@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { mergeTerminalPalette } from "./terminalPalette.ts";
+import { mergeTerminalPalette, themeTerminalPalette } from "./terminalPalette.ts";
+import { MOBILE_DEFAULT_THEME_ID, MOBILE_THEME_IDS } from "./themePalettes.ts";
+import { THEME_TERMINAL_PALETTES } from "./themeTerminalPalettes.ts";
 
 const DEFAULTS = Array.from({ length: 16 }, (_, index) => `default-${index}`);
 const identity = (hex: string) => hex;
@@ -55,5 +57,30 @@ describe("mergeTerminalPalette", () => {
       },
     );
     expect(merged).toEqual([{ r: 0x49, g: 0x4d, b: 0x64 }]);
+  });
+});
+
+describe("themeTerminalPalette", () => {
+  it("has 16 colors in each appearance for every built-in theme", () => {
+    for (const themeId of MOBILE_THEME_IDS) {
+      const lookupId = themeId === MOBILE_DEFAULT_THEME_ID ? undefined : themeId;
+      for (const appearance of ["light", "dark"] as const) {
+        const merged = themeTerminalPalette(DEFAULTS, lookupId, appearance, identity);
+        expect(merged).toEqual(THEME_TERMINAL_PALETTES[themeId]?.[appearance]);
+      }
+    }
+  });
+
+  it("keeps the defaults for custom themes, including one named t3-code", () => {
+    for (const themeId of ["my-theme", "t3-code", "constructor", "__proto__"]) {
+      expect(themeTerminalPalette(DEFAULTS, themeId, "dark", identity)).toEqual(DEFAULTS);
+    }
+  });
+
+  it("lets the host's palette override single theme colors", () => {
+    const themed = themeTerminalPalette(DEFAULTS, "ocean", "dark", identity);
+    const merged = mergeTerminalPalette(themed, { dark: ["#000000"] }, "dark", identity);
+    expect(merged[0]).toBe("#000000");
+    expect(merged.slice(1)).toEqual(themed.slice(1));
   });
 });
