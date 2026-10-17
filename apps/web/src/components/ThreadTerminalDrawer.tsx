@@ -1608,7 +1608,9 @@ export default function ThreadTerminalDrawer({
 
       {!hasTerminalSidebar && (
         <div className="pointer-events-none absolute right-2 top-2 z-20">
-          <div className="pointer-events-auto inline-flex items-center overflow-hidden rounded-md border border-border/80 bg-background shadow-xs">
+          {/* Tangent(FORK-TERMCTL-001): hidden until hovered or keyboard-focused, and held while a
+              tooltip is open so the two leave together; touch screens keep it. */}
+          <div className="pointer-events-auto inline-flex items-center overflow-hidden rounded-md border border-border/80 bg-background opacity-0 shadow-xs transition-opacity duration-150 hover:opacity-100 has-[:focus-visible]:opacity-100 has-[[data-popup-open]]:opacity-100 pointer-coarse:opacity-100">
             <TerminalActionButton
               disabled={!canOperateTerminal}
               className={`p-1 text-foreground/90 transition-colors ${
