@@ -30,6 +30,7 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
+import { mergeTerminalPalette, type TerminalPalette } from "@t3tools/shared/terminalPalette";
 import * as Schema from "effect/Schema";
 import {
   type PointerEvent as ReactPointerEvent,
@@ -317,7 +318,11 @@ function terminalFontOptions(family: string, size: number): { family?: string; s
   return trimmed.length > 0 ? { family: trimmed, size } : { size };
 }
 
-export function terminalThemeFromApp(mountElement?: HTMLElement | null): GhosttyTheme {
+// Tangent(FORK-TERMCOLOR-001): `terminalPalette` is the host's hand-set palette.
+export function terminalThemeFromApp(
+  mountElement?: HTMLElement | null,
+  terminalPalette?: TerminalPalette,
+): GhosttyTheme {
   const drawerSurface =
     mountElement?.closest("[data-thread-terminal-drawer]") ??
     document.querySelector("[data-thread-terminal-drawer]") ??
@@ -376,7 +381,12 @@ export function terminalThemeFromApp(mountElement?: HTMLElement | null): Ghostty
       terminalCursor,
       isDark ? { r: 180, g: 203, b: 255 } : { r: 38, g: 56, b: 78 },
     ),
-    palette: TERMINAL_PALETTES[isDark ? "dark" : "light"],
+    palette: mergeTerminalPalette(
+      TERMINAL_PALETTES[isDark ? "dark" : "light"],
+      terminalPalette,
+      isDark ? "dark" : "light",
+      hexToGhosttyColor,
+    ),
     selectionBackground: terminalSelection,
   };
 }
@@ -535,6 +545,12 @@ function TerminalSessionViewport({
     serverConfig?.availableEditors ?? [],
   );
   const openTerminalPath = useEffectEvent((target: string) => openInPreferredEditor(target));
+  // Tangent(FORK-TERMCOLOR-001): the config object changes on every config
+  // event, so only a palette whose content changed repaints the terminal.
+  const terminalPalette = serverConfig?.settings.terminalPalette;
+  const terminalPaletteRef = useRef(terminalPalette);
+  terminalPaletteRef.current = terminalPalette;
+  const terminalPaletteKey = JSON.stringify(terminalPalette ?? null);
   const openPreview = useAtomCommand(previewEnvironment.open, {
     reportFailure: false,
   });
@@ -653,6 +669,13 @@ function TerminalSessionViewport({
     if (visible) consumePendingTerminalFocus(threadRef, terminalId);
   }, [terminalId, threadRef, visible]);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- applies palette changes to the live Ghostty terminal surface
+  useEffect(() => {
+    terminalRef.current?.setTheme(
+      terminalThemeFromApp(containerRef.current, terminalPaletteRef.current),
+    );
+  }, [terminalPaletteKey]);
+
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- applies font family and size changes to the live Ghostty terminal surface
   useEffect(() => {
     const current = terminalFontRef.current;
@@ -676,7 +699,7 @@ function TerminalSessionViewport({
     const setup = async (): Promise<(() => void) | null> => {
       const setupFont = terminalFontRef.current;
       const terminalOptions = withLiveVisibility(visibleRef, {
-        theme: terminalThemeFromApp(mount),
+        theme: terminalThemeFromApp(mount, terminalPaletteRef.current),
         font: terminalFontOptions(setupFont.family, setupFont.size),
         onData: (data) => handleData(data),
         onResize: (cols, rows) => void resizeTerminal(cols, rows),
@@ -696,7 +719,7 @@ function TerminalSessionViewport({
       }
       terminal.setVisible(visibleRef.current);
       // Re-read theme changes during WASM loading, before the observer was installed.
-      terminal.setTheme(terminalThemeFromApp(mount));
+      terminal.setTheme(terminalThemeFromApp(mount, terminalPaletteRef.current));
       setupTerminal = terminal;
       terminalRef.current = terminal;
       terminal.input.setAttribute("data-workspace-focus-default", "");
@@ -1077,7 +1100,9 @@ function TerminalSessionViewport({
       const themeObserver = new MutationObserver(() => {
         const activeTerminal = terminalRef.current;
         if (!activeTerminal) return;
-        activeTerminal.setTheme(terminalThemeFromApp(containerRef.current));
+        activeTerminal.setTheme(
+          terminalThemeFromApp(containerRef.current, terminalPaletteRef.current),
+        );
       });
       themeObserver.observe(document.documentElement, {
         attributes: true,
