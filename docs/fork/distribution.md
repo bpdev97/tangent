@@ -46,6 +46,11 @@ that slice, so desktop-only changes never alter the iOS runtime fingerprint.
   hook allows 30 seconds to import the timeline, and the macOS runner takes longer while every
   package tests at once. It passes alone and on Linux, where `personal-ci.yml` runs it for the same
   commit before any release. Stop skipping it once it passes on the macOS runner again.
+- The macOS release also skips `apps/server/src/storageCleanup.test.ts`. The runner's Git 2.56
+  reports a `.git` file that points nowhere as "gitfile does not point to a valid repository",
+  while upstream's storage cleanup only recognizes "not a git repository", so one case reports
+  the worktree as failed instead of kept (it is still not removed). `personal-ci.yml` runs the
+  file on Linux, whose Git is older. Stop skipping it once upstream handles the new message.
 
 Deliberately not carried: renaming in-app text, permission prompts, CLI messages, or artwork;
 Linux and Windows desktop identity (Tangent ships only macOS desktop); and the old fork's

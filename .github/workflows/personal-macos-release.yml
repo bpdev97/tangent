@@ -249,11 +249,14 @@ jobs:
         # Upstream's Expo 58 upgrade dropped the native patches these macOS-only tests compile.
         # The timeline test gives itself 30 seconds to import, which this runner exceeds while
         # every package tests at once; Tangent CI runs it on Linux for the same commit.
+        # Storage cleanup expects Git's pre-2.56 message for a broken worktree; Tangent CI's
+        # older Git still runs it.
         # See the distribution record for when to remove these.
         run: |
           rm -f apps/mobile/scripts/notification-center-manager.test.ts \
             apps/mobile/scripts/permissions-service.test.ts \
-            apps/web/src/components/chat/MessagesTimeline.test.tsx
+            apps/web/src/components/chat/MessagesTimeline.test.tsx \
+            apps/server/src/storageCleanup.test.ts
           vp run test
 
       - name: Align package versions
