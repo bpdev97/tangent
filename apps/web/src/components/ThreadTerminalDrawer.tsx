@@ -29,7 +29,11 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
-import { mergeTerminalPalette, type TerminalPalette } from "@t3tools/shared/terminalPalette";
+import {
+  mergeTerminalPalette,
+  themeTerminalPalette,
+  type TerminalPalette,
+} from "@t3tools/shared/terminalPalette";
 import * as Schema from "effect/Schema";
 import {
   type PointerEvent as ReactPointerEvent,
@@ -234,7 +238,8 @@ function terminalFontOptions(family: string, size: number): { family?: string; s
   return trimmed.length > 0 ? { family: trimmed, size } : { size };
 }
 
-// Tangent(FORK-TERMCOLOR-001): `terminalPalette` is the host's hand-set palette.
+// Tangent(FORK-TERMCOLOR-001): the active built-in theme's ANSI colors, then
+// `terminalPalette`, the host's hand-set palette, over them.
 export function terminalThemeFromApp(
   mountElement?: HTMLElement | null,
   terminalPalette?: TerminalPalette,
@@ -298,7 +303,12 @@ export function terminalThemeFromApp(
       isDark ? { r: 180, g: 203, b: 255 } : { r: 38, g: 56, b: 78 },
     ),
     palette: mergeTerminalPalette(
-      TERMINAL_PALETTES[isDark ? "dark" : "light"],
+      themeTerminalPalette(
+        TERMINAL_PALETTES[isDark ? "dark" : "light"],
+        document.documentElement.dataset?.themeId,
+        isDark ? "dark" : "light",
+        hexToGhosttyColor,
+      ),
       terminalPalette,
       isDark ? "dark" : "light",
       hexToGhosttyColor,
@@ -998,7 +1008,8 @@ export function TerminalViewport({
       });
       themeObserver.observe(document.documentElement, {
         attributes: true,
-        attributeFilter: ["class", "style"],
+        // Tangent(FORK-TERMCOLOR-001): a theme can change only its id.
+        attributeFilter: ["class", "style", "data-theme-id"],
       });
       setupCleanups.push(() => themeObserver.disconnect());
 

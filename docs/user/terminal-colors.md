@@ -1,8 +1,15 @@
 # Terminal colors
 
-Terminals use 16 standard colors for prompts, `ls` output, and other programs. You can set them
-for the thread terminals on a server, so they match the terminal you use elsewhere. Web, desktop,
-iPhone, and iPad all use them.
+Terminals use 16 standard colors for prompts, `ls` output, and other programs. Each built-in theme
+(T3 Code, T3 Chat, Grove, Ocean, Ember, and Iris) comes with colors that match it, in both light
+and dark mode, so switching themes recolors the terminal too. Custom and imported themes use the
+default colors.
+
+## Set your own colors
+
+To use your own colors, such as the ones from the terminal you use elsewhere, set them for the
+thread terminals on a server. Web, desktop, iPhone, and iPad all use them, whatever theme each one
+shows.
 
 Edit `settings.json` in the server's `userdata` directory and add `terminalPalette`, with a list of
 16 colors for dark mode, light mode, or both, in order from color 0 to color 15:
@@ -33,8 +40,10 @@ Edit `settings.json` in the server's `userdata` directory and add `terminalPalet
 ```
 
 Open terminals update when you save. Colors must be written as `#rrggbb`; any other entry, and any
-color you leave out, keeps the default. The terminal's background and text colors still follow your
-theme.
+color you leave out, keeps the theme's color. To change just a few colors, leave the others out or
+write something else in their place, such as `""`. The terminal's background and text colors still
+follow your theme.
 
 To copy a Ghostty theme, take the `palette = N=#rrggbb` lines from its theme file. Each server has
-its own `settings.json`, so set the colors on every server whose terminals you use.
+its own `settings.json`, so set the colors on every server whose terminals you use. Remove
+`terminalPalette` to go back to the theme's colors.
