@@ -61,6 +61,15 @@ export const findOwnedLauncher = Effect.fn("cli.uninstall.find_launcher")(functi
       ? shimPath
       : undefined;
   }
+  // Tangent(FORK-LAUNCHER-001): links from older Tangent installs name runtime/current/t3.
+  const linkTarget = yield* fs.readLink(input.launchedAs).pipe(Effect.option);
+  if (
+    Option.isSome(linkTarget) &&
+    path.resolve(path.dirname(input.launchedAs), linkTarget.value) ===
+      path.join(path.dirname(input.versionsDir), "current", "t3")
+  ) {
+    return input.launchedAs;
+  }
   return yield* findPosixLauncher({ launchedAs: input.launchedAs, versionsDir: input.versionsDir });
 });
 
@@ -92,6 +101,13 @@ const ownsLauncher = Effect.fn("cli.uninstall.owns_launcher")(function* (
           ),
           yield* fs.realPath(launcher).pipe(Effect.orElseSucceed(() => undefined)),
           yield* readPosixLauncherTarget(launcher),
+          // Tangent(FORK-LAUNCHER-001): a script runs runtime/current/t3, which resolves to a version.
+          yield* readPosixLauncherTarget(launcher).pipe(
+            Effect.flatMap((target) =>
+              target === undefined ? Effect.undefined : fs.realPath(target),
+            ),
+            Effect.orElseSucceed(() => undefined),
+          ),
         ];
   return targets.some(
     (target) =>

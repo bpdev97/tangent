@@ -317,8 +317,10 @@ if [ -e "${bin_dir}/t3" ] || [ -L "${bin_dir}/t3" ]; then
     case "$existing" in
       */./* | */../* | */. | */..) ;;
       *)
+        # Tangent(FORK-LAUNCHER-001): runtime/current/t3 is ours too.
         if version_t3 "$existing" "$versions_dir" || version_t3 "$existing" "$real_versions_dir" ||
-          [ "$existing" = "${t3_home}/bin/t3" ]; then owned=true; fi
+          [ "$existing" = "${t3_home}/bin/t3" ] ||
+          [ "$existing" = "${t3_home}/runtime/current/t3" ]; then owned=true; fi
         ;;
     esac
     if [ -n "$existing_dir" ] && version_t3 "${existing_dir}/${existing##*/}" "$real_versions_dir"; then
@@ -331,7 +333,9 @@ launcher_tmp="$(mktemp "${bin_dir}/.t3.XXXXXX")"
 trap 'rm -f "$launcher_tmp"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-launcher_script "${target_dir}/t3" > "$launcher_tmp"
+# Tangent(FORK-LAUNCHER-001): the script runs runtime/current, which every update moves.
+ln -sfn "versions/${version}" "${t3_home}/runtime/current"
+launcher_script "${t3_home}/runtime/current/t3" > "$launcher_tmp"
 chmod 755 "$launcher_tmp"
 # An empty spot is hard-linked without -f, so a file that appears after the check above is kept.
 if "$slot_empty"; then

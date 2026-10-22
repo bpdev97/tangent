@@ -241,6 +241,20 @@ it.layer(NodeServices.layer)("t3 uninstall launcher", (it) => {
         ),
         [cmd],
       );
+      // Tangent(FORK-LAUNCHER-001): links name runtime/current/t3.
+      const following = path.join(root, "following/t3");
+      yield* fs.makeDirectory(path.dirname(following), { recursive: true });
+      yield* fs.symlink(path.join(root, "runtime/current/t3"), following);
+      assert.equal(yield* findOwnedLauncher({ launchedAs: following, versionsDir }), following);
+      // A launcher script that runs runtime/current/t3 is recorded as ours.
+      yield* fs.symlink("versions/1.0.0", path.join(root, "runtime/current"));
+      const followingScript = path.join(root, "following/t3-script");
+      yield* fs.writeFileString(
+        followingScript,
+        posixLauncherScript(path.join(root, "runtime/current/t3")),
+      );
+      yield* fs.writeFileString(path.join(root, "runtime/launchers"), `${followingScript}\n`);
+      assert.deepStrictEqual(yield* findRecordedLaunchers(versionsDir), [followingScript]);
     }).pipe(Effect.provideService(HostProcess.Platform, "linux")),
   );
 });

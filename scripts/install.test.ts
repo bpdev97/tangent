@@ -52,8 +52,9 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer home
       const { status, stdout, stderr } = install();
       expect(status, stdout + stderr).toBe(0);
       expect(stderr).toContain(`Installed T3 Code ${version}`);
+      // Tangent(FORK-LAUNCHER-001): the script runs runtime/current, which every update moves.
       expect(await NodeFSP.readFile(launcher, "utf8")).toBe(
-        launcherScript(NodePath.join(target, "t3")),
+        launcherScript(NodePath.join(home, "runtime/current/t3")),
       );
       expect(
         NodeChildProcess.execFileSync(launcher, ["--version"], {
@@ -275,8 +276,9 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("install.sh t3 
         env: { HOME: root, SHELL: "/bin/zsh", PATH: "/usr/bin:/bin" },
       });
       expect(upgrade.code, upgrade.output).toBe(0);
+      // Tangent(FORK-LAUNCHER-001): launchers run runtime/current/t3.
       expect(await NodeFSP.readFile(link, "utf8")).toBe(
-        launcherScript(NodePath.join(root, "alias/runtime/versions/1.2.3/t3")),
+        launcherScript(NodePath.join(root, "alias/runtime/current/t3")),
       );
       expect(upgrade.output).toContain(
         `printf '\\n%s\\n' 'export PATH="$PATH:$HOME/bin"' >> ~/.zshrc`,
@@ -329,7 +331,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("install.sh t3 
       });
       expect(overDesktop.code, overDesktop.output).toBe(0);
       expect(await NodeFSP.readFile(link, "utf8")).toBe(
-        launcherScript(NodePath.join(home, "runtime/versions/1.2.3/t3")),
+        launcherScript(NodePath.join(home, "runtime/current/t3")),
       );
     } finally {
       await NodeFSP.rm(root, { recursive: true, force: true });
