@@ -264,8 +264,10 @@ if [ -e "${bin_dir}/t3" ] || [ -L "${bin_dir}/t3" ]; then
     case "$existing" in
       */./* | */../* | */. | */..) ;;
       *)
+        # Tangent(FORK-LAUNCHER-001): runtime/current/t3 is ours too.
         if version_t3 "$existing" "$versions_dir" || version_t3 "$existing" "$real_versions_dir" ||
-          [ "$existing" = "${t3_home}/bin/t3" ]; then owned=true; fi
+          [ "$existing" = "${t3_home}/bin/t3" ] ||
+          [ "$existing" = "${t3_home}/runtime/current/t3" ]; then owned=true; fi
         ;;
     esac
     if [ -n "$existing_dir" ] && version_t3 "${existing_dir}/${existing##*/}" "$real_versions_dir"; then
@@ -274,12 +276,14 @@ if [ -e "${bin_dir}/t3" ] || [ -L "${bin_dir}/t3" ]; then
   fi
   "$owned" || fail "another t3 is already at ${bin_dir}/t3. Remove it and run this again, or run ${target_dir}/t3 directly."
 fi
+# Tangent(FORK-LAUNCHER-001): the link follows runtime/current, which every update moves.
+ln -sfn "versions/${version}" "${t3_home}/runtime/current"
 # An empty spot is linked without -f, so a file that appears after the check above is kept.
 if "$slot_empty"; then
-  ln -s "${target_dir}/t3" "${bin_dir}/t3" || fail "could not link ${bin_dir}/t3; something else was created there."
+  ln -s "${t3_home}/runtime/current/t3" "${bin_dir}/t3" || fail "could not link ${bin_dir}/t3; something else was created there."
 else
   # Known race, accepted: a file written here after the ownership check above is overwritten.
-  ln -sfn "${target_dir}/t3" "${bin_dir}/t3"
+  ln -sfn "${t3_home}/runtime/current/t3" "${bin_dir}/t3"
 fi
 # Pruning keeps what this launcher points at; a background service cannot see bin_dir otherwise.
 launcher="$(CDPATH='' cd -P -- "$bin_dir" && pwd)/t3"

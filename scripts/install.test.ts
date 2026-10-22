@@ -47,7 +47,8 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer home
       );
       expect(status, stdout + stderr).toBe(0);
       expect(stderr).toContain(`Installed T3 Code ${version}`);
-      expect(await NodeFSP.readlink(launcher)).toBe(NodePath.join(target, "t3"));
+      // Tangent(FORK-LAUNCHER-001): the link follows runtime/current.
+      expect(await NodeFSP.readlink(launcher)).toBe(NodePath.join(home, "runtime/current/t3"));
       expect(
         NodeChildProcess.execFileSync(launcher, ["--version"], {
           cwd: NodeOS.tmpdir(),
@@ -214,9 +215,8 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("install.sh t3 
         env: { HOME: root, SHELL: "/bin/zsh", PATH: "/usr/bin:/bin" },
       });
       expect(upgrade.code, upgrade.output).toBe(0);
-      expect(await NodeFSP.readlink(link)).toBe(
-        NodePath.join(root, "alias/runtime/versions/1.2.3/t3"),
-      );
+      // Tangent(FORK-LAUNCHER-001): links name runtime/current/t3.
+      expect(await NodeFSP.readlink(link)).toBe(NodePath.join(root, "alias/runtime/current/t3"));
       expect(upgrade.output).toContain(
         `printf '\\n%s\\n' 'export PATH="$PATH:$HOME/bin"' >> ~/.zshrc`,
       );
@@ -260,7 +260,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("install.sh t3 
         binDir: `${binDir}/`,
       });
       expect(overDesktop.code, overDesktop.output).toBe(0);
-      expect(await NodeFSP.readlink(link)).toBe(NodePath.join(home, "runtime/versions/1.2.3/t3"));
+      expect(await NodeFSP.readlink(link)).toBe(NodePath.join(home, "runtime/current/t3"));
     } finally {
       await NodeFSP.rm(root, { recursive: true, force: true });
     }
