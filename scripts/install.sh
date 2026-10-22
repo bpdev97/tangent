@@ -218,7 +218,9 @@ fi
 
 step "Setting up the t3 command..."
 mkdir -p "$bin_dir"
-ln -sfn "${target_dir}/t3" "${bin_dir}/t3"
+# Tangent(FORK-LAUNCHER-001): the link follows runtime/current, which every update moves.
+ln -sfn "versions/${version}" "${t3_home}/runtime/current"
+ln -sfn "${t3_home}/runtime/current/t3" "${bin_dir}/t3"
 # Pruning keeps what this launcher points at; a background service cannot see bin_dir otherwise.
 launcher="$(CDPATH='' cd -P -- "$bin_dir" && pwd)/t3"
 launchers="${t3_home}/runtime/launchers"

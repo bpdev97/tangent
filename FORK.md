@@ -52,6 +52,7 @@ rebased onto upstream rather than merging it, so each feature stays one commit.
 | `FORK-NOTES-001`     | Tangent's release notes live on GitHub; each client offers them once after an update and keeps them in Settings                               | [release notes](docs/fork/release-notes.md)                     | Active |
 | `FORK-TERMCOLOR-001` | Terminals use one fixed set of ANSI colors on every theme; each theme gets its own, and settings.json overrides them                          | [terminal colors](docs/fork/terminal-colors.md)                 | Active |
 | `FORK-TERMCTL-001`   | The terminal's split, new, and close buttons cover output; they stay hidden until hovered                                                     | [quiet terminal controls](docs/fork/quiet-terminal-controls.md) | Active |
+| `FORK-LAUNCHER-001`  | The service and the `t3` command run from fixed paths, so client updates move `t3` along and macOS privacy grants survive updates             | [stable launcher](docs/fork/stable-launcher.md)                 | Active |
 
 ## Removed, do not reintroduce
 
