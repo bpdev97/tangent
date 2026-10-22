@@ -32,6 +32,12 @@ it.layer(NodeServices.layer)("t3 uninstall launcher", (it) => {
       assert.isUndefined(yield* findOwnedLauncher({ launchedAs: theirs, versionsDir }));
       assert.isUndefined(yield* findOwnedLauncher({ launchedAs: copy, versionsDir }));
       assert.isUndefined(yield* findOwnedLauncher({ launchedAs: undefined, versionsDir }));
+
+      // Tangent(FORK-LAUNCHER-001): links name runtime/current/t3.
+      const following = path.join(root, "following/t3");
+      yield* fs.makeDirectory(path.dirname(following), { recursive: true });
+      yield* fs.symlink(path.join(root, "runtime/current/t3"), following);
+      assert.equal(yield* findOwnedLauncher({ launchedAs: following, versionsDir }), following);
     }).pipe(Effect.scoped, Effect.provideService(HostProcess.Platform, "linux")),
   );
 });
