@@ -24,6 +24,10 @@ if (
     // Tangent(FORK-MCP-001)
     const { runSharedMcpBridgeFastPath } = await import("./sharedMcpServers/sharedMcpBridge.ts");
     await runSharedMcpBridgeFastPath();
+  } else if (command === "__service-launcher") {
+    // Tangent(FORK-LAUNCHER-001)
+    const { runServiceLauncherFastPath } = await import("./serviceLauncherFastPath.ts");
+    await runServiceLauncherFastPath(process.argv.slice(3));
   } else {
     // Before anything reads stdin: the desktop app's Windows launcher starts
     // the CLI without one. Never for the fast paths, whose stdin is a pipe.

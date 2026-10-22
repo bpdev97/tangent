@@ -233,6 +233,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, NetService.layer))("t3 update servic
         );
 
         expect(installs).toEqual([{ allowDowngrade: false, start: true }]);
+        // Tangent(FORK-LAUNCHER-001): the handed-off install moves t3 once its checks pass.
+        expect(yield* fs.exists(path.join(baseDir, "runtime", "current"))).toBe(false);
         const output = lines.join("\n");
         expect(output).not.toContain("Background service restarted");
         expect(output).toContain(`Background service switching to ${targetVersion}`);
