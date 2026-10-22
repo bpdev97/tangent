@@ -42,6 +42,10 @@ if (
   if (process.argv[2] === "__service-launcher" && process.argv.length === 3) {
     const { runServiceLauncherCli } = await import("./cli/serviceLauncher.ts");
     await runServiceLauncherCli();
+  } else if (process.argv[2] === "__service-launcher" && process.argv[3] === "--check") {
+    // Tangent(FORK-LAUNCHER-001)
+    const { runServiceLauncherCheck } = await import("./serviceLauncherFastPath.ts");
+    runServiceLauncherCheck();
   } else {
     const { runCliCommand } = await loadCliMain();
     await runCliCommand();

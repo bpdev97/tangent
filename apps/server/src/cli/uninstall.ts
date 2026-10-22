@@ -59,7 +59,11 @@ export const findOwnedLauncher = Effect.fn("cli.uninstall.find_launcher")(functi
   const linkTarget = yield* fs.readLink(input.launchedAs).pipe(Effect.option);
   if (Option.isNone(linkTarget)) return undefined;
   const resolved = path.resolve(path.dirname(input.launchedAs), linkTarget.value);
-  return isVersionExecutable(path, input.versionsDir, resolved) ? input.launchedAs : undefined;
+  return isVersionExecutable(path, input.versionsDir, resolved) ||
+    // Tangent(FORK-LAUNCHER-001): links name runtime/current/t3.
+    resolved === path.join(path.dirname(input.versionsDir), "current", "t3")
+    ? input.launchedAs
+    : undefined;
 });
 
 /** Whether `launcher` is a link or unedited `t3.cmd` into this home's runtime/versions. */

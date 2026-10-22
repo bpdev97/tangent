@@ -18,6 +18,8 @@ import { vi } from "vite-plus/test";
 import * as ProcessRunner from "../processRunner.ts";
 import * as BootService from "./bootService.ts";
 import { pinnedRuntimePaths } from "./pinnedRuntime.ts";
+import { SERVICE_LAUNCHER_CHECK_OUTPUT } from "../serviceLauncherFastPath.ts"; // Tangent(FORK-LAUNCHER-001)
+import { stableLauncherPaths } from "./stableLauncher.ts"; // Tangent(FORK-LAUNCHER-001)
 import {
   parseServiceState,
   SERVICE_ENV_FILE,
@@ -142,11 +144,13 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
     linger: string;
     enabled: boolean;
     active: boolean;
+    standaloneLauncher: boolean; // Tangent(FORK-LAUNCHER-001)
   } = {
     failCommand: undefined,
     linger: "yes",
     enabled: true,
     active: true,
+    standaloneLauncher: true,
   };
   const runner = ProcessRunner.ProcessRunner.of({
     run: Effect.fn("test.run_boot_service_command")(function* (
@@ -185,13 +189,18 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
               })
             : input.args[0] === "--version"
               ? `t3 v${/versions\/([^/]+)\//.exec(input.command)?.[1] ?? "1.2.3"}\n`
-              : input.command === "loginctl" && input.args[0] === "show-user"
-                ? `${control.linger}\n`
-                : input.args[1] === "is-enabled"
-                  ? control.enabled
-                    ? "enabled\n"
-                    : "disabled\n"
-                  : "",
+              : // Tangent(FORK-LAUNCHER-001)
+                input.args[0] === "__service-launcher" && input.args[1] === "--check"
+                ? control.standaloneLauncher
+                  ? `${SERVICE_LAUNCHER_CHECK_OUTPUT}\n`
+                  : ""
+                : input.command === "loginctl" && input.args[0] === "show-user"
+                  ? `${control.linger}\n`
+                  : input.args[1] === "is-enabled"
+                    ? control.enabled
+                      ? "enabled\n"
+                      : "disabled\n"
+                    : "",
         stderr: "",
         code: ChildProcessSpawner.ExitCode(
           failed ||
@@ -253,8 +262,10 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
       ),
     );
   const service = yield* makeService();
+  const launcher = stableLauncherPaths(path, baseDir); // Tangent(FORK-LAUNCHER-001)
   return {
     service,
+    launcher,
     makeService,
     fs,
     home,
@@ -388,7 +399,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
           : setting === "manager-only"
             ? path.join(configRoot, "config root")
             : undefined;
-      const { service, makeService, home, statePath, timeouts, runtime, control } =
+      const { service, makeService, home, statePath, timeouts, launcher, control } =
         yield* makeHarness("linux", undefined, xdgConfigHome, managerXdgConfigHome);
       const unitPath = path.join(
         setting === "relocated" || setting === "manager-only" || setting === "manager-unavailable"
@@ -411,9 +422,9 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
         protocol: SERVICE_LAUNCHER_PROTOCOL,
         activeVersion: "1.2.3",
       });
-      expect(plan.program).toEqual([runtime.entryPath, "__service-launcher"]);
+      expect(plan.program).toEqual([launcher.entryPath, "__service-launcher"]);
       expect(yield* fs.readFileString(plan.unitPath)).toContain(
-        `ExecStart=${runtime.entryPath} __service-launcher`,
+        `ExecStart=${launcher.entryPath} __service-launcher`,
       );
       expect(yield* service.status).toMatchObject({
         current: true,
@@ -565,7 +576,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
     "install with start=false rewrites files, preserves service.env, and marks a restart pending on %s",
     (platform) =>
       Effect.gen(function* () {
-        const { service, fs, baseDir, statePath, commands, makeService } =
+        const { service, fs, baseDir, statePath, commands, makeService, launcher } =
           yield* makeHarness(platform);
         const path = yield* Path.Path;
         const envPath = path.join(baseDir, SERVICE_ENV_FILE);
@@ -580,14 +591,14 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
         commands.length = 0;
 
         const newer = yield* makeService(undefined, "1.2.4");
-        const plan = yield* newer.install({ start: false });
+        yield* newer.install({ start: false });
         expect(new Uint8Array(yield* fs.readFile(envPath))).toEqual(envBytes);
 
         expect(parseServiceState(yield* fs.readFileString(statePath))).toEqual({
           protocol: SERVICE_LAUNCHER_PROTOCOL,
           activeVersion: "1.2.4",
         });
-        expect(yield* fs.readFileString(plan.unitPath)).toContain("versions/1.2.4/t3");
+        expect((yield* fs.readFileString(launcher.versionPath)).split(" ")[0]).toBe("1.2.4");
         expect(
           commands.filter(
             (command) =>
@@ -609,7 +620,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
           protocol: SERVICE_LAUNCHER_PROTOCOL,
           activeVersion: "1.2.5",
         });
-        expect(yield* fs.readFileString(plan.unitPath)).toContain("versions/1.2.5/t3");
+        expect((yield* fs.readFileString(launcher.versionPath)).split(" ")[0]).toBe("1.2.5");
         expect((yield* latest.status).current).toBe(true);
         expect(
           yield* fs.exists(path.join(path.dirname(statePath), SERVICE_RESTART_PENDING_FILE)),
@@ -621,13 +632,14 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
     "serializes a local install with another process reconciling an older unit snapshot",
     () =>
       Effect.gen(function* () {
-        const { service, fs, statePath, makeService, runtime } = yield* makeHarness();
+        const { service, fs, statePath, makeService, runtime, launcher } = yield* makeHarness();
         const path = yield* Path.Path;
         const plan = yield* service.install();
         const unit = yield* fs.readFileString(plan.unitPath);
         yield* fs.writeFileString(
           plan.unitPath,
-          unit.replace("versions/1.2.3/t3", "versions/1.2.2/t3"),
+          // Tangent(FORK-LAUNCHER-001): a unit from before the fixed launcher.
+          unit.replace(launcher.entryPath, path.join(plan.baseDir, "runtime/versions/1.2.2/t3")),
         );
         yield* fs.writeFileString(
           statePath,
@@ -755,7 +767,8 @@ process.disconnect();
           protocol: SERVICE_LAUNCHER_PROTOCOL,
           activeVersion: "1.2.4",
         });
-        expect(yield* fs.readFileString(plan.unitPath)).toContain("versions/1.2.4/t3");
+        expect(yield* fs.readFileString(plan.unitPath)).toContain(launcher.entryPath);
+        expect((yield* fs.readFileString(launcher.versionPath)).split(" ")[0]).toBe("1.2.4");
         expect(
           yield* fs.readFileString(
             path.join(path.dirname(statePath), SERVICE_RESTART_PENDING_FILE),
@@ -1033,7 +1046,7 @@ process.disconnect();
 
   it.effect("installs, reports current state, and uninstalls on macOS", () =>
     Effect.gen(function* () {
-      const { service, fs, statePath, commands, timeouts, runtime } = yield* makeHarness("darwin");
+      const { service, fs, statePath, commands, timeouts, launcher } = yield* makeHarness("darwin");
       const path = yield* Path.Path;
       const plan = yield* service.install();
 
@@ -1050,7 +1063,7 @@ process.disconnect();
         activeVersion: "1.2.3",
       });
       expect(yield* fs.readFileString(plan.unitPath)).toContain(
-        `    <string>${runtime.entryPath}</string>\n    <string>__service-launcher</string>`,
+        `    <string>${launcher.entryPath}</string>\n    <string>__service-launcher</string>`,
       );
       expect(yield* service.status).toMatchObject({
         current: true,
@@ -1107,7 +1120,8 @@ process.disconnect();
       const { makeService, fs, baseDir, runtime } = yield* makeHarness("darwin");
       const path = yield* Path.Path;
       const previous = runtime.versionDir;
-      const installed = pinnedRuntimePaths(path, baseDir, "1.2.4", "darwin").versionDir;
+      // Tangent(FORK-LAUNCHER-001): runtime/current stands in for the installed version.
+      const installed = path.join(baseDir, "runtime", "current");
       // The 1.2.3 CLI, or the 1.2.3 service's own PATH, installs 1.2.4.
       const updated = yield* makeService(
         `/usr/bin:${previous}:/bin`,
@@ -1174,6 +1188,69 @@ process.disconnect();
 
       expect(commands).toContain(bootstrap);
       expect(yield* fs.exists(markerPath)).toBe(false);
+      expect((yield* service.status).current).toBe(true);
+    }),
+  );
+
+  // Tangent(FORK-LAUNCHER-001)
+  it.effect.each(["linux", "darwin"] as const)(
+    "moves a unit that names a versioned runtime onto the fixed launcher on %s",
+    (platform) =>
+      Effect.gen(function* () {
+        const { service, fs, baseDir, runtime, launcher } = yield* makeHarness(platform);
+        const path = yield* Path.Path;
+        const { unitPath, logPath } = yield* service.status;
+        const versionedPlan = {
+          program: [runtime.entryPath, "__service-launcher"],
+          baseDir,
+          logPath,
+          unitPath,
+        };
+        yield* fs.makeDirectory(path.dirname(unitPath), { recursive: true });
+        yield* fs.writeFileString(
+          unitPath,
+          platform === "linux"
+            ? BootService.renderBootServiceUnit(versionedPlan)
+            : BootService.renderBootServicePlist(versionedPlan, {
+                homeDir: "/Users/theo",
+                environmentPath: "/usr/bin",
+              }),
+        );
+        yield* fs.writeFileString(
+          path.join(baseDir, "runtime", "service-state.json"),
+          JSON.stringify({ protocol: SERVICE_LAUNCHER_PROTOCOL, activeVersion: "1.2.3" }),
+        );
+        // `t3 service install` acts only on a service that is not current.
+        expect((yield* service.status).current).toBe(false);
+
+        const plan = yield* service.install();
+
+        expect(plan.program).toEqual([launcher.entryPath, "__service-launcher"]);
+        expect(BootService.bootServiceProgramOf(yield* fs.readFileString(plan.unitPath))).toBe(
+          launcher.entryPath,
+        );
+        expect((yield* fs.readFileString(launcher.versionPath)).split(" ")[0]).toBe("1.2.3");
+        expect(yield* fs.readLink(path.join(baseDir, "runtime", "current"))).toBe("versions/1.2.3");
+        expect((yield* service.status).current).toBe(true);
+      }),
+  );
+
+  it.effect("keeps the versioned launcher for a build that cannot launch on its own", () =>
+    Effect.gen(function* () {
+      const { service, fs, control, runtime, launcher } = yield* makeHarness();
+      control.standaloneLauncher = false;
+
+      const plan = yield* service.install();
+
+      expect(plan.program).toEqual([runtime.entryPath, "__service-launcher"]);
+      expect(yield* fs.readFileString(plan.unitPath)).toContain(
+        `ExecStart=${runtime.entryPath} __service-launcher`,
+      );
+      expect(yield* fs.exists(launcher.entryPath)).toBe(false);
+      // A later install from a build that can launch alone moves it over.
+      expect((yield* service.status).current).toBe(false);
+      control.standaloneLauncher = true;
+      yield* service.install();
       expect((yield* service.status).current).toBe(true);
     }),
   );

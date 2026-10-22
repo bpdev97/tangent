@@ -21,10 +21,8 @@ import * as ProcessRunner from "../processRunner.ts";
 import { acquireServiceSelectionLock } from "./serviceSelectionLock.ts";
 import {
   ensurePinnedRuntimeInstalled,
-  launcherOwnsVersionsDir,
   pinnedRuntimeCommand,
   pinnedRuntimePaths,
-  pinnedRuntimeVersionsDir,
   PinnedRuntimeInstallError,
 } from "./pinnedRuntime.ts";
 import {
@@ -39,6 +37,12 @@ import {
   serviceStateHasPendingUpdate,
   type ServiceState,
 } from "./serviceProtocol.ts";
+import {
+  adoptSelectedRuntime,
+  followCurrentOnPath,
+  installStableLauncher,
+  stableLauncherPaths,
+} from "./stableLauncher.ts"; // Tangent(FORK-LAUNCHER-001)
 
 export {
   serviceUnitBaseDirOf as bootServiceBaseDirOf,
@@ -59,12 +63,16 @@ function escapeSystemdSpecifiers(value: string): string {
   return value.replaceAll("%", "%%");
 }
 
-function quoteSystemdValue(value: string): string {
+export function quoteSystemdValue(value: string): string {
   const escaped = escapeSystemdSpecifiers(value);
   return /[\s"'\\]/.test(escaped)
     ? `"${escaped.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
     : escaped;
 }
+
+// Tangent(FORK-LAUNCHER-001): stableLauncherSettle rewrites the plist's PATH.
+export const unescapeXmlText = (value: string) =>
+  value.replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
 
 export interface BootServicePlan {
   readonly program: ReadonlyArray<string>;
@@ -117,7 +125,7 @@ export function renderBootServiceUnit(plan: BootServicePlan): string {
   ].join("\n");
 }
 
-function escapeXmlText(value: string): string {
+export function escapeXmlText(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
@@ -600,7 +608,10 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
   const runner = yield* ProcessRunner.ProcessRunner;
   const host = input.host ?? { execPath: hostExecPath };
   const runtimePaths = pinnedRuntimePaths(path, input.baseDir, input.cliVersion, platform);
-  const versionsDir = pinnedRuntimeVersionsDir(path, input.baseDir);
+  const followCurrent = yield* followCurrentOnPath(input.baseDir).pipe(
+    Effect.provideService(FileSystem.FileSystem, fs),
+    Effect.provideService(Path.Path, path),
+  ); // Tangent(FORK-LAUNCHER-001)
   const xmlSafeInstallerDirectories = installerPath.split(":").filter(
     (directory) =>
       directory.length > 0 &&
@@ -622,9 +633,7 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
         "/bin",
         "/usr/sbin",
         "/sbin",
-      ].map((directory) =>
-        launcherOwnsVersionsDir(path, versionsDir, directory) ? runtimePaths.versionDir : directory,
-      ),
+      ].map(followCurrent), // Tangent(FORK-LAUNCHER-001): runtime/current, not the version dir.
     ),
   ).join(":");
 
@@ -649,6 +658,7 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
       ? installedBaseDir
       : undefined;
   };
+  const stableLauncher = stableLauncherPaths(path, input.baseDir); // Tangent(FORK-LAUNCHER-001)
   const writeDurably = (filePath: string, contents: string) =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -669,7 +679,8 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
       }),
     ).pipe(Effect.mapError((cause) => new BootServiceInstallError({ cause })));
   const plan: BootServicePlan = {
-    program: [runtimePaths.entryPath, "__service-launcher"],
+    // Tangent(FORK-LAUNCHER-001): install falls back to the versioned path when it must.
+    program: [stableLauncher.entryPath, "__service-launcher"],
     baseDir: input.baseDir,
     logPath,
     unitPath,
@@ -874,6 +885,7 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
       .exists(unitPath)
       .pipe(Effect.mapError((cause) => new BootServiceInstallError({ cause })));
     // Stop outside the selection lock: the launcher may be waiting to acquire it.
+    let installPlan = plan; // Tangent(FORK-LAUNCHER-001)
     const start = options?.start !== false;
     if (installed && start && runningInsideService && manager.kind === "systemd") {
       // Stopping the unit from inside it kills this process before the start.
@@ -957,7 +969,24 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
               return yield* new BootServiceUpdatePendingError();
             }
           }
-          yield* writeDurably(unitPath, manager.render(plan));
+          // Tangent(FORK-LAUNCHER-001): a fixed program path keeps macOS privacy grants across
+          // versions. A build that cannot launch on its own keeps the versioned path.
+          const launcher = yield* installStableLauncher({
+            baseDir: input.baseDir,
+            version: input.cliVersion,
+          }).pipe(
+            Effect.provideService(ProcessRunner.ProcessRunner, runner),
+            Effect.provideService(FileSystem.FileSystem, fs),
+            Effect.provideService(Path.Path, path),
+          );
+          if (Option.isNone(launcher)) {
+            installPlan = { ...plan, program: [runtimePaths.entryPath, "__service-launcher"] };
+          }
+          yield* writeDurably(unitPath, manager.render(installPlan));
+          yield* adoptSelectedRuntime({ baseDir: input.baseDir }).pipe(
+            Effect.provideService(FileSystem.FileSystem, fs),
+            Effect.provideService(Path.Path, path),
+          ); // Tangent(FORK-LAUNCHER-001)
         }),
       ),
     ).pipe(
@@ -985,7 +1014,7 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
         installed && start ? runSteps(manager.restart).pipe(Effect.ignore) : Effect.void,
       ),
     );
-    return plan;
+    return installPlan; // Tangent(FORK-LAUNCHER-001)
   });
 
   const restart: BootService["Service"]["restart"] = Effect.gen(function* () {
@@ -1090,12 +1119,14 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
     if (!(yield* fs.exists(unitPath))) {
       return { supported: true, installed: false, current: false, unitPath, logPath };
     }
-    const [unit, runtimeEntryExists, runtimeSentinel, stateText] = yield* Effect.all([
-      fs.readFileString(unitPath),
-      fs.exists(runtimePaths.entryPath),
-      fs.readFileString(runtimePaths.sentinelPath).pipe(Effect.option),
-      fs.readFileString(statePath).pipe(Effect.option),
-    ]);
+    const [unit, runtimeEntryExists, runtimeSentinel, stateText, launcherExists] =
+      yield* Effect.all([
+        fs.readFileString(unitPath),
+        fs.exists(runtimePaths.entryPath),
+        fs.readFileString(runtimePaths.sentinelPath).pipe(Effect.option),
+        fs.readFileString(statePath).pipe(Effect.option),
+        fs.exists(stableLauncher.entryPath), // Tangent(FORK-LAUNCHER-001)
+      ]);
     const state = Option.isSome(stateText) ? parseServiceState(stateText.value) : undefined;
     const installedVersion = Option.isSome(stateText)
       ? serviceStateActiveVersion(stateText.value)
@@ -1120,6 +1151,7 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
         problems.length === 0 &&
         normalizeUnit(unit) === normalizeUnit(detectedManager.render(plan)) &&
         runtimeEntryExists &&
+        launcherExists && // Tangent(FORK-LAUNCHER-001)
         Option.isSome(runtimeSentinel) &&
         runtimeSentinel.value.trim() === input.cliVersion &&
         state?.activeVersion === input.cliVersion &&
