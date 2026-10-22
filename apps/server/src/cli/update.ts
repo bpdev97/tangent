@@ -38,6 +38,7 @@ import {
 import { compareExactServiceVersions, isExactServiceVersion } from "../cloud/serviceProtocol.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import { managedUpdateMirror, managedUpdateRefusal } from "../policy/managedUpdates.ts";
+import { adoptCurrentRuntime, adoptSelectedRuntime } from "../cloud/stableLauncher.ts"; // Tangent(FORK-LAUNCHER-001)
 import * as ProcessRunner from "../processRunner.ts";
 import { isProcessAlive, readPersistedServerRuntimeState } from "../serverRuntimeState.ts";
 import { projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
@@ -546,11 +547,15 @@ export const runUpdate = Effect.fn("cli.update.run")(function* (input: {
   );
 
   const launchedAs = (yield* HostProcess.IsExecutable) ? yield* resolveLauncherPath : undefined;
-  const repointed = yield* repointLauncher({
-    launchedAs,
-    baseDir: input.baseDir,
-    targetEntryPath: runtime.entryPath,
-  });
+  // Tangent(FORK-LAUNCHER-001): elsewhere links follow runtime/current, moved further down.
+  let repointed =
+    platform === "win32"
+      ? yield* repointLauncher({
+          launchedAs,
+          baseDir: input.baseDir,
+          targetEntryPath: runtime.entryPath,
+        })
+      : Option.none<string>();
 
   // Use today's service manager for the target version. Inside the service it hands off to
   // the target CLI, so stopping this process cannot interrupt the switch.
@@ -579,6 +584,15 @@ export const runUpdate = Effect.fn("cli.update.run")(function* (input: {
           }),
       ),
     );
+  }
+
+  // Tangent(FORK-LAUNCHER-001): with a service, t3 follows the version its state selects, after
+  // the install passed its own checks and even when a client update committed meanwhile. A
+  // handed-off install, or a pending update, publishes its version itself.
+  if (platform !== "win32" && servicePlan?.handedOff !== true) {
+    repointed = serviceInstalled
+      ? yield* adoptSelectedRuntime({ baseDir: input.baseDir, launchedAs })
+      : yield* adoptCurrentRuntime({ baseDir: input.baseDir, version: targetVersion, launchedAs });
   }
 
   // A handed-off service install rewrites the unit later, while the old launcher may be stopped.

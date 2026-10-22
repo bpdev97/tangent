@@ -47,7 +47,8 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer home
       );
       expect(status, stdout + stderr).toBe(0);
       expect(stderr).toContain(`Installed T3 Code ${version}`);
-      expect(await NodeFSP.readlink(launcher)).toBe(NodePath.join(target, "t3"));
+      // Tangent(FORK-LAUNCHER-001): the link follows runtime/current.
+      expect(await NodeFSP.readlink(launcher)).toBe(NodePath.join(home, "runtime/current/t3"));
       expect(
         NodeChildProcess.execFileSync(launcher, ["--version"], {
           cwd: NodeOS.tmpdir(),
