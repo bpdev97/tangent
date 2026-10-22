@@ -53,6 +53,10 @@ if (
   const launcherOptions = launcher?.parseServiceLauncherArgs(process.argv.slice(3));
   if (launcher !== undefined && launcherOptions !== undefined) {
     await launcher.runServiceLauncherCli(launcherOptions);
+  } else if (process.argv[2] === "__service-launcher" && process.argv[3] === "--check") {
+    // Tangent(FORK-LAUNCHER-001)
+    const { runServiceLauncherCheck } = await import("./serviceLauncherFastPath.ts");
+    runServiceLauncherCheck();
   } else {
     const { runCliCommand } = await loadCliMain();
     await runCliCommand();
