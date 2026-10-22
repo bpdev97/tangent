@@ -27,6 +27,7 @@ import * as Schema from "effect/Schema";
 
 import * as ServerConfig from "./config.ts";
 import * as ServiceLauncherClient from "./cloud/serviceLauncherClient.ts";
+import { settleThisServiceRuntime } from "./cloud/stableLauncherSettle.ts"; // Tangent(FORK-LAUNCHER-001)
 import { flushCompileCache } from "./compileCache.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
@@ -644,6 +645,10 @@ const make = Effect.fn("serverRuntimeStartup.make")(function* (options?: Startup
     yield* runStartupPhase("auxiliary-roots.parked", options?.awaitAuxiliaryParked ?? Effect.void);
 
     const updateOutcome = yield* launcher.prepareTrial;
+    // Tangent(FORK-LAUNCHER-001): this server is now the version the launcher keeps running.
+    if (launcher.managed) {
+      yield* Effect.forkScoped(settleThisServiceRuntime(serverConfig.baseDir));
+    }
 
     yield* Effect.logDebug("startup phase: publishing welcome event", {
       environmentId: environment.environmentId,

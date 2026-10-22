@@ -32,6 +32,7 @@
     "FORK-STATUS-001": "docs/fork/quiet-connection-status.md",
     "FORK-NOTES-001": "docs/fork/release-notes.md",
     "FORK-TERMCOLOR-001": "docs/fork/terminal-colors.md",
-    "FORK-TERMCTL-001": "docs/fork/quiet-terminal-controls.md"
+    "FORK-TERMCTL-001": "docs/fork/quiet-terminal-controls.md",
+    "FORK-LAUNCHER-001": "docs/fork/stable-launcher.md"
   }
 }

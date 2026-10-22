@@ -10,6 +10,7 @@ import { HttpClient } from "effect/http";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
 import * as ProcessRunner from "../processRunner.ts";
+import { SERVICE_LAUNCHER_CHECK_OUTPUT } from "../serviceLauncherFastPath.ts";
 import * as BootService from "./bootService.ts";
 import { pinnedRuntimePaths } from "./pinnedRuntime.ts";
 import { bootServiceHostOf } from "./serviceListenHost.ts";
@@ -48,7 +49,12 @@ const makeService = Effect.fn("test.make_listen_host_service")(function* (
   const runner = ProcessRunner.ProcessRunner.of({
     run: (input) =>
       Effect.succeed({
-        stdout: input.args[0] === "--version" ? `t3 v${cliVersion}\n` : "",
+        stdout:
+          input.args[0] === "--version"
+            ? `t3 v${cliVersion}\n`
+            : input.args[1] === "--check" // Tangent(FORK-LAUNCHER-001)
+              ? `${SERVICE_LAUNCHER_CHECK_OUTPUT}\n`
+              : "",
         stderr: "",
         code: ChildProcessSpawner.ExitCode(0),
         timedOut: false,
