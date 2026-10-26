@@ -2,6 +2,7 @@ import { Button } from "../../components/ui/Button";
 import * as Dialog from "../../components/ui/Dialog";
 import { useOpenPullRequest } from "../../native/useOpenPullRequest";
 import { useWorkspaceSettledContentWidth } from "../layout/workspace-content-width";
+import { threadLaneContainerStyle } from "./tangent-reading-width"; // Tangent(FORK-READWIDTH-001)
 import { ThreadMarkdownVideo, ThreadMediaVisibleContext } from "./ThreadMarkdownVideo";
 import { useMarkdownImageSource } from "../../native/useMarkdownImageSource";
 import {
@@ -2759,7 +2760,8 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     props.threadId,
     fileShareSourceIdentifier,
   );
-  const horizontalPadding = splitLayout ? 20 : 16;
+  const upstreamHorizontalPadding = splitLayout ? 20 : 16;
+  const horizontalPadding = duoColumns ? 16 : upstreamHorizontalPadding; // Tangent(FORK-READWIDTH-001)
   const contentLeftInset = props.contentSideInsets?.left ?? 0;
   const contentRightInset = props.contentSideInsets?.right ?? 0;
   const usableViewportWidth = Math.max(0, viewportWidth - contentLeftInset - contentRightInset);
@@ -3742,6 +3744,13 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
               paddingTop: FEED_PADDING_TOP,
               paddingLeft: contentHorizontalPadding + contentLeftInset,
               paddingRight: contentHorizontalPadding + contentRightInset,
+              // Tangent(FORK-READWIDTH-001)
+              ...threadLaneContainerStyle({
+                maxWidth: props.contentMaxWidth,
+                minimumPadding: horizontalPadding,
+                leftInset: contentLeftInset,
+                rightInset: contentRightInset,
+              }),
             }}
           />
         </View>
