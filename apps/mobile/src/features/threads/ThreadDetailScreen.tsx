@@ -133,6 +133,7 @@ import {
   type LayoutVariant,
 } from "../../lib/layout";
 import { editPendingThreadMessage } from "../../state/edit-pending-thread-message";
+import { capThreadReadingWidth } from "./tangent-reading-width"; // Tangent(FORK-READWIDTH-001)
 import { deviceEnvironment } from "../../state/device";
 import { useEnvironmentQuery } from "../../state/query";
 import { threadDevicePreviews } from "../devices/threadDevicePreviews";
@@ -1127,12 +1128,13 @@ function ThreadDetailBody(props: ThreadDetailScreenProps) {
   );
   const layoutVariant = props.layoutVariant ?? "compact";
   const isSplitLayout = layoutVariant === "split";
-  const contentMaxWidth =
+  const upstreamContentMaxWidth =
     Platform.OS === "android"
       ? ANDROID_READING_MAX_WIDTH
       : isSplitLayout
         ? CHAT_CONTENT_MAX_WIDTH
         : undefined;
+  const contentMaxWidth = capThreadReadingWidth(upstreamContentMaxWidth); // Tangent(FORK-READWIDTH-001)
   const providerSubagentProvider = props.serverConfig?.providers.find(
     (provider) => provider.instanceId === props.selectedThread.modelSelection.instanceId,
   );

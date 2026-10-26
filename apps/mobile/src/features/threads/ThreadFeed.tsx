@@ -2,6 +2,7 @@ import { Button } from "../../components/ui/Button";
 import * as Dialog from "../../components/ui/Dialog";
 import { useOpenPullRequest } from "../../native/useOpenPullRequest";
 import { useWorkspaceSettledContentWidth } from "../layout/workspace-content-width";
+import { threadLaneContainerStyle } from "./tangent-reading-width"; // Tangent(FORK-READWIDTH-001)
 import { ThreadMarkdownVideo, ThreadMediaVisibleContext } from "./ThreadMarkdownVideo";
 import { useMarkdownImageSource } from "../../native/useMarkdownImageSource";
 import {
@@ -2645,7 +2646,8 @@ export const ThreadFeed = memo(function ThreadFeed({
     props.threadId,
     fileShareSourceIdentifier,
   );
-  const horizontalPadding = props.layoutVariant === "split" ? 20 : 16;
+  const upstreamHorizontalPadding = props.layoutVariant === "split" ? 20 : 16;
+  const horizontalPadding = duoColumns ? 16 : upstreamHorizontalPadding; // Tangent(FORK-READWIDTH-001)
   const contentLeftInset = props.contentSideInsets?.left ?? 0;
   const contentRightInset = props.contentSideInsets?.right ?? 0;
   const usableViewportWidth = Math.max(0, viewportWidth - contentLeftInset - contentRightInset);
@@ -3222,6 +3224,8 @@ export const ThreadFeed = memo(function ThreadFeed({
     const anchor = reflowAnchorRef.current;
     cancelReflow();
     const list = listRef.current;
+    // Tangent(FORK-READWIDTH-001): a fold's width steps can leave the relative hold past the end.
+    if (reflowAnchorsSizeChanges && anchor === "end") void list?.scrollToEnd({ animated: false });
     if (reflowAnchorsSizeChanges || !anchor || anchor === "end" || !list) return;
     if (userScrollSessionRef.current) return;
     if (loadedListKeyRef.current !== listMountKey) return;
@@ -3249,7 +3253,10 @@ export const ThreadFeed = memo(function ThreadFeed({
     if (reflowSettleTimerRef.current !== null) clearTimeout(reflowSettleTimerRef.current);
     reflowSettleTimerRef.current = setTimeout(
       settleReflow,
-      reflowAnchorsSizeChanges ? FEED_REFLOW_HOLD_MS : FEED_REFLOW_SETTLE_MS,
+      // Tangent(FORK-READWIDTH-001): the end has no place to hold; settling sooner hides the pin.
+      reflowAnchorsSizeChanges && reflowAnchorRef.current !== "end"
+        ? FEED_REFLOW_HOLD_MS
+        : FEED_REFLOW_SETTLE_MS,
     );
   };
 
@@ -3707,6 +3714,13 @@ export const ThreadFeed = memo(function ThreadFeed({
               paddingTop: FEED_PADDING_TOP,
               paddingLeft: contentHorizontalPadding + contentLeftInset,
               paddingRight: contentHorizontalPadding + contentRightInset,
+              // Tangent(FORK-READWIDTH-001)
+              ...threadLaneContainerStyle({
+                maxWidth: props.contentMaxWidth,
+                minimumPadding: horizontalPadding,
+                leftInset: contentLeftInset,
+                rightInset: contentRightInset,
+              }),
             }}
           />
         </View>
