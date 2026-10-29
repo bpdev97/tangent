@@ -85,6 +85,7 @@ import { DelimitedTablePreview } from "./DelimitedTablePreview";
 import { PreviewImage } from "./PreviewImage";
 import FileBrowserPanel from "./FileBrowserPanel";
 import { FileExplorerPane } from "./FileExplorerPane";
+import { SlideAnnotatedFilePreview } from "./SlideAnnotatedFilePreview"; // Tangent(FORK-SLIDES-001)
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
 import { breadcrumbPathOf, retainedBreadcrumbTrail, trailChildOf } from "./filePath";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
@@ -1422,8 +1423,13 @@ export default function FilePreviewPanel({
           ) : relativePath &&
             absolutePath &&
             (isDocument || file.readError?.failure === "binary_file") ? (
-            <AttachmentFilePreview
-              key={`${environmentId}:${absolutePath}:${workspaceMutationId}:${fileRefreshRevision}`}
+            // Tangent(FORK-SLIDES-001): slide comments go to this thread's composer, and the
+            // preview reloads when this file changes, not on every workspace mutation.
+            <SlideAnnotatedFilePreview
+              composerTarget={composerDraftTarget}
+              path={absolutePath}
+              workspaceMutationId={workspaceMutationId}
+              key={`${environmentId}:${absolutePath}:${fileRefreshRevision}`}
               name={relativePath.split(/[\\/]/).at(-1) || relativePath}
               mimeType="application/octet-stream"
               sizeBytes={0}
