@@ -84,6 +84,7 @@ import { BrowserDocumentFrame, isPdfPreviewFile } from "./BrowserDocumentFrame";
 import { DelimitedTablePreview } from "./DelimitedTablePreview";
 import { PreviewImage } from "./PreviewImage";
 import FileBrowserPanel from "./FileBrowserPanel";
+import { SlideAnnotatedFilePreview } from "./SlideAnnotatedFilePreview"; // Tangent(FORK-SLIDES-001)
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
 import { breadcrumbPathOf, retainedBreadcrumbTrail, trailChildOf } from "./filePath";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
@@ -1410,7 +1411,10 @@ export default function FilePreviewPanel({
           ) : relativePath &&
             absolutePath &&
             (isDocument || file.readError?.failure === "binary_file") ? (
-            <AttachmentFilePreview
+            // Tangent(FORK-SLIDES-001): slide comments go to this thread's composer.
+            <SlideAnnotatedFilePreview
+              composerTarget={composerDraftTarget}
+              path={absolutePath}
               key={`${environmentId}:${absolutePath}:${workspaceMutationId}:${fileRefreshRevision}`}
               name={relativePath.split(/[\\/]/).at(-1) || relativePath}
               mimeType="application/octet-stream"
