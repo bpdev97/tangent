@@ -33,6 +33,7 @@
     "FORK-TERMCOLOR-001": "docs/fork/terminal-colors.md",
     "FORK-TERMCTL-001": "docs/fork/quiet-terminal-controls.md",
     "FORK-LAUNCHER-001": "docs/fork/stable-launcher.md",
-    "FORK-READWIDTH-001": "docs/fork/reading-width.md"
+    "FORK-READWIDTH-001": "docs/fork/reading-width.md",
+    "FORK-SLIDES-001": "docs/fork/slide-comments.md"
   }
 }
