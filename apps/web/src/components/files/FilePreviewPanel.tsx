@@ -99,6 +99,7 @@ import { DelimitedTablePreview } from "./DelimitedTablePreview";
 import { PreviewImage } from "./PreviewImage";
 import FileBrowserPanel from "./FileBrowserPanel";
 import { FileExplorerPane } from "./FileExplorerPane";
+import { SlideAnnotatedFilePreview } from "./SlideAnnotatedFilePreview"; // Tangent(FORK-SLIDES-001)
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
 import { breadcrumbPathOf, retainedBreadcrumbTrail, trailChildOf } from "./filePath";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
@@ -1808,6 +1809,28 @@ export default function FilePreviewPanel({
               revealLine={revealLine}
               revealRequestId={revealRequestId}
               wordWrap={wordWrap}
+            />
+          ) : relativePath &&
+            absolutePath &&
+            isDocument &&
+            officePreviewKind({ name: relativePath }) === "pptx" ? (
+            // Tangent(FORK-SLIDES-001): slide comments go to this thread's composer, and a new
+            // version of the deck loads hidden before it replaces the one on screen.
+            <SlideAnnotatedFilePreview
+              composerTarget={composerDraftTarget}
+              path={absolutePath}
+              workspaceMutationId={workspaceMutationId}
+              key={`${environmentId}:${absolutePath}:${fileRefreshRevision}`}
+              name={relativePath.split(/[\\/]/).at(-1) || relativePath}
+              mimeType="application/octet-stream"
+              sizeBytes={0}
+              asset={{
+                environmentId,
+                resource: draft
+                  ? { _tag: "draft-workspace-file", cwd, path: absolutePath }
+                  : { _tag: "media-file", threadId: threadRef.threadId, path: absolutePath },
+              }}
+              origin="File"
             />
           ) : relativePath &&
             absolutePath &&

@@ -8,6 +8,7 @@ import {
   FileSurfaceNotice,
   FILE_SURFACE_SUBHEADER_CLASS,
 } from "./fileSurfaceChrome";
+import { useDeckVersionFailure } from "./office/deckVersions"; // Tangent(FORK-SLIDES-001)
 import { OFFICE_PREVIEW_MAX_BYTES, type OfficeWorkerResult } from "./officePreviewProtocol";
 import { previewErrorText, previewFailureText } from "./previewFailureMessages";
 const WordDocument = lazy(() => import("./office/WordDocument"));
@@ -48,6 +49,7 @@ export default function OfficeViewer(props: {
   const [error, setError] = useState<string | null>(null);
   const [prepared, setPrepared] = useState<Extract<OfficeWorkerResult, { bytes: ArrayBuffer }>>();
   const [details, setDetails] = useState("");
+  useDeckVersionFailure(error); // Tangent(FORK-SLIDES-001)
   const fail = useStableCallback((cause: unknown) =>
     setError(previewErrorText(cause, m(msg("Could not render this Office document.")))),
   );
