@@ -9,6 +9,12 @@ import {
 } from "../fileSurfaceChrome";
 import { OfficePages, type PaintPage } from "./OfficePages";
 import { createWorkerClient } from "./worker-rpc";
+// Tangent(FORK-SLIDES-001): slide comments for the composer.
+import {
+  SlideAnnotationLayer,
+  SlideAnnotationToggle,
+  useSlideAnnotationMode,
+} from "./SlideAnnotations";
 import type { SlideMethods, SlideSummary } from "./slide-protocol";
 import { rasterize } from "./vector-pictures";
 import { m } from "~/i18n/messages";
@@ -25,6 +31,7 @@ export default function Presentation(props: {
   const [page, setPage] = useState(0);
   const [failed, setFailed] = useState<Record<number, boolean>>({});
   const scroll = useRef<((index: number, y?: number) => void) | null>(null);
+  const annotation = useSlideAnnotationMode(); // Tangent(FORK-SLIDES-001)
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Open and paint slides through a worker whose requests and lifetime belong to this presentation.
   useEffect(() => {
     const controller = new AbortController();
@@ -124,6 +131,13 @@ export default function Presentation(props: {
         >
           <ChevronRightIcon className="size-3.5" />
         </FileSurfaceAction>
+        {/* Tangent(FORK-SLIDES-001) */}
+        <SlideAnnotationToggle
+          mode={annotation}
+          page={page}
+          slideCount={opened.slides.length}
+          onRestore={select}
+        />
       </div>
       <OfficePages
         pages={opened.slides}
@@ -137,6 +151,8 @@ export default function Presentation(props: {
             {opened.slides[index]?.hidden ? (
               <div className="pointer-events-none absolute inset-0 bg-white/50" />
             ) : null}
+            {/* Tangent(FORK-SLIDES-001) */}
+            <SlideAnnotationLayer mode={annotation} index={index} slides={opened.slides} />
             {failed[index] ? (
               <p
                 role="status"
