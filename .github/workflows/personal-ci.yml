@@ -124,7 +124,7 @@ jobs:
 
   mobile-native:
     name: Mobile Native Static Analysis
-    runs-on: tangent-mac
+    runs-on: macos-latest
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -134,7 +134,7 @@ jobs:
         uses: voidzero-dev/setup-vp@v1
         with:
           node-version-file: package.json
-          cache: false
+          cache: true
           run-install: true
 
       - name: Install native analysis tools

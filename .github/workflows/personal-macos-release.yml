@@ -63,7 +63,7 @@ jobs:
       matrix:
         include:
           - {
-              runner: tangent-mac,
+              runner: macos-latest,
               platform: mac,
               arch: arm64,
               target: aarch64-apple-darwin,
@@ -97,7 +97,7 @@ jobs:
       - uses: voidzero-dev/setup-vp@v1
         with:
           node-version-file: package.json
-          cache: ${{ matrix.runner != 'tangent-mac' }}
+          cache: true
           run-install: false
       - name: Install release dependencies
         run: vp install --filter=@t3tools/desktop... --filter=t3... --filter=@t3tools/scripts...
@@ -184,7 +184,7 @@ jobs:
   release:
     name: Build and publish macOS arm64
     needs: [preflight, cli-archives]
-    runs-on: tangent-mac
+    runs-on: macos-latest
     timeout-minutes: 60
     environment: personal-release
     steps:
@@ -197,7 +197,7 @@ jobs:
         uses: voidzero-dev/setup-vp@v1
         with:
           node-version-file: package.json
-          cache: false
+          cache: true
           run-install: true
 
       - name: Ensure Electron runtime is installed
