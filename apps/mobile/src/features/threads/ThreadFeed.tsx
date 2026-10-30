@@ -2635,7 +2635,8 @@ export const ThreadFeed = memo(function ThreadFeed({
     props.threadId,
     fileShareSourceIdentifier,
   );
-  const horizontalPadding = props.layoutVariant === "split" ? 20 : 16;
+  const upstreamHorizontalPadding = props.layoutVariant === "split" ? 20 : 16;
+  const horizontalPadding = duoColumns ? 16 : upstreamHorizontalPadding; // Tangent(FORK-READWIDTH-001)
   const contentLeftInset = props.contentSideInsets?.left ?? 0;
   const contentRightInset = props.contentSideInsets?.right ?? 0;
   const usableViewportWidth = Math.max(0, viewportWidth - contentLeftInset - contentRightInset);
@@ -3232,7 +3233,10 @@ export const ThreadFeed = memo(function ThreadFeed({
     if (reflowSettleTimerRef.current !== null) clearTimeout(reflowSettleTimerRef.current);
     reflowSettleTimerRef.current = setTimeout(
       settleReflow,
-      reflowAnchorsSizeChanges ? FEED_REFLOW_HOLD_MS : FEED_REFLOW_SETTLE_MS,
+      // Tangent(FORK-READWIDTH-001): the end has no place to hold; settling sooner hides the pin.
+      reflowAnchorsSizeChanges && reflowAnchorRef.current !== "end"
+        ? FEED_REFLOW_HOLD_MS
+        : FEED_REFLOW_SETTLE_MS,
     );
   };
 

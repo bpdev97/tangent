@@ -20,8 +20,11 @@ defaults to a narrower lane (`46rem`).
   padding re-wrapped every row twice. LegendList's end anchor adjusts by relative amounts, and the
   two passes reach native as one commit, so a thread at its end landed past the end of its content
   and showed blank. Upstream's panes never reach its 960pt limit on the Duo, so it does not hit this.
-- A thread that follows its end scrolls to the end once its rows settle after a resize. A fold steps
-  through several widths, which can leave the relative adjustment past the end on its own.
+- The feed keeps 16pt side padding on a Duo in both poses. Upstream uses 16 compact and 20 split, so
+  a fold re-wrapped every row a second time over those 8pt, and the thread overshot its end.
+- A thread that follows its end scrolls to the end 200ms after a resize settles, not after the 600ms
+  row hold. A fold also shifts UIKit's inset by a few points the list cannot see, and this correction
+  lands inside the fold transition.
 
 ## Upstream hooks
 
@@ -31,8 +34,9 @@ Each hook is marked `Tangent(FORK-READWIDTH-001)`.
   `upstreamContentMaxWidth`, unchanged, and `contentMaxWidth` is that value passed through
   `capThreadReadingWidth`. Also the import.
 - `apps/mobile/src/features/threads/ThreadFeed.tsx`: `threadLaneContainerStyle` is spread last into
-  the list's `contentContainerStyle`, and `settleReflow` scrolls to the end for an iOS `"end"`
-  anchor. Also the import.
+  the list's `contentContainerStyle`, upstream's padding is renamed `upstreamHorizontalPadding` and
+  wrapped for the Duo, `beginReflow` settles an iOS `"end"` anchor sooner, and `settleReflow` scrolls
+  to the end for it. Also the import.
 
 Fork-owned: `apps/mobile/src/features/threads/tangent-reading-width.ts`.
 
@@ -53,8 +57,8 @@ upstream already gives iOS a reading width of about 720pt or less, drop the feat
 
 Upstream limits iOS threads to a reading width (for example by applying its Android value on every
 platform), or adds a chat width setting on mobile. Removal: delete the fork file, the import, and
-the wrapper line, and the `ThreadFeed.tsx` hooks, and rename `upstreamContentMaxWidth` back to
-`contentMaxWidth`.
+the wrapper line, and the `ThreadFeed.tsx` hooks, and rename `upstreamContentMaxWidth` and
+`upstreamHorizontalPadding` back.
 
 ## Verify
 
