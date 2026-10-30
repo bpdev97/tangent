@@ -28,6 +28,7 @@ import { randomUUID } from "~/lib/utils";
 
 import { isCommentSubmitShortcut } from "../../diffs/commentSubmitShortcut";
 import { FileSurfaceAction } from "../fileSurfaceChrome";
+import { useDeckVersionSlot } from "./deckVersions";
 import {
   annotatedSlideIndex,
   buildSlideAnnotation,
@@ -64,9 +65,9 @@ interface SlideDraft {
 }
 
 /**
- * One deck's view, kept outside the viewer because the file panel remounts it on every workspace
- * change and slides unmount offscreen. Keyed by environment and path; unfinished comments are
- * keyed by thread, since several threads can show the same deck.
+ * One deck's view, kept outside the viewer because a rebuilt deck is a new viewer and slides unmount
+ * offscreen. Keyed by environment and path; unfinished comments are keyed by thread, since several
+ * threads can show the same deck.
  */
 interface SlideView {
   readonly active: boolean;
@@ -152,9 +153,23 @@ export function useSlideAnnotationMode(): SlideAnnotationMode {
   return { target, key: target ? `${environment}\u0000${target.path}` : "", owner };
 }
 
+/** Whether this thread has an unfinished comment on the deck. */
+export function useSlideCommentOpen(mode: SlideAnnotationMode): boolean {
+  return useSlideView(mode.key, (view) => view.drafts[mode.owner] !== undefined);
+}
+
+/** Whether the slide list has `row` where the restore puts it: 24px below the top, or at the end. */
+function slideLanded(pages: HTMLElement, row: HTMLElement, slideCount: number) {
+  const offset = row.getBoundingClientRect().top - pages.getBoundingClientRect().top;
+  const allMounted = pages.querySelectorAll('[role="group"]').length >= slideCount;
+  const atEnd = pages.scrollTop + pages.clientHeight >= pages.scrollHeight - 1;
+  return Math.abs(offset - 24) <= 2 || (allMounted && atEnd);
+}
+
 /**
  * The commenting toggle. It also returns a reloaded deck to the slide it showed before, and
- * remembers the slide shown since.
+ * remembers the slide shown since. A version loading behind the shown one follows that slide, and
+ * says it is ready once the slide is painted.
  */
 export function SlideAnnotationToggle(props: {
   readonly mode: SlideAnnotationMode;
@@ -173,23 +188,33 @@ function SlideAnnotationToolbar(props: {
   readonly onRestore: (index: number) => void;
 }) {
   const { mode, page, slideCount } = props;
+  const version = useDeckVersionSlot();
+  const hidden = version?.hidden ?? false;
+  const followed = useSlideView(mode.key, (view) => (hidden ? view.page : 0));
   const active = useSlideView(mode.key, (view) => view.active);
   const update = useSlideViewStore((state) => state.update);
   const setDraft = useSlideViewStore((state) => state.setDraft);
   const prune = useSlideViewStore((state) => state.prune);
   const onRestore = useStableCallback(props.onRestore);
+  const onReady = useStableCallback(() => version?.onReady());
   const anchor = useRef<HTMLSpanElement>(null);
   const restored = useRef(false);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Drop unfinished comments on slides this version of the deck does not have.
-  useEffect(() => prune(mode.key, slideCount), [mode.key, slideCount, prune]);
+  useEffect(() => {
+    if (!hidden) prune(mode.key, slideCount);
+  }, [hidden, mode.key, slideCount, prune]);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Scroll a reopened deck back to its remembered slide once the slide list can reach it, unless the user navigates first.
   useEffect(() => {
-    if (restored.current) return;
-    const index = Math.min(useSlideViewStore.getState().views[mode.key]?.page ?? 0, slideCount - 1);
+    if (restored.current && !hidden) return;
+    restored.current = false;
+    const remembered = hidden
+      ? followed
+      : (useSlideViewStore.getState().views[mode.key]?.page ?? 0);
+    const index = Math.min(remembered, slideCount - 1);
     // The toolbar shares the presentation's root with the slide list.
     const root = anchor.current?.parentElement?.parentElement;
     const pages = root?.querySelector(":scope > [data-office-pages]");
-    if (index <= 0 || !root || !(pages instanceof HTMLElement)) {
+    if ((index <= 0 && !hidden) || !root || !(pages instanceof HTMLElement)) {
       restored.current = true;
       return;
     }
@@ -204,10 +229,7 @@ function SlideAnnotationToolbar(props: {
         onRestore(index);
         // OfficePages scrolls a slide to 24px below the top, which needs the slides after it
         // mounted; it mounts them in batches, so keep scrolling until the slide lands.
-        const offset = row.getBoundingClientRect().top - pages.getBoundingClientRect().top;
-        const allMounted = pages.querySelectorAll('[role="group"]').length >= slideCount;
-        const atEnd = pages.scrollTop + pages.clientHeight >= pages.scrollHeight - 1;
-        if (Math.abs(offset - 24) <= 2 || (allMounted && atEnd)) return stop();
+        if (slideLanded(pages, row, slideCount)) return stop();
       }
       loop.tries += 1;
       if (loop.tries < 240) loop.frame = requestAnimationFrame(attempt);
@@ -221,11 +243,36 @@ function SlideAnnotationToolbar(props: {
       cancelAnimationFrame(loop.frame);
       for (const type of interrupts) root.removeEventListener(type, stop);
     };
-  }, [mode.key, slideCount, onRestore]);
+  }, [followed, hidden, mode.key, slideCount, onRestore]);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Remember the slide shown, once the remembered one has been restored.
   useEffect(() => {
-    if (restored.current) update(mode.key, { page });
-  }, [mode.key, page, update]);
+    if (restored.current && !hidden) update(mode.key, { page });
+  }, [hidden, mode.key, page, update]);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Poll this hidden version's slide list, which reports no paint, until the followed slide is drawn.
+  useEffect(() => {
+    if (!hidden) return;
+    const pages = anchor.current?.parentElement?.parentElement?.querySelector(
+      ":scope > [data-office-pages]",
+    );
+    if (!(pages instanceof HTMLElement)) return;
+    const index = Math.min(followed, slideCount - 1);
+    let drawn = false;
+    const timer = setInterval(() => {
+      const row = pages.querySelector(`[role="group"][aria-label="Slide ${index + 1}"]`);
+      const canvas = row?.querySelector("canvas");
+      const landed = row instanceof HTMLElement && slideLanded(pages, row, slideCount);
+      // A slide that cannot be drawn shows that instead of its canvas, and is as ready as it gets.
+      const settled =
+        landed && ((canvas && canvas.width > 0) || row.querySelector('[role="status"]'));
+      // A new canvas has a default size until OfficePages clears it, so one sighting proves nothing.
+      if (settled && drawn) {
+        clearInterval(timer);
+        onReady();
+      }
+      drawn = Boolean(settled);
+    }, 50);
+    return () => clearInterval(timer);
+  }, [followed, hidden, onReady, slideCount]);
   return (
     <span ref={anchor} className="contents">
       <FileSurfaceAction
@@ -249,7 +296,8 @@ export function SlideAnnotationLayer(props: {
   readonly slides: readonly SlideSize[];
 }) {
   const slide = props.slides[props.index];
-  if (!props.mode.target || !slide) return null;
+  const version = useDeckVersionSlot();
+  if (!props.mode.target || !slide || version?.hidden) return null;
   return (
     <SlideAnnotationSurface
       target={props.mode.target}

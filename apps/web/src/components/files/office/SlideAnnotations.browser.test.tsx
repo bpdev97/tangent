@@ -7,6 +7,7 @@ import "~/index.css";
 import { DraftId, useComposerDraftStore } from "~/composerDraftStore";
 import { render } from "../../../../test/render";
 
+import { DeckVersionContext, type DeckVersionSlot } from "./deckVersions";
 import {
   SlideAnnotationLayer,
   SlideAnnotationProvider,
@@ -22,6 +23,13 @@ const SLIDES = [
   { id: "chart", width: 960, height: 540, hidden: false, notes: undefined },
   { id: "summary", width: 960, height: 540, hidden: false, notes: undefined },
 ];
+
+const HIDDEN_VERSION: DeckVersionSlot = {
+  hidden: true,
+  onReady: () => undefined,
+  onFailed: () => undefined,
+  onRecovered: () => undefined,
+};
 
 function threadRef(name: string, environment = "environment-1") {
   return { environmentId: EnvironmentId.make(environment), threadId: ThreadId.make(name) };
@@ -44,6 +52,9 @@ function Deck(props: { readonly showSecond?: boolean; readonly slideCount?: numb
       <div>
         <button type="button" onClick={() => select(1)}>
           Go to slide 2
+        </button>
+        <button type="button" onClick={() => select(2)}>
+          Go to slide 3
         </button>
         <span>Showing slide {shown + 1}</span>
         <SlideAnnotationToggle
@@ -94,6 +105,7 @@ function deck(
     readonly showSecond?: boolean;
     readonly slideCount?: number;
     readonly path?: string;
+    readonly version?: DeckVersionSlot;
   } = {},
 ) {
   const path =
@@ -103,10 +115,12 @@ function deck(
       : `/Users/me/work/${typeof ref === "string" ? ref : ref.threadId}.pptx`);
   return (
     <SlideAnnotationProvider composerTarget={ref} path={path}>
-      <Deck
-        {...(options.showSecond === undefined ? {} : { showSecond: options.showSecond })}
-        {...(options.slideCount === undefined ? {} : { slideCount: options.slideCount })}
-      />
+      <DeckVersionContext value={options.version ?? null}>
+        <Deck
+          {...(options.showSecond === undefined ? {} : { showSecond: options.showSecond })}
+          {...(options.slideCount === undefined ? {} : { slideCount: options.slideCount })}
+        />
+      </DeckVersionContext>
     </SlideAnnotationProvider>
   );
 }
@@ -340,6 +354,61 @@ describe("slide annotations", () => {
     await expect.element(page.getByRole("textbox")).not.toBeInTheDocument();
     await page.getByRole("button", { name: "Comment on slide 2" }).click();
     await expect.element(page.getByRole("textbox", { name: "Comment on slide 2" })).toHaveValue("");
+  });
+
+  it("loads a hidden version at the slide on screen, and follows it", async () => {
+    const ref = threadRef("thread-slide-hidden");
+    const path = "/Users/me/work/hidden-version.pptx";
+    let ready = 0;
+    const hidden = { ...HIDDEN_VERSION, onReady: () => (ready += 1) };
+    await using shown = await render(deck(ref, { path }));
+    await page.getByRole("button", { name: "Go to slide 2" }).click();
+    await page.getByRole("button", { name: "Comment on slides" }).click();
+    await expect.element(page.getByText("Showing slide 2")).toBeInTheDocument();
+    await shown.unmount();
+
+    await using _hidden = await render(deck(ref, { path, version: hidden }));
+    await expect.element(page.getByText("Showing slide 2")).toBeInTheDocument();
+    await expect.poll(() => ready).toBeGreaterThan(0);
+    // Its marks wait until it is the one on screen.
+    expect(page.getByRole("button", { name: "Comment on slide 2" }).query()).toBeNull();
+  });
+
+  it("does not let a hidden version overwrite the remembered slide", async () => {
+    const ref = threadRef("thread-slide-hidden-page");
+    const path = "/Users/me/work/hidden-page.pptx";
+    {
+      await using _screen = await render(deck(ref, { path }));
+      await page.getByRole("button", { name: "Go to slide 2" }).click();
+      await expect.element(page.getByText("Showing slide 2")).toBeInTheDocument();
+    }
+    {
+      await using _screen = await render(deck(ref, { path, version: HIDDEN_VERSION }));
+      await expect.element(page.getByText("Showing slide 2")).toBeInTheDocument();
+      await page.getByRole("button", { name: "Go to slide 3" }).click();
+      await expect.element(page.getByText("Showing slide 3")).toBeInTheDocument();
+    }
+    await using _screen = await render(deck(ref, { path }));
+    await expect.element(page.getByText("Showing slide 2")).toBeInTheDocument();
+  });
+
+  it("does not let a hidden version prune comments", async () => {
+    const ref = threadRef("thread-slide-hidden-prune");
+    const path = "/Users/me/work/hidden-prune.pptx";
+    {
+      await using _screen = await render(deck(ref, { path }));
+      await page.getByRole("button", { name: "Comment on slides" }).click();
+      await page.getByRole("button", { name: "Comment on slide 3" }).click();
+      await page.getByRole("textbox").fill("Keep me");
+    }
+    {
+      await using _screen = await render(
+        deck(ref, { path, slideCount: 2, version: HIDDEN_VERSION }),
+      );
+      await expect.element(page.getByText("Slide 2")).not.toBeInTheDocument();
+    }
+    await using _screen = await render(deck(ref, { path }));
+    await expect.element(page.getByRole("textbox")).toHaveValue("Keep me");
   });
 
   it("keeps the comment open when the composer refuses its screenshot", async () => {

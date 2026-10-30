@@ -17,8 +17,10 @@ the deck's path, the slide number, your comment, and the screenshot.
 Comments waiting in the composer show on their slides as numbered outlines. Remove one from the
 slide or from the composer and it disappears from both.
 
-When the agent updates the deck, the viewer reloads it and returns to the slide you were looking
-at, still in commenting mode.
+When the agent updates the deck, the new version replaces the old one in place, at the slide you
+were looking at and still in commenting mode. If you are writing a comment, the update waits until
+you add or cancel it. If the new version cannot be opened, the viewer keeps the previous one and
+says so. It tries again the next time the deck changes, or you can close the file and open it again.
 
 Commenting works on web and desktop for decks in the project or linked from a message. Files
 attached to a message can be viewed but not commented on. The mobile app shows the comments in

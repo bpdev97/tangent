@@ -1411,11 +1411,13 @@ export default function FilePreviewPanel({
           ) : relativePath &&
             absolutePath &&
             (isDocument || file.readError?.failure === "binary_file") ? (
-            // Tangent(FORK-SLIDES-001): slide comments go to this thread's composer.
+            // Tangent(FORK-SLIDES-001): slide comments go to this thread's composer, and the
+            // preview reloads when this file changes, not on every workspace mutation.
             <SlideAnnotatedFilePreview
               composerTarget={composerDraftTarget}
               path={absolutePath}
-              key={`${environmentId}:${absolutePath}:${workspaceMutationId}:${fileRefreshRevision}`}
+              workspaceMutationId={workspaceMutationId}
+              key={`${environmentId}:${absolutePath}:${fileRefreshRevision}`}
               name={relativePath.split(/[\\/]/).at(-1) || relativePath}
               mimeType="application/octet-stream"
               sizeBytes={0}
