@@ -2,6 +2,7 @@ import { Button } from "../../components/ui/Button";
 import * as Dialog from "../../components/ui/Dialog";
 import { useOpenPullRequest } from "../../native/useOpenPullRequest";
 import { useWorkspaceSettledContentWidth } from "../layout/workspace-content-width";
+import { threadLaneContainerStyle } from "./tangent-reading-width"; // Tangent(FORK-READWIDTH-001)
 import { ThreadMarkdownVideo, ThreadMediaVisibleContext } from "./ThreadMarkdownVideo";
 import { useMarkdownImageSource } from "../../native/useMarkdownImageSource";
 import {
@@ -3202,6 +3203,8 @@ export const ThreadFeed = memo(function ThreadFeed({
     const anchor = reflowAnchorRef.current;
     cancelReflow();
     const list = listRef.current;
+    // Tangent(FORK-READWIDTH-001): a fold's width steps can leave the relative hold past the end.
+    if (reflowAnchorsSizeChanges && anchor === "end") void list?.scrollToEnd({ animated: false });
     if (reflowAnchorsSizeChanges || !anchor || anchor === "end" || !list) return;
     if (userScrollSessionRef.current) return;
     if (loadedListKeyRef.current !== listMountKey) return;
@@ -3686,6 +3689,13 @@ export const ThreadFeed = memo(function ThreadFeed({
               paddingTop: FEED_PADDING_TOP,
               paddingLeft: contentHorizontalPadding + contentLeftInset,
               paddingRight: contentHorizontalPadding + contentRightInset,
+              // Tangent(FORK-READWIDTH-001)
+              ...threadLaneContainerStyle({
+                maxWidth: props.contentMaxWidth,
+                minimumPadding: horizontalPadding,
+                leftInset: contentLeftInset,
+                rightInset: contentRightInset,
+              }),
             }}
           />
         </View>
